@@ -19,10 +19,11 @@ import logging
 import os
 import sys
 from collections import Counter
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 import config as config_module
 import digest as digest_module
+import library
 import mailer
 import relevance
 import sources
@@ -301,6 +302,7 @@ def command_status(args):
         "  remembered  %d papers (%d identity keys)"
         % (store.paper_count, len(store.seen))
     )
+    print("  library     %d saved paper(s)" % library.count(cfg["library_path"]))
     latest = os.path.join(cfg["digest_dir"], "latest.html")
     print("  latest      %s" % (latest if os.path.exists(latest) else "none yet"))
     return 0
@@ -365,6 +367,175 @@ def command_test_email(args):
     return 0
 
 
+def _print_papers(papers, numbered=True):
+    for index, paper in enumerate(papers, 1):
+        prefix = "%3d. " % index if numbered else "     "
+        score = ("[%.1f] " % paper.score) if getattr(paper, "score", 0) else ""
+        print("%s%s%s" % (prefix, score, paper.title))
+        detail = " | ".join(
+            bit for bit in (paper.source, paper.venue, paper.published) if bit
+        )
+        if paper.authors:
+            print("      %s" % paper.author_line(limit=5))
+        print("      %s" % detail)
+        print("      %s" % paper.url)
+
+
+def command_serve(args):
+    import server
+
+    cfg = load_config_or_exit(args.config)
+    setup_logging(cfg["log_path"], verbose=False)
+    digest_path = os.path.join(cfg["digest_dir"], "latest.html")
+
+    if not os.path.exists(digest_path):
+        sys.stderr.write(
+            "No digest to serve yet. Run 'python3 paperfeed.py run' first.\n"
+        )
+        return 2
+
+    try:
+        httpd = server.serve(digest_path, cfg["library_path"], args.port)
+    except OSError as error:
+        sys.stderr.write("Could not start the local server: %s\n" % error)
+        return 1
+
+    actual_port = httpd.server_address[1]
+    url = "http://127.0.0.1:%d" % actual_port
+    if actual_port != args.port:
+        print("Port %d was busy, using %d instead." % (args.port, actual_port))
+    print("PaperFeed is serving your latest digest at %s" % url)
+    print("  %d paper(s) already in your library" % library.count(cfg["library_path"]))
+    print("  Click '+ Save' on anything worth keeping. Press Ctrl-C to stop.")
+    print("  (Bound to 127.0.0.1 - not reachable from your network.)")
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\nStopped. %d paper(s) in your library." % library.count(cfg["library_path"]))
+    finally:
+        httpd.server_close()
+    return 0
+
+
+def command_saved(args):
+    cfg = load_config_or_exit(args.config)
+    records = library.all_saved(cfg["library_path"], args.limit)
+    if not records:
+        print("Nothing saved yet. Run 'paperfeed serve' and click + Save.")
+        return 0
+    print("%d saved paper(s), newest first:\n" % len(records))
+    for index, record in enumerate(records, 1):
+        print("%3d. %s" % (index, record["title"]))
+        if record["authors"]:
+            print("      %s" % ", ".join(record["authors"][:5]))
+        detail = " | ".join(
+            bit
+            for bit in (record["source"], record["venue"], record["published"])
+            if bit
+        )
+        print("      %s" % detail)
+        print("      %s" % (record["url"] or ""))
+    return 0
+
+
+def command_search(args):
+    cfg = load_config_or_exit(args.config)
+    setup_logging(cfg["log_path"], verbose=False)
+    text = args.text.strip()
+    if not text:
+        sys.stderr.write("Give me something to search for.\n")
+        return 2
+
+    if not args.online:
+        records = library.search(cfg["library_path"], text, args.limit)
+        if not records:
+            print(
+                "Nothing in your library matches %r.\n"
+                "Add --online to search PubMed and the preprint servers instead."
+                % text
+            )
+            return 0
+        print("%d match(es) in your library:\n" % len(records))
+        for index, record in enumerate(records, 1):
+            print("%3d. %s" % (index, record["title"]))
+            print("      %s | %s" % (record["source"], record["venue"] or "-"))
+            print("      %s" % (record["url"] or ""))
+        return 0
+
+    # --online: ask the sources directly. Nothing is stored unless you say so.
+    since = None
+    if args.since:
+        try:
+            since = date.fromisoformat(args.since)
+        except ValueError:
+            sys.stderr.write("--since needs a date like 2025-01-31\n")
+            return 2
+    else:
+        since = date.today() - timedelta(days=90)
+    lookback = max(1, (date.today() - since).days)
+
+    # "a b c" searched as one exact phrase would almost never match. Treat
+    # separate words as "all of these must appear", and honour real quotes
+    # when someone genuinely wants a phrase.
+    if len(text) > 1 and text[0] == text[-1] == '"':
+        terms, all_of = [text[1:-1]], []
+    else:
+        words = [word for word in text.split() if word]
+        terms, all_of = ([], words) if len(words) > 1 else ([text], [])
+
+    keyword_set = {
+        "name": "search",
+        "terms": terms,
+        "all_of": all_of,
+        "authors": [],
+        "exclude": [],
+        "fields": "title_abstract",
+        "journals": {"allow": [], "deny": []},
+    }
+
+    print("Searching PubMed and preprints since %s ..." % since.isoformat())
+    papers = []
+    for key, (label, fetcher) in sources.SOURCES.items():
+        if not cfg["sources"].get(key):
+            continue
+        try:
+            papers.extend(
+                fetcher(keyword_set, lookback, args.limit, cfg.get("contact_email", ""))
+            )
+        except Exception as error:
+            print("  ! %s did not answer: %s" % (label, error))
+
+    papers = store_module.deduplicate(papers)
+    relevance.score_all(papers, [keyword_set], cfg["ranking"])
+    papers = relevance.rank(papers)[: args.limit]
+
+    if not papers:
+        print("No matches.")
+        return 0
+
+    print("\n%d result(s), best first:\n" % len(papers))
+    _print_papers(papers)
+
+    if not sys.stdin.isatty():
+        return 0
+    answer = input("\nSave any? Enter numbers (e.g. 1,3) or press Enter to skip: ")
+    wanted = [bit.strip() for bit in answer.replace(" ", ",").split(",") if bit.strip()]
+    saved = 0
+    for bit in wanted:
+        if not bit.isdigit() or not (1 <= int(bit) <= len(papers)):
+            print("  skipping %r - not one of the numbers above" % bit)
+            continue
+        paper = papers[int(bit) - 1]
+        _, already = library.save(
+            cfg["library_path"], digest_module.paper_payload(paper)
+        )
+        print("  %s %s" % ("already saved:" if already else "saved:", paper.title[:70]))
+        saved += not already
+    if saved:
+        print("\n%d added. Your library now has %d." % (saved, library.count(cfg["library_path"])))
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="paperfeed", description="Keyword-driven literature alerts."
@@ -397,6 +568,31 @@ def main(argv=None):
 
     email_parser = subparsers.add_parser("test-email", help="send one test message")
     email_parser.set_defaults(handler=command_test_email)
+
+    serve_parser = subparsers.add_parser(
+        "serve", help="open the latest digest in a browser with Save buttons"
+    )
+    serve_parser.add_argument("--port", type=int, default=8931)
+    serve_parser.set_defaults(handler=command_serve)
+
+    saved_parser = subparsers.add_parser("saved", help="list your saved papers")
+    saved_parser.add_argument("--limit", type=int, default=100)
+    saved_parser.set_defaults(handler=command_saved)
+
+    search_parser = subparsers.add_parser(
+        "search", help="search your library, or the sources with --online"
+    )
+    search_parser.add_argument("text", help="what to look for")
+    search_parser.add_argument(
+        "--online",
+        action="store_true",
+        help="query PubMed and the preprint servers instead of your library",
+    )
+    search_parser.add_argument(
+        "--since", help="with --online: earliest date, e.g. 2025-01-31 (default 90 days)"
+    )
+    search_parser.add_argument("--limit", type=int, default=25)
+    search_parser.set_defaults(handler=command_search)
 
     args = parser.parse_args(argv)
     if not args.command:

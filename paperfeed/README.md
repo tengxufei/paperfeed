@@ -34,12 +34,57 @@ and each card carries the senior author's institution plus subject chips.
 | `python3 paperfeed.py run --set "name"` | Only one keyword set. Good for testing a new one. |
 | `python3 paperfeed.py status` | Last run, next run, how many papers it remembers. |
 | `python3 paperfeed.py check` | Validate config.json and print it back in plain English. |
+| `python3 paperfeed.py serve` | Open the latest digest in your browser with Save buttons. |
+| `python3 paperfeed.py saved` | List the papers you have kept. |
+| `python3 paperfeed.py search "text"` | Search your saved papers. |
+| `python3 paperfeed.py search "text" --online` | Search PubMed and the preprint servers live. |
 | `python3 paperfeed.py test-email` | Send one test message. |
 
 The digest emailed to you is a separate, simpler rendering: mail clients
 routinely strip stylesheets and ignore media queries, so the email version
 writes its styling directly onto each element and skips the collapsible
 abstracts. It is built for a phone screen. The full version stays on your Mac.
+
+## Keeping papers
+
+PaperFeed does not hoard. A run writes its digest and forgets every paper in
+it. The only papers that persist are the ones you choose:
+
+```bash
+python3 paperfeed.py serve
+```
+
+That opens your latest digest at `http://127.0.0.1:8931` with a **+ Save**
+button on each paper. Click it and the paper goes into `library.db`, a plain
+SQLite file you can open with any SQLite browser or simply delete. Click again
+to remove it. Ctrl-C stops the server.
+
+It is bound to `127.0.0.1`, so the page is reachable only from this Mac — not
+from your network, not from the internet. That is why it needs no login. It
+serves the digest file that is already on disk; nothing is fetched and nothing
+is uploaded.
+
+If port 8931 is busy it quietly steps to the next free one and tells you which
+it used. `--port` picks your own.
+
+## Finding things again
+
+```bash
+python3 paperfeed.py search "disordered proteins"
+python3 paperfeed.py search "protein hallucination" --online --since 2025-01-01
+```
+
+Without `--online` it searches the papers you saved. With `--online` it asks
+PubMed and the preprint servers directly, over whatever window you give it,
+and offers to save any of the results — useful for the paper you remember
+seeing but never kept.
+
+Several words are treated as "all of these must appear". Wrap the search in
+double quotes inside the shell quotes to force an exact phrase:
+
+```bash
+python3 paperfeed.py search '"de novo protein design"' --online
+```
 
 ## Editing your keywords
 
@@ -205,7 +250,10 @@ sources.py            talks to PubMed and Europe PMC
 store.py              decides what counts as "already seen"
 digest.py             builds the HTML
 mailer.py             sends it
+library.py            your saved papers
+server.py             the local Save-button page
 state/seen.json       the memory (plain JSON, safe to read or delete)
+library.db            papers you saved (SQLite, safe to read or delete)
 digests/              one file per run, plus latest.html
 paperfeed.log         what happened, every run
 ```

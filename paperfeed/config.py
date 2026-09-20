@@ -365,4 +365,5 @@ def load(config_path):
     cfg["digest_dir"] = os.path.join(base_dir, "digests")
     cfg["state_path"] = os.path.join(base_dir, "state", "seen.json")
     cfg["log_path"] = os.path.join(base_dir, "paperfeed.log")
+    cfg["library_path"] = os.path.join(base_dir, "library.db")
     return cfg
