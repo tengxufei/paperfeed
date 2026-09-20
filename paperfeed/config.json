@@ -1,37 +1,38 @@
 {
   "_about": "PaperFeed config. Keys starting with _ are comments and are ignored.",
-
   "_keyword_sets": "One block per topic you follow. 'terms' are OR'ed together. A term containing [ ] is passed to PubMed as raw search syntax; anything else is searched as a quoted phrase in title/abstract.",
   "keyword_sets": [
     {
       "name": "de novo protein design",
-      "terms": ["de novo protein design", "RFdiffusion", "ProteinMPNN"],
+      "terms": [
+        "de novo protein design",
+        "RFdiffusion",
+        "ProteinMPNN"
+      ],
       "enabled": true
     },
     {
       "name": "protein language models",
-      "terms": ["protein language model", "ESM-2", "protein structure prediction"],
+      "terms": [
+        "protein language model",
+        "ESM-2",
+        "protein structure prediction"
+      ],
       "enabled": true
     }
   ],
-
   "_interval_days": "Minimum days between digests. The scheduler wakes the script daily; it exits quietly until this many days have passed. Change this number to change your schedule.",
   "interval_days": 3,
-
   "_lookback_days": "How far back each run searches. Keep comfortably larger than interval_days so nothing slips through a gap.",
   "lookback_days": 14,
-
   "_max_per_set": "Cap on papers fetched per keyword set per source. Stops the first run being enormous.",
   "max_per_set": 30,
-
   "sources": {
     "pubmed": true,
     "preprints": true
   },
-
   "_contact_email": "NCBI asks that automated tools identify themselves. Sent as a User-Agent header only.",
   "contact_email": "tengxufei@gmail.com",
-
   "_email": "Set enabled to true once your digests look right. The password is NEVER stored here: set the environment variable named in password_env. For Gmail, use an app password, not your account password.",
   "email": {
     "enabled": false,
@@ -40,9 +41,24 @@
     "username": "tengxufei@gmail.com",
     "password_env": "PAPERFEED_SMTP_PASSWORD",
     "from_address": "tengxufei@gmail.com",
-    "to_addresses": ["tengxufei@gmail.com"],
+    "to_addresses": [
+      "tengxufei@gmail.com"
+    ],
     "subject_prefix": "[PaperFeed]",
     "_send_when_empty": "Email you even when there is nothing new. Off by default so quiet weeks stay quiet; the digest file is still written either way.",
     "send_when_empty": false
+  },
+  "ranking": {
+    "enabled": true,
+    "title_weight": 4.0,
+    "abstract_weight": 1.0,
+    "breadth_bonus": 1.0,
+    "recency_bonus": 1.0,
+    "author_bonus": 3.0,
+    "min_score": 0.0
+  },
+  "mute": {
+    "terms": [],
+    "journals": []
   }
 }

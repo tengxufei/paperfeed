@@ -12,6 +12,16 @@ import os
 
 DEFAULTS = {
     "interval_days": 3,
+    "ranking": {
+        "enabled": True,
+        "title_weight": 4.0,
+        "abstract_weight": 1.0,
+        "breadth_bonus": 1.0,
+        "recency_bonus": 1.0,
+        "author_bonus": 3.0,
+        "min_score": 0.0,
+    },
+    "mute": {"terms": [], "journals": []},
     "lookback_days": 14,
     "max_per_set": 30,
     "contact_email": "",
@@ -77,18 +87,83 @@ def _validate_keyword_sets(raw):
             )
         seen_names.add(name)
 
-        terms = entry.get("terms")
-        if not isinstance(terms, list) or not terms:
-            raise ConfigError(
-                "Keyword set %r needs a 'terms' list with at least one search term." % name
-            )
-        clean_terms = []
-        for term in terms:
-            if not isinstance(term, str) or not term.strip():
+        def string_list(key, required=False):
+            raw_value = entry.get(key)
+            if raw_value is None:
+                if required:
+                    raise ConfigError(
+                        "Keyword set %r needs a '%s' list." % (name, key)
+                    )
+                return []
+            if isinstance(raw_value, str):
+                raw_value = [raw_value]
+            if not isinstance(raw_value, list):
                 raise ConfigError(
-                    "Keyword set %r has a term that is not text: %r" % (name, term)
+                    "Keyword set %r: '%s' must be a list of words." % (name, key)
                 )
-            clean_terms.append(term.strip())
+            cleaned_items = []
+            for item in raw_value:
+                if not isinstance(item, str) or not item.strip():
+                    raise ConfigError(
+                        "Keyword set %r has an entry in '%s' that is not text: %r"
+                        % (name, key, item)
+                    )
+                cleaned_items.append(item.strip())
+            return cleaned_items
+
+        clean_terms = string_list("terms")
+        all_of = string_list("all_of")
+        authors = string_list("authors")
+        exclude = string_list("exclude")
+
+        # A set is valid if it can search for *something*: keywords, a
+        # required phrase, or an author to follow.
+        if not (clean_terms or all_of or authors):
+            raise ConfigError(
+                "Keyword set %r has nothing to search for. Give it 'terms', "
+                "'all_of', or 'authors'." % name
+            )
+
+        fields = entry.get("fields", "title_abstract")
+        if fields not in ("title_abstract", "all"):
+            raise ConfigError(
+                "Keyword set %r has 'fields': %r - it must be \"title_abstract\" "
+                "or \"all\"." % (name, fields)
+            )
+
+        journals = entry.get("journals") or {}
+        if not isinstance(journals, dict):
+            raise ConfigError(
+                "Keyword set %r: 'journals' must be a block with 'allow' "
+                "and/or 'deny' lists." % name
+            )
+        for key in journals:
+            if key not in ("allow", "deny"):
+                raise ConfigError(
+                    "Keyword set %r: journals.%s is not a setting. Use 'allow' "
+                    "or 'deny'." % (name, key)
+                )
+        allow = journals.get("allow") or []
+        deny = journals.get("deny") or []
+        for label, values in (("allow", allow), ("deny", deny)):
+            if not isinstance(values, list):
+                raise ConfigError(
+                    "Keyword set %r: journals.%s must be a list." % (name, label)
+                )
+
+        set_sources = entry.get("sources")
+        if set_sources is not None:
+            if not isinstance(set_sources, dict):
+                raise ConfigError(
+                    "Keyword set %r: 'sources' must be a block like "
+                    "{\"preprints\": false}." % name
+                )
+            for key, value in set_sources.items():
+                if not isinstance(value, bool):
+                    raise ConfigError(
+                        "Keyword set %r: sources.%s must be true or false, "
+                        "but found %r." % (name, key, value)
+                    )
 
         enabled = entry.get("enabled", True)
         if not isinstance(enabled, bool):
@@ -97,13 +172,84 @@ def _validate_keyword_sets(raw):
                 % (name, enabled)
             )
 
-        cleaned.append({"name": name, "terms": clean_terms, "enabled": enabled})
+        cleaned.append(
+            {
+                "name": name,
+                "terms": clean_terms,
+                "all_of": all_of,
+                "authors": authors,
+                "exclude": exclude,
+                "fields": fields,
+                "journals": {"allow": list(allow), "deny": list(deny)},
+                "sources": set_sources,
+                "enabled": enabled,
+            }
+        )
 
     if not any(entry["enabled"] for entry in cleaned):
         raise ConfigError(
             "Every keyword set has \"enabled\": false, so there is nothing to search."
         )
     return cleaned
+
+
+def _validate_ranking(raw):
+    ranking = dict(DEFAULTS["ranking"])
+    if raw is None:
+        return ranking
+    if not isinstance(raw, dict):
+        raise ConfigError("'ranking' must be a block of settings.")
+    for key in raw:
+        if key not in ranking:
+            raise ConfigError(
+                "ranking.%s is not a setting. Valid ones: %s"
+                % (key, ", ".join(sorted(ranking)))
+            )
+    ranking.update(raw)
+
+    if not isinstance(ranking["enabled"], bool):
+        raise ConfigError(
+            "ranking.enabled must be true or false, but found: %r"
+            % (ranking["enabled"],)
+        )
+    for key, value in ranking.items():
+        if key == "enabled":
+            continue
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ConfigError(
+                "ranking.%s must be a number, but found: %r" % (key, value)
+            )
+        if value < 0:
+            raise ConfigError("ranking.%s cannot be negative." % key)
+    return ranking
+
+
+def _validate_mute(raw):
+    mute = {"terms": [], "journals": []}
+    if raw is None:
+        return mute
+    if not isinstance(raw, dict):
+        raise ConfigError(
+            "'mute' must be a block with 'terms' and/or 'journals' lists."
+        )
+    for key in raw:
+        if key not in mute:
+            raise ConfigError(
+                "mute.%s is not a setting. Use 'terms' or 'journals'." % key
+            )
+    for key in ("terms", "journals"):
+        values = raw.get(key, [])
+        if isinstance(values, str):
+            values = [values]
+        if not isinstance(values, list):
+            raise ConfigError("mute.%s must be a list of words." % key)
+        for item in values:
+            if not isinstance(item, str) or not item.strip():
+                raise ConfigError(
+                    "mute.%s has an entry that is not text: %r" % (key, item)
+                )
+        mute[key] = [item.strip() for item in values]
+    return mute
 
 
 def _validate_email(raw):
@@ -209,6 +355,8 @@ def load(config_path):
             % (cfg["lookback_days"], cfg["interval_days"])
         )
 
+    cfg["ranking"] = _validate_ranking(raw.get("ranking"))
+    cfg["mute"] = _validate_mute(raw.get("mute"))
     cfg["email"] = _validate_email(raw.get("email"))
 
     base_dir = os.path.dirname(config_path)

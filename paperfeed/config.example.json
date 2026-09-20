@@ -1,11 +1,30 @@
 {
   "_about": "PaperFeed config. Keys starting with _ are comments and are ignored.",
 
-  "_keyword_sets": "One block per topic you follow. 'terms' are OR'ed together. A term containing [ ] is passed to PubMed as raw search syntax; anything else is searched as a quoted phrase in title/abstract.",
+  "_keyword_sets": "One block per topic you follow. Every field except 'name' is optional, but a set needs at least one of terms / all_of / authors.",
   "keyword_sets": [
     {
+      "_terms": "OR'ed together: a paper matching ANY of these is a hit. Searched as exact phrases in title+abstract. A term containing [ ] is passed to PubMed as raw search syntax.",
       "name": "de novo protein design",
       "terms": ["de novo protein design", "RFdiffusion", "ProteinMPNN"],
+
+      "_all_of": "Every term here must ALSO appear. Use it to narrow a noisy set, e.g. terms=[binder] + all_of=[protein].",
+      "all_of": [],
+
+      "_authors": "Follow specific people. Written as PubMed writes them: surname then initials. Papers by them get a scoring bonus. Note the search APIs are loose - 'Baker D' will also return papers by 'Baker DA' - but only an exact initial match earns the bonus.",
+      "authors": [],
+
+      "_exclude": "Drop papers mentioning any of these, for this set only.",
+      "exclude": [],
+
+      "_fields": "'title_abstract' (default, less noise) or 'all' (searches everywhere, including MeSH and full text).",
+      "fields": "title_abstract",
+
+      "_journals": "allow = ONLY these journals. deny = never these. Matched as substrings, so 'Nature' covers 'Nature Methods'.",
+      "journals": { "allow": [], "deny": [] },
+
+      "_sources": "Override the global sources for this set only, e.g. {\"pubmed\": false} to make it preprints-only.",
+
       "enabled": true
     },
     {
@@ -15,13 +34,30 @@
     }
   ],
 
-  "_interval_days": "Minimum days between digests. The scheduler wakes the script daily; it exits quietly until this many days have passed. Change this number to change your schedule.",
+  "_ranking": "How papers are ordered. A title match is weighted above two abstract mentions on purpose - the title is what a paper is ABOUT. recency_bonus is deliberately small: inside a 14-day window almost everything is recent, so it is a tiebreaker, not a driver. Set enabled=false to go back to plain date order. min_score hides weak matches (try 2 or 3).",
+  "ranking": {
+    "enabled": true,
+    "title_weight": 4.0,
+    "abstract_weight": 1.0,
+    "breadth_bonus": 1.0,
+    "recency_bonus": 1.0,
+    "author_bonus": 3.0,
+    "min_score": 0.0
+  },
+
+  "_mute": "Applies to every keyword set. Useful for an ambiguous word: 'binder' matches battery-electrode papers, so muting 'cathode' cleans that up. Muted papers are NOT remembered, so removing a mute brings them back.",
+  "mute": {
+    "terms": [],
+    "journals": []
+  },
+
+  "_interval_days": "Minimum days between digests. The scheduler wakes the script daily; it exits quietly until this many days have passed.",
   "interval_days": 3,
 
-  "_lookback_days": "How far back each run searches. Keep comfortably larger than interval_days so nothing slips through a gap.",
+  "_lookback_days": "How far back each run searches. Keep comfortably larger than interval_days.",
   "lookback_days": 14,
 
-  "_max_per_set": "Cap on papers fetched per keyword set per source. Stops the first run being enormous.",
+  "_max_per_set": "Cap on papers fetched per keyword set per source.",
   "max_per_set": 30,
 
   "sources": {
@@ -32,7 +68,7 @@
   "_contact_email": "NCBI asks that automated tools identify themselves. Sent as a User-Agent header only.",
   "contact_email": "you@example.com",
 
-  "_email": "Set enabled to true once your digests look right. The password is NEVER stored here: set the environment variable named in password_env. For Gmail, use an app password, not your account password.",
+  "_email": "Set enabled to true once your digests look right. The password is NEVER stored here: set the environment variable named in password_env. For Gmail, use an app password.",
   "email": {
     "enabled": false,
     "smtp_host": "smtp.gmail.com",
@@ -42,7 +78,7 @@
     "from_address": "you@example.com",
     "to_addresses": ["you@example.com"],
     "subject_prefix": "[PaperFeed]",
-    "_send_when_empty": "Email you even when there is nothing new. Off by default so quiet weeks stay quiet; the digest file is still written either way.",
+    "_send_when_empty": "Email you even when there is nothing new. Off by default; the digest file is written either way.",
     "send_when_empty": false
   }
 }

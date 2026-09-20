@@ -17,7 +17,12 @@ open digests/latest.html
 
 `digests/latest.html` is always written, even when email is off and even when
 nothing new turned up. If you ever wonder whether a run worked, that file is
-the answer.
+the answer. `digests/index.html` lists every past digest.
+
+Each digest opens with the **top 5 papers of that run** across all your
+topics, then the full list per topic. Abstracts are collapsed behind a
+click, papers with free full text are badged and linked straight to the PDF,
+and each card carries the senior author's institution plus subject chips.
 
 ## The commands
 
@@ -30,6 +35,11 @@ the answer.
 | `python3 paperfeed.py status` | Last run, next run, how many papers it remembers. |
 | `python3 paperfeed.py check` | Validate config.json and print it back in plain English. |
 | `python3 paperfeed.py test-email` | Send one test message. |
+
+The digest emailed to you is a separate, simpler rendering: mail clients
+routinely strip stylesheets and ignore media queries, so the email version
+writes its styling directly onto each element and skips the collapsible
+abstracts. It is built for a phone screen. The full version stays on your Mac.
 
 ## Editing your keywords
 
@@ -56,6 +66,72 @@ passed through untouched, so `"CRISPR"[MeSH Terms]` works as written.
 After editing, run `python3 paperfeed.py check` — it will tell you in plain
 English if something is wrong, including which line if the JSON itself is
 broken.
+
+### Narrowing a noisy set
+
+Three extra fields, all optional:
+
+```json
+{
+  "name": "binder design",
+  "terms": ["binder design"],
+  "all_of": ["protein"],
+  "exclude": ["cathode", "electrode"],
+  "journals": { "deny": ["Journal of Power Sources"] }
+}
+```
+
+- **`all_of`** — every term listed must *also* appear. `terms` says "any of
+  these"; `all_of` says "and definitely this".
+- **`exclude`** — drop papers mentioning these, for this set only.
+- **`journals.deny` / `journals.allow`** — `deny` never shows them; `allow`, if
+  used, shows *only* those. Matched as substrings, so `"Nature"` covers
+  *Nature Methods*.
+- **`mute`** at the top level does the same across every set. Good for an
+  ambiguous word: "binder" also matches battery-electrode papers, so muting
+  `"cathode"` cleans that up.
+
+Anything a filter removes is **not** remembered, so if you delete a mute term
+later those papers can come back. Every digest says how many were hidden and
+why, so filters never eat things silently.
+
+### Following people
+
+```json
+{ "name": "Baker lab", "authors": ["Baker D"], "terms": [] }
+```
+
+A set can search purely by author. Papers by someone you follow get a scoring
+bonus and the card says so.
+
+One honest caveat: the search APIs are loose about initials, so `"Baker D"`
+will also *return* papers by "Baker DA", a different researcher. PaperFeed
+will not give those the follow bonus — matching requires the initials to line
+up exactly — so they sink to the bottom rather than topping your digest.
+
+## How papers are ordered
+
+Papers are sorted by a relevance score out of 10, and **every card shows why
+it scored what it did** ("'RFdiffusion' in title; 2 different terms matched").
+A ranking you cannot interrogate is one you stop trusting.
+
+| Signal | Points | Reasoning |
+|---|---|---|
+| Term in the **title** | +4 | The title is what a paper is *about* |
+| Term in the **abstract** | +1 | A passing mention is weak evidence |
+| Each extra distinct term | +1 | Breadth is real, but must not outrank a title hit |
+| Published in the last 3 days | +1 | A tiebreaker only |
+| By an author you follow | +3 | |
+
+The weights sit in `config.json` under `ranking` if you want to tune them.
+`"min_score": 3` hides weak matches; `"enabled": false` goes back to plain
+date order.
+
+Why a title match is worth more than two abstract mentions: in testing, a
+paper with *"binder design"* in its title was being outranked by a review that
+merely mentioned the phrase twice in passing. Recency is kept deliberately
+small for the same reason — inside a 14-day window nearly everything is
+recent, so a large recency bonus is noise rather than signal.
 
 ## Changing the schedule
 

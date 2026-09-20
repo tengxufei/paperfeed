@@ -42,6 +42,18 @@ class Paper:
     source: str = ""          # "PubMed" or "Preprint"
     set_name: str = ""        # which keyword set found it
 
+    # Extra detail, all of it parsed from responses we already fetch.
+    free_fulltext: bool = False
+    fulltext_url: str = ""
+    mesh_terms: List[str] = field(default_factory=list)
+    keywords: List[str] = field(default_factory=list)
+    affiliation: str = ""     # the senior (last) author's institution
+    citations: Optional[int] = None   # Europe PMC only; None means unknown
+
+    # Filled in later by relevance.py.
+    score: float = 0.0
+    score_reasons: List[str] = field(default_factory=list)
+
     def author_line(self, limit=8):
         if not self.authors:
             return ""
@@ -114,6 +126,28 @@ def _clean_text(value):
     return " ".join(text.split())
 
 
+_INSTITUTION_HINTS = (
+    "University", "Universit", "Institute", "Institut", "Hospital", "College",
+    "Laboratory", "Laboratoire", "School", "Center", "Centre", "Academy",
+)
+
+
+def _institution(affiliation):
+    """Pull the recognisable institution out of a long affiliation string.
+
+    Affiliations read "Department of X, Y University, City, Country". The
+    department is rarely what you want at a glance; the institution is.
+    """
+    text = _clean_text(affiliation)
+    if not text:
+        return ""
+    parts = [part.strip() for part in text.split(",") if part.strip()]
+    for part in parts:
+        if any(hint in part for hint in _INSTITUTION_HINTS):
+            return part.rstrip(".")
+    return parts[0][:70].rstrip(".") if parts else ""
+
+
 def _normalize_doi(value):
     if not value:
         return ""
@@ -128,20 +162,41 @@ def _normalize_doi(value):
 # PubMed
 # --------------------------------------------------------------------------
 
-def _pubmed_query(terms):
-    """OR the terms together.
+def _bare(term):
+    return term.replace('"', "")
+
+
+def _pubmed_query(keyword_set):
+    """Build one PubMed query from a keyword set.
+
+        terms    OR'ed together  -> ("a" OR "b")
+        all_of   each required   -> AND "c"
+        authors  any of them     -> AND ("Baker D"[Author] OR ...)
 
     A term containing a square bracket is assumed to be deliberate PubMed
-    syntax and passed through untouched; anything else is searched as a quoted
-    phrase in the title and abstract, which keeps the noise down.
+    syntax and passed through untouched. Otherwise terms are searched as
+    quoted phrases in the title and abstract, which keeps the noise down;
+    set "fields": "all" on the keyword set to search everywhere instead.
     """
-    parts = []
-    for term in terms:
+    tag = "" if keyword_set.get("fields") == "all" else "[Title/Abstract]"
+
+    def phrase(term):
         if "[" in term:
-            parts.append("(%s)" % term)
-        else:
-            parts.append('"%s"[Title/Abstract]' % term.replace('"', ""))
-    return " OR ".join(parts)
+            return "(%s)" % term
+        return '"%s"%s' % (_bare(term), tag)
+
+    clauses = []
+    terms = keyword_set.get("terms") or []
+    if terms:
+        clauses.append("(%s)" % " OR ".join(phrase(term) for term in terms))
+    for term in keyword_set.get("all_of") or []:
+        clauses.append(phrase(term))
+    authors = keyword_set.get("authors") or []
+    if authors:
+        clauses.append(
+            "(%s)" % " OR ".join('"%s"[Author]' % _bare(name) for name in authors)
+        )
+    return " AND ".join(clauses)
 
 
 def _text(node, path):
@@ -194,16 +249,39 @@ def _parse_pubmed_xml(xml_text, set_name):
             elif collective:
                 authors.append(collective)
 
-        doi = ""
-        for identifier in article.findall(".//ArticleId"):
-            if identifier.get("IdType") == "doi":
-                doi = _normalize_doi(identifier.text)
-                break
+        ids = {
+            identifier.get("IdType"): (identifier.text or "").strip()
+            for identifier in article.findall(".//ArticleId")
+        }
+        doi = _normalize_doi(ids.get("doi"))
         if not doi:
             for location in article.findall(".//ELocationID"):
                 if location.get("EIdType") == "doi":
                     doi = _normalize_doi(location.text)
                     break
+
+        # A PMC identifier means the full text is readable without a
+        # subscription, which is the practical question when you are deciding
+        # whether to click.
+        pmcid = ids.get("pmc", "")
+
+        mesh_terms = [
+            node.text.strip()
+            for node in article.findall(".//MeshHeading/DescriptorName")
+            if node.text
+        ]
+        keywords = [
+            _clean_text("".join(node.itertext()))
+            for node in article.findall(".//KeywordList/Keyword")
+        ]
+
+        # Walk backwards: the senior author is the last one with an address.
+        affiliation = ""
+        for node in reversed(article.findall(".//Author")):
+            found = node.findtext(".//Affiliation")
+            if found:
+                affiliation = _institution(found)
+                break
 
         pmid = _text(article, ".//PMID")
         url = (
@@ -223,6 +301,15 @@ def _parse_pubmed_xml(xml_text, set_name):
                 venue=_text(article, ".//Journal/Title"),
                 source="PubMed",
                 set_name=set_name,
+                free_fulltext=bool(pmcid),
+                fulltext_url=(
+                    "https://www.ncbi.nlm.nih.gov/pmc/articles/%s/" % pmcid
+                    if pmcid
+                    else ""
+                ),
+                mesh_terms=mesh_terms,
+                keywords=[word for word in keywords if word],
+                affiliation=affiliation,
             )
         )
     return papers
@@ -234,7 +321,7 @@ def fetch_pubmed(keyword_set, lookback_days, max_results, contact_email=""):
         EUTILS + "/esearch.fcgi",
         {
             "db": "pubmed",
-            "term": _pubmed_query(keyword_set["terms"]),
+            "term": _pubmed_query(keyword_set),
             "retmax": max_results,
             "retmode": "json",
             "sort": "date",
@@ -262,15 +349,70 @@ def fetch_pubmed(keyword_set, lookback_days, max_results, contact_email=""):
 # Preprints, via Europe PMC
 # --------------------------------------------------------------------------
 
-def _preprint_query(terms, start, end):
+def _europepmc_terms(keyword_set):
+    """The same terms / all_of / authors logic, in Europe PMC's syntax."""
+    everywhere = keyword_set.get("fields") == "all"
+
+    def phrase(term):
+        # PubMed field syntax means nothing here. Search the plain text part
+        # instead of sending "CRISPR[MeSH Terms]" as a literal phrase, which
+        # would quietly match nothing at all.
+        bare = _bare(term.split("[")[0].strip() if "[" in term else term)
+        if not bare:
+            return ""
+        if everywhere:
+            return '"%s"' % bare
+        return '(TITLE:"%s" OR ABSTRACT:"%s")' % (bare, bare)
+
+    clauses = []
+    rendered = [phrase(term) for term in (keyword_set.get("terms") or [])]
+    rendered = [part for part in rendered if part]
+    if rendered:
+        clauses.append("(%s)" % " OR ".join(rendered))
+    for term in keyword_set.get("all_of") or []:
+        part = phrase(term)
+        if part:
+            clauses.append(part)
+    authors = keyword_set.get("authors") or []
+    if authors:
+        clauses.append(
+            "(%s)" % " OR ".join('AUTH:"%s"' % _bare(name) for name in authors)
+        )
+    return " AND ".join(clauses)
+
+
+def _preprint_query(keyword_set, start, end):
     """SRC:PPR restricts results to preprints: bioRxiv, medRxiv, arXiv,
     Research Square and others, all searchable through one endpoint."""
-    joined = " OR ".join('"%s"' % term.replace('"', "") for term in terms)
-    return '(%s) AND (SRC:PPR) AND (FIRST_PDATE:[%s TO %s])' % (
-        joined,
+    return "(%s) AND (SRC:PPR) AND (FIRST_PDATE:[%s TO %s])" % (
+        _europepmc_terms(keyword_set),
         start.isoformat(),
         end.isoformat(),
     )
+
+
+def _europepmc_fulltext(item):
+    """(free_fulltext, url) - prefer a PDF, fall back to any free copy."""
+    urls = (item.get("fullTextUrlList") or {}).get("fullTextUrl") or []
+    free = [entry for entry in urls if entry.get("availability") == "Free"]
+    is_open = item.get("isOpenAccess") == "Y" or bool(free)
+    for entry in free:
+        if entry.get("documentStyle") == "pdf":
+            return is_open, entry.get("url", "")
+    if free:
+        return is_open, free[0].get("url", "")
+    return is_open, ""
+
+
+def _europepmc_senior_affiliation(item):
+    """The last author's institution, falling back to the record's own."""
+    authors = (item.get("authorList") or {}).get("author") or []
+    for author in reversed(authors):
+        details = author.get("authorAffiliationDetailsList") or {}
+        entries = details.get("authorAffiliation") or []
+        if entries and entries[0].get("affiliation"):
+            return _institution(entries[0]["affiliation"])
+    return _institution(item.get("affiliation", ""))
 
 
 def _preprint_server(item):
@@ -290,7 +432,7 @@ def fetch_preprints(keyword_set, lookback_days, max_results, contact_email=""):
     payload = _get(
         EUROPEPMC,
         {
-            "query": _preprint_query(keyword_set["terms"], start, end),
+            "query": _preprint_query(keyword_set, start, end),
             "format": "json",
             "resultType": "core",
             "pageSize": min(max_results, 100),
@@ -318,6 +460,20 @@ def fetch_preprints(keyword_set, lookback_days, max_results, contact_email=""):
                 if part.strip()
             ]
 
+        free_fulltext, fulltext_url = _europepmc_fulltext(item)
+        mesh_terms = [
+            entry.get("descriptorName", "")
+            for entry in (item.get("meshHeadingList") or {}).get("meshHeading") or []
+            if entry.get("descriptorName")
+        ]
+        keywords = (item.get("keywordList") or {}).get("keyword") or []
+
+        citations = item.get("citedByCount")
+        try:
+            citations = int(citations) if citations is not None else None
+        except (TypeError, ValueError):
+            citations = None
+
         doi = _normalize_doi(item.get("doi"))
         identifier = item.get("id") or ""
         url = (
@@ -337,6 +493,12 @@ def fetch_preprints(keyword_set, lookback_days, max_results, contact_email=""):
                 venue=_preprint_server(item),
                 source="Preprint",
                 set_name=keyword_set["name"],
+                free_fulltext=free_fulltext,
+                fulltext_url=fulltext_url,
+                mesh_terms=mesh_terms,
+                keywords=[str(word) for word in keywords if word],
+                affiliation=_europepmc_senior_affiliation(item),
+                citations=citations,
             )
         )
     return papers
@@ -355,10 +517,15 @@ def fetch_all(keyword_set, cfg):
     the failure is reported in the digest so a short list is never mistaken
     for a quiet week.
     """
+    enabled = dict(cfg["sources"])
+    override = keyword_set.get("sources")
+    if isinstance(override, dict):
+        enabled.update(override)      # e.g. this set is preprints-only
+
     papers = []
     errors = []
     for key, (label, fetcher) in SOURCES.items():
-        if not cfg["sources"].get(key):
+        if not enabled.get(key):
             continue
         try:
             papers.extend(

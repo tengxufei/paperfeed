@@ -14,14 +14,17 @@ thing to check.
 """
 
 import argparse
+import json
 import logging
 import os
 import sys
+from collections import Counter
 from datetime import datetime
 
 import config as config_module
 import digest as digest_module
 import mailer
+import relevance
 import sources
 import store as store_module
 
@@ -68,6 +71,30 @@ def write_digest(cfg, html_text, moment):
     return stamped, latest
 
 
+def update_index(cfg, record):
+    """Append this run to digests/index.json and rebuild index.html.
+
+    Only run metadata is stored here — a date and some counts — never papers.
+    """
+    index_path = os.path.join(cfg["digest_dir"], "index.json")
+    records = []
+    if os.path.exists(index_path):
+        try:
+            with open(index_path, "r", encoding="utf-8") as handle:
+                records = json.load(handle) or []
+        except (json.JSONDecodeError, OSError):
+            records = []
+
+    records = [item for item in records if item.get("file") != record["file"]]
+    records.insert(0, record)
+    records = records[:400]
+
+    with open(index_path, "w", encoding="utf-8") as handle:
+        json.dump(records, handle, indent=2)
+    with open(os.path.join(cfg["digest_dir"], "index.html"), "w", encoding="utf-8") as handle:
+        handle.write(digest_module.render_index(records))
+
+
 def command_run(args):
     cfg = load_config_or_exit(args.config)
     setup_logging(cfg["log_path"], verbose=not args.quiet)
@@ -98,49 +125,100 @@ def command_run(args):
 
     fetched = []
     errors = []
+    hidden = []
     for keyword_set in keyword_sets:
         papers, set_errors = sources.fetch_all(keyword_set, cfg)
         errors.extend(set_errors)
-        log.info("  %-34s %3d found", keyword_set["name"], len(papers))
+        kept, set_hidden = relevance.filter_papers(papers, keyword_set, cfg)
+        hidden.extend(set_hidden)
+        log.info(
+            "  %-34s %3d found%s",
+            keyword_set["name"],
+            len(papers),
+            (", %d filtered out" % len(set_hidden)) if set_hidden else "",
+        )
         for message in set_errors:
             log.warning("  ! %s", message)
-        fetched.extend(papers)
+        fetched.extend(kept)
 
     unique = store_module.deduplicate(fetched)
     new_papers = store.filter_new(unique)
+
+    ranking = cfg["ranking"]
+    show_scores = bool(ranking.get("enabled", True))
+    low_scoring = []
+    if show_scores:
+        relevance.score_all(new_papers, keyword_sets, ranking)
+        new_papers, low_scoring = relevance.drop_below(
+            new_papers, ranking.get("min_score", 0)
+        )
+        hidden.extend(low_scoring)
+
     log.info(
-        "%d fetched, %d after deduplication, %d new",
+        "%d kept after filters, %d after deduplication, %d new, %d hidden",
         len(fetched),
         len(unique),
         len(new_papers),
+        len(hidden),
     )
 
     by_set = {}
     for paper in new_papers:
         by_set.setdefault(paper.set_name, []).append(paper)
-    for papers in by_set.values():
-        papers.sort(key=lambda paper: paper.published or "", reverse=True)
+    for name in by_set:
+        if show_scores:
+            by_set[name] = relevance.rank(by_set[name])
+        else:
+            by_set[name].sort(key=lambda paper: paper.published or "", reverse=True)
     groups = [(entry["name"], by_set.get(entry["name"], [])) for entry in keyword_sets]
 
     moment = datetime.now()
     enabled_sources = [
         label for key, (label, _) in sources.SOURCES.items() if cfg["sources"].get(key)
     ]
+    source_counts = dict(Counter(paper.source for paper in new_papers))
+
+    hidden_examples = []
+    if hidden:
+        reasons = Counter(reason for _, reason in hidden)
+        hidden_examples.append(
+            "%d paper%s hidden by your filters: %s. Nothing hidden is marked as "
+            "seen, so loosening a filter brings it back."
+            % (
+                len(hidden),
+                "" if len(hidden) == 1 else "s",
+                "; ".join(
+                    "%s (%d)" % (reason, count)
+                    for reason, count in reasons.most_common(4)
+                ),
+            )
+        )
+
     meta = {
         "date_label": digest_module.date_label(moment),
         "total_new": len(new_papers),
         "lookback_days": cfg["lookback_days"],
         "errors": errors,
         "sources_label": " and ".join(enabled_sources),
+        "show_scores": show_scores,
+        "source_counts": source_counts,
+        "hidden_count": len(hidden),
+        "hidden_examples": hidden_examples,
+        "top_papers": relevance.top_n(new_papers, 5) if len(new_papers) > 5 else [],
     }
     html_text = digest_module.render_html(groups, meta)
     text_body = digest_module.render_text(groups, meta)
+    email_html = digest_module.render_email_html(groups, meta)
 
     if args.dry_run:
         log.info("Dry run: no digest written, nothing marked as seen, no email sent.")
         for name, papers in groups:
             for paper in papers:
-                log.info("  [%s] %s", name, paper.title)
+                log.info("  %4.1f  [%s] %s", paper.score, name, paper.title)
+                if paper.score_reasons:
+                    log.info("        why: %s", "; ".join(paper.score_reasons))
+        for line in hidden_examples:
+            log.info("  %s", line)
         return 1 if errors else 0
 
     # The file goes to disk first, always, whatever happens next.
@@ -148,10 +226,25 @@ def command_run(args):
     log.info("Digest written: %s", stamped)
     log.info("Also at:        %s", latest)
 
-    # Everything fetched is marked seen, including papers that appeared in an
-    # earlier digest, so the next run starts from a clean slate.
-    store.mark_seen(unique)
+    # Everything that passed the filters is marked seen. Papers a filter
+    # removed are deliberately left unmarked, so relaxing that filter later
+    # lets them show up rather than silently swallowing them forever.
+    low_keys = {store_module.fingerprint(paper) for paper, _ in low_scoring}
+    store.mark_seen(
+        [paper for paper in unique if store_module.fingerprint(paper) not in low_keys]
+    )
     store.save(record_run=True)
+
+    update_index(
+        cfg,
+        {
+            "file": os.path.basename(stamped),
+            "date_label": meta["date_label"],
+            "total": len(new_papers),
+            "sources": source_counts,
+            "hidden": len(hidden),
+        },
+    )
 
     email_settings = cfg["email"]
     if not email_settings["enabled"]:
@@ -166,7 +259,7 @@ def command_run(args):
             moment.strftime("%d %b %Y"),
         )
         try:
-            mailer.send(email_settings, subject, html_text, text_body)
+            mailer.send(email_settings, subject, email_html, text_body)
             log.info("Email sent to %s", ", ".join(email_settings["to_addresses"]))
         except mailer.MailError as error:
             log.error("Email failed: %s", error)
