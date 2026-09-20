@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.paperfeed.daily</string>
+
+    <!-- Wakes PaperFeed once a day. PaperFeed itself decides whether enough
+         days have passed, using interval_days in config.json. That is why you
+         never have to edit this file to change your schedule. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/Users/xufeiteng/ai_completion/research_tools/paperfeed/paperfeed.py</string>
+        <string>run</string>
+        <string>--quiet</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/xufeiteng/ai_completion/research_tools/paperfeed</string>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>8</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <!-- If the Mac was asleep at 08:00, run when it next wakes. -->
+    <key>RunAtLoad</key>
+    <false/>
+
+    <!-- Anything the script prints unexpectedly (a crash, say). The normal
+         run log is paperfeed.log in the folder above. -->
+    <key>StandardOutPath</key>
+    <string>/Users/xufeiteng/ai_completion/research_tools/paperfeed/state/launchd.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/xufeiteng/ai_completion/research_tools/paperfeed/state/launchd.err.log</string>
+
+    <!-- Scheduled jobs do not read ~/.zshrc, so if you want the scheduled run
+         to send email you must supply the password here. Uncomment, paste it
+         in, then: chmod 600 ~/Library/LaunchAgents/com.paperfeed.daily.plist
+         Leave it commented out to keep the password off disk; the digest file
+         is written either way.
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PAPERFEED_SMTP_PASSWORD</key>
+        <string>your-app-password-here</string>
+    </dict>
+    -->
+</dict>
+</plist>
