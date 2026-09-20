@@ -319,7 +319,7 @@ def _parse_pubmed_xml(xml_text, set_name):
     return papers
 
 
-def fetch_pubmed(keyword_set, lookback_days, max_results, contact_email=""):
+def fetch_pubmed(keyword_set, lookback_days, max_results, contact_email="", stats=None):
     start, end = _window(lookback_days)
     search = _get(
         EUTILS + "/esearch.fcgi",
@@ -336,7 +336,14 @@ def fetch_pubmed(keyword_set, lookback_days, max_results, contact_email=""):
         contact_email,
     )
 
-    ids = search.get("esearchresult", {}).get("idlist", [])
+    result = search.get("esearchresult", {}) or {}
+    ids = result.get("idlist", [])
+    if stats is not None:
+        try:
+            stats["available"] = int(result.get("count", 0))
+        except (TypeError, ValueError):
+            pass
+        stats["fetched"] = len(ids)
     if not ids:
         return []
 
@@ -431,7 +438,7 @@ def _preprint_server(item):
     return str(name).strip()
 
 
-def fetch_preprints(keyword_set, lookback_days, max_results, contact_email=""):
+def fetch_preprints(keyword_set, lookback_days, max_results, contact_email="", stats=None):
     start, end = _window(lookback_days)
     payload = _get(
         EUROPEPMC,
@@ -439,14 +446,22 @@ def fetch_preprints(keyword_set, lookback_days, max_results, contact_email=""):
             "query": _preprint_query(keyword_set, start, end),
             "format": "json",
             "resultType": "core",
-            "pageSize": min(max_results, 100),
+            "pageSize": min(max_results, 100),   # API maximum per page
             "sort": "P_PDATE_D desc",
         },
         contact_email,
     )
 
+    items = payload.get("resultList", {}).get("result", [])[:max_results]
+    if stats is not None:
+        try:
+            stats["available"] = int(payload.get("hitCount", 0))
+        except (TypeError, ValueError):
+            pass
+        stats["fetched"] = len(items)
+
     papers = []
-    for item in payload.get("resultList", {}).get("result", [])[:max_results]:
+    for item in items:
         title = _clean_text(item.get("title")).rstrip(".")
         if not title:
             continue
@@ -528,9 +543,11 @@ def fetch_all(keyword_set, cfg):
 
     papers = []
     errors = []
+    notices = []
     for key, (label, fetcher) in SOURCES.items():
         if not enabled.get(key):
             continue
+        stats = {}
         try:
             papers.extend(
                 fetcher(
@@ -538,8 +555,21 @@ def fetch_all(keyword_set, cfg):
                     cfg["lookback_days"],
                     cfg["max_per_set"],
                     cfg.get("contact_email", ""),
+                    stats,
                 )
             )
         except Exception as error:
             errors.append("%s / %s: %s" % (label, keyword_set["name"], error))
-    return papers, errors
+            continue
+
+        # Say so when a cap threw papers away. Silently keeping the newest N
+        # of a much larger set is how a keyword set quietly stops working.
+        available = stats.get("available", 0)
+        fetched = stats.get("fetched", 0)
+        if available and fetched and available > fetched:
+            notices.append(
+                "%s: %r matched %d papers but only the %d most recent were "
+                "fetched. Raise max_per_set, or narrow the set with all_of "
+                "or exclude." % (label, keyword_set["name"], available, fetched)
+            )
+    return papers, errors, notices

@@ -224,6 +224,35 @@ def drop_below(papers, min_score):
     return kept, hidden
 
 
+def drop_below_per_set(papers, keyword_sets, global_min):
+    """Apply each set's own min_score, falling back to the global one.
+
+    A single global threshold cannot serve sets with different vocabularies:
+    a cut-off that tames a broad term like "glioblastoma" (where the word is
+    usually in the title) will silence a set whose matches are legitimately
+    in abstracts.
+    """
+    thresholds = {}
+    for entry in keyword_sets:
+        value = entry.get("min_score")
+        thresholds[entry["name"]] = global_min if value is None else value
+
+    kept, hidden = [], []
+    for paper in papers:
+        threshold = thresholds.get(paper.set_name, global_min)
+        if not threshold or paper.score >= threshold:
+            kept.append(paper)
+        else:
+            hidden.append(
+                (
+                    paper,
+                    "scored %.1f, below the %.1f minimum set for %r"
+                    % (paper.score, threshold, paper.set_name),
+                )
+            )
+    return kept, hidden
+
+
 def top_n(papers, count=5):
     """The strongest papers across every keyword set, for the digest header."""
     return rank(papers)[:count]

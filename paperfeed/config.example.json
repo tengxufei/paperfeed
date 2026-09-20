@@ -25,6 +25,8 @@
 
       "_sources": "Override the global sources for this set only, e.g. {\"pubmed\": false} to make it preprints-only.",
 
+      "_min_score": "Override the global ranking.min_score for this set. Useful for a broad term: a title match is worth 4, so min_score 4 means the paper must be ABOUT this, not merely mention it. Hidden papers are reported and not marked as seen.",
+
       "enabled": true
     },
     {

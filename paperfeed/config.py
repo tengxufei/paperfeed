@@ -166,6 +166,20 @@ def _validate_keyword_sets(raw):
                     "Keyword set %r: journals.%s must be a list." % (name, label)
                 )
 
+        set_min_score = entry.get("min_score")
+        if set_min_score is not None:
+            if isinstance(set_min_score, bool) or not isinstance(
+                set_min_score, (int, float)
+            ):
+                raise ConfigError(
+                    "Keyword set %r: 'min_score' must be a number between 0 and 10, "
+                    "but found %r." % (name, set_min_score)
+                )
+            if not 0 <= set_min_score <= 10:
+                raise ConfigError(
+                    "Keyword set %r: 'min_score' must be between 0 and 10." % name
+                )
+
         set_sources = entry.get("sources")
         if set_sources is not None:
             if not isinstance(set_sources, dict):
@@ -197,6 +211,7 @@ def _validate_keyword_sets(raw):
                 "fields": fields,
                 "journals": {"allow": list(allow), "deny": list(deny)},
                 "sources": set_sources,
+                "min_score": set_min_score,
                 "enabled": enabled,
             }
         )

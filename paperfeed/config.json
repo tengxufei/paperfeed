@@ -19,6 +19,16 @@
         "protein structure prediction"
       ],
       "enabled": true
+    },
+    {
+      "name": "IDH1 glioblastoma",
+      "terms": [
+        "glioblastoma",
+        "glioblastoma multi-omics"
+      ],
+      "enabled": true,
+      "min_score": 4,
+      "_min_score": "'glioblastoma' is broad, so require the match to be in the title (title_weight is 4). Papers that merely mention it in the abstract are hidden and reported, not forgotten."
     }
   ],
   "_interval_days": "Minimum days between digests. The scheduler wakes the script daily; it exits quietly until this many days have passed. Change this number to change your schedule.",
@@ -26,7 +36,7 @@
   "_lookback_days": "How far back each run searches. Keep comfortably larger than interval_days so nothing slips through a gap.",
   "lookback_days": 14,
   "_max_per_set": "Cap on papers fetched per keyword set per source. Stops the first run being enormous.",
-  "max_per_set": 30,
+  "max_per_set": 200,
   "sources": {
     "pubmed": true,
     "preprints": true

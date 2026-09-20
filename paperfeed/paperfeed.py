@@ -118,7 +118,9 @@ def command_run(args):
                 log.error("Trend report failed: %s", error)
 
     due, reason = store.due(cfg["interval_days"])
-    if not due and not args.force:
+    # A dry run changes nothing, so the interval gate would only get in the
+    # way of the question you are actually asking: what would I get now?
+    if not due and not args.force and not args.dry_run:
         log.info("Not due yet (%s). Use --force to run anyway.", reason)
         return 0
 
@@ -143,9 +145,11 @@ def command_run(args):
     fetched = []
     errors = []
     hidden = []
+    notices = []
     for keyword_set in keyword_sets:
-        papers, set_errors = sources.fetch_all(keyword_set, cfg)
+        papers, set_errors, set_notices = sources.fetch_all(keyword_set, cfg)
         errors.extend(set_errors)
+        notices.extend(set_notices)
         kept, set_hidden = relevance.filter_papers(papers, keyword_set, cfg)
         hidden.extend(set_hidden)
         log.info(
@@ -155,6 +159,8 @@ def command_run(args):
             (", %d filtered out" % len(set_hidden)) if set_hidden else "",
         )
         for message in set_errors:
+            log.warning("  ! %s", message)
+        for message in set_notices:
             log.warning("  ! %s", message)
         fetched.extend(kept)
 
@@ -166,8 +172,8 @@ def command_run(args):
     low_scoring = []
     if show_scores:
         relevance.score_all(new_papers, keyword_sets, ranking)
-        new_papers, low_scoring = relevance.drop_below(
-            new_papers, ranking.get("min_score", 0)
+        new_papers, low_scoring = relevance.drop_below_per_set(
+            new_papers, keyword_sets, ranking.get("min_score", 0)
         )
         hidden.extend(low_scoring)
 
@@ -236,7 +242,7 @@ def command_run(args):
     ]
     source_counts = dict(Counter(paper.source for paper in new_papers))
 
-    hidden_examples = []
+    hidden_examples = list(notices)
     if hidden:
         reasons = Counter(reason for _, reason in hidden)
         hidden_examples.append(
@@ -609,7 +615,9 @@ def command_search(args):
             continue
         try:
             papers.extend(
-                fetcher(keyword_set, lookback, args.limit, cfg.get("contact_email", ""))
+                fetcher(
+                    keyword_set, lookback, args.limit, cfg.get("contact_email", "")
+                )
             )
         except Exception as error:
             print("  ! %s did not answer: %s" % (label, error))

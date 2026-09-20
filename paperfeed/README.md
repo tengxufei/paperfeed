@@ -142,6 +142,39 @@ Anything a filter removes is **not** remembered, so if you delete a mute term
 later those papers can come back. Every digest says how many were hidden and
 why, so filters never eat things silently.
 
+### Broad terms, and the cap
+
+`max_per_set` limits how many papers each set fetches per source. When a set
+matches more than that, PaperFeed **tells you**:
+
+```
+! PubMed: 'IDH1 glioblastoma' matched 180 papers but only the 30 most
+  recent were fetched. Raise max_per_set, or narrow the set.
+```
+
+That warning matters more than it looks. Without it, a broad term quietly
+returns only the newest slice, and the specific papers you actually wanted
+can be crowded out by whatever happened to be indexed most recently.
+
+Two ways to handle a broad set:
+
+- **Narrow it** with `all_of` or `exclude`.
+- **Keep it broad, raise `max_per_set`, and set a per-set `min_score`:**
+
+```json
+{
+  "name": "IDH1 glioblastoma",
+  "terms": ["glioblastoma"],
+  "min_score": 4
+}
+```
+
+`min_score` on a keyword set overrides the global one. Since a title match is
+worth 4, `"min_score": 4` means *the paper must be about this, not merely
+mention it*. This has to be per-set: a threshold that tames a broad term
+where the word is usually in the title would silence a set whose matches are
+legitimately in abstracts.
+
 ### Following people
 
 ```json
