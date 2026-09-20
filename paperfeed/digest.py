@@ -49,12 +49,22 @@ h2 .count { color: #888; font-weight: normal; text-transform: none; letter-spaci
   border-radius: 10px; background: #eceff3; color: #63696f;
 }
 .score.strong { background: #d9ead3; color: #2c5d1e; }
+.score.ai { background: #ece3f5; color: #573a78; }
 .score.medium { background: #e8edf4; color: #33507a; }
 .paper a.title { font-size: 16px; font-weight: 600; color: #11467f; text-decoration: none; }
 .paper a.title:hover { text-decoration: underline; }
 .byline { font-size: 13px; color: #555; margin: 6px 0 0; }
 .affil { color: #777; font-style: italic; }
 .why { font-size: 12px; color: #6b7a52; margin: 5px 0 0; }
+.ai-why { font-size: 13px; color: #573a78; margin: 6px 0 0; }
+.theme { background: #fff; border: 1px solid #e2e4e8; border-radius: 8px;
+         padding: 16px 18px; margin-bottom: 14px; }
+.theme h3 { margin: 0 0 8px; font-size: 17px; color: #11467f; }
+.theme p { margin: 0 0 10px; font-size: 14px; }
+.theme ol { margin: 0; padding-left: 20px; font-size: 13px; }
+.theme li { margin-bottom: 4px; }
+.cooling { font-size: 13px; color: #7a5a1e; border-left: 3px solid #d7b377;
+           padding-left: 10px; margin-top: 10px; }
 .tags { font-size: 12px; color: #777; margin-top: 6px; }
 .badge {
   display: inline-block; padding: 1px 7px; border-radius: 10px;
@@ -103,6 +113,10 @@ details p { font-size: 13.5px; color: #333; margin: 8px 0 0; }
   .chip { background: #282c33; color: #9aa1aa; }
   .score { background: #282c33; color: #9aa1aa; }
   .score.strong { background: #26381f; color: #a6cf92; }
+  .score.ai { background: #322a3d; color: #c0a6dd; }
+  .ai-why { color: #c0a6dd; }
+  .theme { background: #1f2228; border-color: #33373d; }
+  .theme h3 { color: #86b3ec; }
   .score.medium { background: #2a3547; color: #9dbbe4; }
   .counts b { color: #d8dce1; }
   .meta, .counts, .hidden-note { color: #98a0a8; }
@@ -184,6 +198,11 @@ def _paper_html(paper, show_scores):
     parts = ['<div class="paper" data-doi="%s">' % _escape(paper.doi)]
 
     head = ['<div class="head">']
+    if getattr(paper, "ai_score", None) is not None:
+        head.append(
+            '<span class="score ai" title="Claude\'s relevance score">%.0f</span>'
+            % paper.ai_score
+        )
     if show_scores:
         head.append(
             '<span class="%s" title="%s">%.1f</span>'
@@ -205,6 +224,9 @@ def _paper_html(paper, show_scores):
         if paper.affiliation:
             line += ' <span class="affil">&mdash; %s</span>' % _escape(paper.affiliation)
         parts.append('<p class="byline">%s</p>' % line)
+
+    if getattr(paper, "ai_reason", ""):
+        parts.append('<p class="ai-why">%s</p>' % _escape(paper.ai_reason))
 
     # Say why it ranked where it did, visibly. A tooltip alone is useless on
     # a phone, and an unexplained ranking is one you stop trusting.
@@ -474,6 +496,64 @@ def render_index(records):
             "</div></body></html>",
         ]
     )
+
+
+def render_trends(themes, meta):
+    """The quarterly trend briefing."""
+    parts = [
+        "<!doctype html>",
+        '<html lang="en"><head><meta charset="utf-8">',
+        '<meta name="viewport" content="width=device-width, initial-scale=1">',
+        "<title>PaperFeed trends &mdash; %s</title>" % _escape(meta.get("period", "")),
+        "<style>%s</style></head><body><div class=\"wrap\">" % STYLE,
+        "<h1>What's been happening</h1>",
+        '<p class="meta">%s &middot; from %d papers across %d month%s</p>'
+        % (
+            _escape(meta.get("date_label", "")),
+            meta.get("paper_count", 0),
+            meta.get("months", 0),
+            "" if meta.get("months") == 1 else "s",
+        ),
+    ]
+
+    if meta.get("errors"):
+        parts.append(
+            '<div class="errors">%s</div>'
+            % _escape("; ".join(str(error) for error in meta["errors"]))
+        )
+
+    if not themes:
+        parts.append(
+            '<div class="empty">No themes could be produced this time. '
+            "The papers were fetched, but the summary step did not complete.</div>"
+        )
+
+    for theme in themes:
+        block = ['<div class="theme">']
+        block.append("<h3>%s</h3>" % _escape(theme.get("theme", "")))
+        if theme.get("summary"):
+            block.append("<p>%s</p>" % _escape(theme["summary"]))
+        if theme.get("papers"):
+            block.append("<ol>")
+            for paper in theme["papers"]:
+                block.append(
+                    '<li><a href="https://doi.org/%s">%s</a></li>'
+                    % (_escape(paper.get("doi", "")), _escape(paper.get("title", "")))
+                )
+            block.append("</ol>")
+        if theme.get("cooling"):
+            block.append('<div class="cooling">%s</div>' % _escape(theme["cooling"]))
+        block.append("</div>")
+        parts.append("".join(block))
+
+    parts.append(
+        '<p class="footer">Written by %s from titles and abstracts only. '
+        "Every linked paper was in the set it was given &mdash; citations it "
+        "could not be traced back to a real paper were dropped.</p>"
+        % _escape(meta.get("model", "the model"))
+    )
+    parts.append("</div></body></html>")
+    return "\n".join(parts)
 
 
 def date_label(moment=None):

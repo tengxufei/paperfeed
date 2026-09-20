@@ -22,6 +22,21 @@ DEFAULTS = {
         "min_score": 0.0,
     },
     "mute": {"terms": [], "journals": []},
+    "ai": {
+        "enabled": False,
+        "interests": "",
+        "model": "claude-haiku-4-5",
+        "max_papers_per_run": 40,
+        "batch_size": 10,
+    },
+    "trends": {
+        "enabled": False,
+        "months": 3,
+        "max_papers": 300,
+        "model": "claude-sonnet-5",
+        "interval_days": 30,
+        "email": False,
+    },
     "lookback_days": 14,
     "max_per_set": 30,
     "contact_email": "",
@@ -193,6 +208,47 @@ def _validate_keyword_sets(raw):
     return cleaned
 
 
+def _validate_block(raw, defaults, label):
+    """Validate a simple settings block against its defaults.
+
+    Types must match the default's type, so a typo like "enabled": "yes"
+    is caught here rather than behaving oddly three steps later.
+    """
+    block = dict(defaults)
+    if raw is None:
+        return block
+    if not isinstance(raw, dict):
+        raise ConfigError("'%s' must be a block of settings." % label)
+    for key in raw:
+        if key not in defaults:
+            raise ConfigError(
+                "%s.%s is not a setting. Valid ones: %s"
+                % (label, key, ", ".join(sorted(defaults)))
+            )
+    block.update(raw)
+
+    for key, default in defaults.items():
+        value = block[key]
+        if isinstance(default, bool):
+            if not isinstance(value, bool):
+                raise ConfigError(
+                    "%s.%s must be true or false, but found: %r" % (label, key, value)
+                )
+        elif isinstance(default, int):
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ConfigError(
+                    "%s.%s must be a whole number, but found: %r" % (label, key, value)
+                )
+            if value < 1:
+                raise ConfigError("%s.%s must be at least 1." % (label, key))
+        elif isinstance(default, str):
+            if not isinstance(value, str):
+                raise ConfigError(
+                    "%s.%s must be text, but found: %r" % (label, key, value)
+                )
+    return block
+
+
 def _validate_ranking(raw):
     ranking = dict(DEFAULTS["ranking"])
     if raw is None:
@@ -355,6 +411,14 @@ def load(config_path):
             % (cfg["lookback_days"], cfg["interval_days"])
         )
 
+    cfg["ai"] = _validate_block(raw.get("ai"), DEFAULTS["ai"], "ai")
+    cfg["trends"] = _validate_block(raw.get("trends"), DEFAULTS["trends"], "trends")
+    if cfg["ai"]["enabled"] and not (cfg["ai"].get("interests") or "").strip():
+        raise ConfigError(
+            "ai.enabled is true but ai.interests is empty.\n"
+            "Describe what you care about in a sentence or two - that is what "
+            "each paper gets scored against."
+        )
     cfg["ranking"] = _validate_ranking(raw.get("ranking"))
     cfg["mute"] = _validate_mute(raw.get("mute"))
     cfg["email"] = _validate_email(raw.get("email"))

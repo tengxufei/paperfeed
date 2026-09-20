@@ -196,6 +196,21 @@ def rank(papers):
     )
 
 
+def sort_key(paper):
+    """AI score where we have one, local score otherwise.
+
+    Both are on the same 0-10 scale, so a run where only the first 40 papers
+    were sent to the API still sorts sensibly: the local score carries the
+    rest, and the local score breaks ties.
+    """
+    ai = getattr(paper, "ai_score", None)
+    return (ai if ai is not None else paper.score, paper.score, paper.published or "")
+
+
+def rank_with_ai(papers):
+    return sorted(papers, key=sort_key, reverse=True)
+
+
 def drop_below(papers, min_score):
     """Split into (kept, hidden) at the minimum score, if one is set."""
     if not min_score:

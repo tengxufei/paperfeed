@@ -54,6 +54,10 @@ class Paper:
     score: float = 0.0
     score_reasons: List[str] = field(default_factory=list)
 
+    # Filled in by ai.py, only when AI scoring is switched on.
+    ai_score: Optional[float] = None
+    ai_reason: str = ""
+
     def author_line(self, limit=8):
         if not self.authors:
             return ""

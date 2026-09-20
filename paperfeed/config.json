@@ -60,5 +60,20 @@
   "mute": {
     "terms": [],
     "journals": []
+  },
+  "ai": {
+    "enabled": false,
+    "interests": "",
+    "model": "claude-haiku-4-5",
+    "max_papers_per_run": 40,
+    "batch_size": 10
+  },
+  "trends": {
+    "enabled": false,
+    "months": 3,
+    "max_papers": 300,
+    "model": "claude-sonnet-5",
+    "interval_days": 30,
+    "email": false
   }
 }

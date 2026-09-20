@@ -97,6 +97,7 @@ class Store:
         self.last_run = None          # datetime or None
         self.seen = {}                # key -> ISO date first seen
         self.paper_count = 0          # distinct papers, not keys
+        self.marks = {}               # other periodic jobs, e.g. the trend report
         self._load()
 
     def _load(self):
@@ -116,6 +117,7 @@ class Store:
 
         self.seen = data.get("seen", {}) or {}
         self.paper_count = data.get("paper_count", 0) or 0
+        self.marks = data.get("marks", {}) or {}
         stamp = data.get("last_run")
         if stamp:
             try:
@@ -150,6 +152,24 @@ class Store:
         remaining = timedelta(days=interval_days) - elapsed
         return False, "next run in %.1f days" % (remaining.total_seconds() / 86400)
 
+    def due_mark(self, name, interval_days):
+        """Same interval gate as runs, for anything on its own cadence."""
+        stamp = self.marks.get(name)
+        if not stamp:
+            return True, "never run"
+        try:
+            last = datetime.fromisoformat(stamp)
+        except ValueError:
+            return True, "never run"
+        elapsed = _now() - last
+        if elapsed >= timedelta(days=interval_days):
+            return True, "%.0f days since the last one" % (elapsed.total_seconds() / 86400)
+        remaining = timedelta(days=interval_days) - elapsed
+        return False, "next one in %.0f days" % (remaining.total_seconds() / 86400)
+
+    def set_mark(self, name):
+        self.marks[name] = _now().isoformat()
+
     def _prune(self):
         cutoff = (_now() - timedelta(days=FORGET_AFTER_DAYS)).date().isoformat()
         self.seen = {
@@ -166,6 +186,7 @@ class Store:
             "last_run": self.last_run.isoformat() if self.last_run else None,
             "paper_count": self.paper_count,
             "key_count": len(self.seen),
+            "marks": self.marks,
             "seen": self.seen,
         }
         directory = os.path.dirname(self.path)

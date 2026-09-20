@@ -38,6 +38,8 @@ and each card carries the senior author's institution plus subject chips.
 | `python3 paperfeed.py saved` | List the papers you have kept. |
 | `python3 paperfeed.py search "text"` | Search your saved papers. |
 | `python3 paperfeed.py search "text" --online` | Search PubMed and the preprint servers live. |
+| `python3 paperfeed.py trends` | Write a themed summary of the last few months (needs a key). |
+| `python3 paperfeed.py set-key` | Store your Anthropic API key. |
 | `python3 paperfeed.py test-email` | Send one test message. |
 
 The digest emailed to you is a separate, simpler rendering: mail clients
@@ -250,6 +252,7 @@ sources.py            talks to PubMed and Europe PMC
 store.py              decides what counts as "already seen"
 digest.py             builds the HTML
 mailer.py             sends it
+ai.py                 the optional Anthropic API features
 library.py            your saved papers
 server.py             the local Save-button page
 state/seen.json       the memory (plain JSON, safe to read or delete)
@@ -273,6 +276,77 @@ not get collapsed together.
 `state/seen.json` is plain JSON. Delete it and the next run treats everything
 in the lookback window as new — occasionally useful, e.g. after a big change
 to your keywords.
+
+## The optional AI features
+
+Two features use the Anthropic API. **Both are off by default, and PaperFeed
+works completely without them.** They cost money; nothing else here does.
+
+```bash
+python3 paperfeed.py check --costs
+```
+
+That prints an estimate before you commit to anything. At the default
+settings it is roughly **$3-4 a year** — about 2p per digest for scoring, and
+around 10p for each quarterly trend report. Every run logs what it actually
+spent, so you are never guessing.
+
+### Setting your key
+
+```bash
+python3 paperfeed.py set-key
+```
+
+It asks you to paste your key (hidden as you type), **checks it against the
+API before storing it**, and puts it in your macOS Keychain. A wrong key
+fails right there in front of you rather than silently at 08:00 three days
+later. The key never goes into `config.json` or any file in this project.
+`--forget` removes it.
+
+### Relevance scoring
+
+```json
+"ai": {
+  "enabled": true,
+  "interests": "I design de novo protein binders. I care about experimental validation and hit rates, not new architectures for their own sake."
+}
+```
+
+Each paper gets a 0-10 score against that description plus one line on why it
+matters *to you*, shown in purple on the card next to the local score. Both
+are kept: the AI score orders the list, the local score explains the match.
+
+The more specific your `interests`, the better the triage. "Protein design"
+will not help it much; the sentence above will.
+
+`max_papers_per_run` (40) caps what gets sent, so cost stays predictable
+regardless of how many papers a run finds.
+
+### The trend report
+
+```json
+"trends": { "enabled": true, "months": 3, "interval_days": 30 }
+```
+
+Every 30 days, PaperFeed re-queries the last three months across all your
+keyword sets and writes `digests/trends-YYYY-MM.html`: the three to six themes
+that actually characterise the period, each with representative papers, plus
+what seems to be quietening down.
+
+It stores nothing extra — it re-fetches each time, which is what keeps it
+consistent with only keeping papers you chose. Your existing daily scheduler
+triggers it; there is no second cron job to set up.
+
+**On trusting it:** every paper it cites is checked against the DOIs actually
+fetched. A citation it cannot trace back to a real paper is dropped before
+you see it. It reads titles and abstracts only, never full text.
+
+### If the AI is unavailable
+
+No key, a rejected key, a dead network, a garbled reply — all of them fall
+back to the local ranking, note what happened at the top of the digest, and
+**still write the file**. This is tested: the digest is written before the API
+is ever called.
 
 ## When something goes wrong
 

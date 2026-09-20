@@ -51,6 +51,27 @@
     "journals": []
   },
 
+  "_ai": "OPTIONAL and off by default. Scores each paper against 'interests' and writes one line on why it matters to you. Needs an Anthropic API key: run 'python3 paperfeed.py set-key' - the key goes in your macOS Keychain, never in this file. PaperFeed works completely without it; if the key is missing, wrong, or the network is down, it falls back to the local ranking and still writes the digest.",
+  "ai": {
+    "enabled": false,
+    "_interests": "Free text. The more specific, the better the triage. e.g. 'I design de novo protein binders; I care about experimental validation and hit rates, not new architectures for their own sake.'",
+    "interests": "",
+    "model": "claude-haiku-4-5",
+    "_max_papers_per_run": "Cost cap: only the top N papers after filtering get sent.",
+    "max_papers_per_run": 40,
+    "batch_size": 10
+  },
+
+  "_trends": "OPTIONAL and off by default. Every interval_days it re-queries the last few months and writes digests/trends-YYYY-MM.html: the themes of the period with representative papers. Stores nothing extra - it re-fetches each time, which is what keeps it compatible with keeping only papers you chose. Your existing daily scheduler runs it; there is no second cron job.",
+  "trends": {
+    "enabled": false,
+    "months": 3,
+    "max_papers": 300,
+    "model": "claude-sonnet-5",
+    "interval_days": 30,
+    "email": false
+  },
+
   "_interval_days": "Minimum days between digests. The scheduler wakes the script daily; it exits quietly until this many days have passed.",
   "interval_days": 3,
 

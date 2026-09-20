@@ -14,6 +14,7 @@ thing to check.
 """
 
 import argparse
+import getpass
 import json
 import logging
 import os
@@ -21,6 +22,7 @@ import sys
 from collections import Counter
 from datetime import date, datetime, timedelta
 
+import ai
 import config as config_module
 import digest as digest_module
 import library
@@ -101,6 +103,20 @@ def command_run(args):
     setup_logging(cfg["log_path"], verbose=not args.quiet)
 
     store = store_module.Store(cfg["state_path"])
+
+    # The trend report runs on its own, much slower cadence. Checking it here
+    # means the one daily launchd job drives both - no second scheduler.
+    if cfg["trends"]["enabled"] and not args.dry_run:
+        trends_due, trends_reason = store.due_mark(
+            "trends", cfg["trends"]["interval_days"]
+        )
+        if trends_due:
+            log.info("Trend report is due (%s); building it.", trends_reason)
+            try:
+                build_trends(cfg, store)
+            except Exception as error:      # never let it break the digest
+                log.error("Trend report failed: %s", error)
+
     due, reason = store.due(cfg["interval_days"])
     if not due and not args.force:
         log.info("Not due yet (%s). Use --force to run anyway.", reason)
@@ -163,11 +179,52 @@ def command_run(args):
         len(hidden),
     )
 
+    # AI scoring is strictly an enhancement. Anything that goes wrong here -
+    # no key, a rejected key, a dead network, a garbled reply - leaves the
+    # local ranking in place and the digest still gets written.
+    ai_note = None
+    used_ai = False
+    if cfg["ai"]["enabled"] and new_papers and not args.dry_run:
+        key = ai.read_key(cfg["base_dir"])
+        if not key:
+            ai_note = (
+                "AI scoring is switched on but no API key is stored. "
+                "Run 'python3 paperfeed.py set-key'. Ranked locally instead."
+            )
+        else:
+            try:
+                scored, usage, problem = ai.score_papers(
+                    new_papers, cfg["ai"], key, log
+                )
+                used_ai = scored > 0
+                if scored:
+                    spend = ai.cost_of(usage)
+                    log.info(
+                        "AI scored %d paper(s) in %d call(s), %d in / %d out tokens%s",
+                        scored,
+                        usage.get("calls", 0),
+                        usage.get("input_tokens", 0),
+                        usage.get("output_tokens", 0),
+                        (" (about $%.3f)" % spend) if spend is not None else "",
+                    )
+                if problem:
+                    ai_note = "Part of the AI scoring did not complete: %s" % problem
+                if not scored and not problem:
+                    ai_note = "The AI returned no usable scores. Ranked locally."
+            except ai.KeyRejected as error:
+                ai_note = "%s Ranked locally instead." % error
+            except Exception as error:               # never lose the digest
+                ai_note = "AI scoring failed (%s). Ranked locally instead." % error
+    if ai_note:
+        log.warning(ai_note)
+
     by_set = {}
     for paper in new_papers:
         by_set.setdefault(paper.set_name, []).append(paper)
     for name in by_set:
-        if show_scores:
+        if used_ai:
+            by_set[name] = relevance.rank_with_ai(by_set[name])
+        elif show_scores:
             by_set[name] = relevance.rank(by_set[name])
         else:
             by_set[name].sort(key=lambda paper: paper.published or "", reverse=True)
@@ -205,7 +262,12 @@ def command_run(args):
         "source_counts": source_counts,
         "hidden_count": len(hidden),
         "hidden_examples": hidden_examples,
-        "top_papers": relevance.top_n(new_papers, 5) if len(new_papers) > 5 else [],
+        "top_papers": (
+            (relevance.rank_with_ai(new_papers)[:5] if used_ai else relevance.top_n(new_papers, 5))
+            if len(new_papers) > 5
+            else []
+        ),
+        "ai_note": ai_note,
     }
     html_text = digest_module.render_html(groups, meta)
     text_body = digest_module.render_text(groups, meta)
@@ -323,6 +385,53 @@ def command_check(args):
             print("    %s: %s" % (entry["name"], " OR ".join(entry["terms"])))
     print("  every %d days, looking back %d days" % (cfg["interval_days"], cfg["lookback_days"]))
     print("  email: %s" % ("enabled" if cfg["email"]["enabled"] else "disabled"))
+
+    has_key = bool(ai.read_key(cfg["base_dir"]))
+    print(
+        "  AI scoring: %s | trend report: %s | API key stored: %s"
+        % (
+            "on" if cfg["ai"]["enabled"] else "off",
+            "on" if cfg["trends"]["enabled"] else "off",
+            "yes" if has_key else "no",
+        )
+    )
+
+    if cfg["ai"]["enabled"] or cfg["trends"]["enabled"] or args.costs:
+        estimates = ai.estimate_costs(cfg)
+        print("\n  Estimated API cost (rough - actual usage is logged each run):")
+        scoring = estimates["scoring"]
+        if scoring["per_run"] is not None:
+            print(
+                "    scoring   ~$%.3f per run (%d papers, %s), about $%.2f/year at every %d days"
+                % (
+                    scoring["per_run"],
+                    scoring["papers"],
+                    scoring["model"],
+                    scoring["per_year"],
+                    cfg["interval_days"],
+                )
+            )
+        report = estimates["trends"]
+        if report["per_run"] is not None:
+            print(
+                "    trends    ~$%.3f per report (%d papers, %s), about $%.2f/year at every %d days"
+                % (
+                    report["per_run"],
+                    report["papers"],
+                    report["model"],
+                    report["per_year"],
+                    cfg["trends"]["interval_days"],
+                )
+            )
+        total = sum(
+            value["per_year"]
+            for key_name, value in estimates.items()
+            if value["per_year"] is not None
+            and (cfg[key_name if key_name != "scoring" else "ai"]["enabled"] or args.costs)
+        )
+        print("    -> roughly $%.2f a year in total" % total)
+        if not cfg["ai"]["enabled"] and not cfg["trends"]["enabled"]:
+            print("    (both are currently off, so you are spending nothing)")
     return 0
 
 
@@ -536,6 +645,163 @@ def command_search(args):
     return 0
 
 
+def command_set_key(args):
+    cfg = load_config_or_exit(args.config)
+
+    if args.forget:
+        removed = ai.forget_key(cfg["base_dir"])
+        print("Removed the stored key from: %s" % (", ".join(removed) or "nowhere"))
+        return 0
+
+    print("Paste your Anthropic API key. It will not be shown as you type.")
+    print("Get one at https://console.anthropic.com/settings/keys")
+    try:
+        key = getpass.getpass("API key: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print("\nCancelled.")
+        return 1
+    if not key:
+        sys.stderr.write("Nothing entered, nothing stored.\n")
+        return 1
+
+    # Check it before storing it, so a bad key fails here in front of you
+    # rather than silently at 08:00 in three days' time.
+    print("Checking the key with a small test request ...")
+    try:
+        _, usage = ai.call(
+            key,
+            cfg["ai"].get("model") or ai.DEFAULT_SCORING_MODEL,
+            "Reply with the single word: ok",
+            "ok",
+            max_tokens=10,
+        )
+    except ai.KeyRejected:
+        sys.stderr.write(
+            "\nThat key was rejected by the API, so it has NOT been stored.\n"
+            "Check you copied all of it (they start with sk-ant-).\n"
+        )
+        return 1
+    except ai.AIError as error:
+        sys.stderr.write(
+            "\nCould not check the key: %s\n"
+            "Nothing was stored. This usually means a network problem rather "
+            "than a bad key - try again in a moment.\n" % error
+        )
+        return 1
+
+    where = ai.store_key(key, cfg["base_dir"])
+    print("Key works and is stored in: %s" % where)
+    print("It is not written into config.json or any file in this project.")
+    if not cfg["ai"]["enabled"]:
+        print("\nAI scoring is still off. To switch it on, set in config.json:")
+        print('    "ai": { "enabled": true, "interests": "...what you care about..." }')
+    return 0
+
+
+def build_trends(cfg, store):
+    """Fetch a few months of papers and have them summarised into themes.
+
+    Shared by the `trends` command and by a scheduled run, so the daily
+    launchd job can produce it without a second scheduler.
+    Returns (themes, path) - path is None if nothing was written.
+    """
+    key = ai.read_key(cfg["base_dir"])
+    if not key:
+        log.error(
+            "The trend report needs an API key. Run 'python3 paperfeed.py set-key'."
+        )
+        return [], None
+
+    months = cfg["trends"]["months"]
+    lookback = months * 31
+    keyword_sets = [entry for entry in cfg["keyword_sets"] if entry["enabled"]]
+    per_set = max(10, min(100, cfg["trends"]["max_papers"] // max(1, len(keyword_sets))))
+
+    log.info(
+        "Building a trend report over %d months from %d keyword set(s)",
+        months,
+        len(keyword_sets),
+    )
+
+    papers = []
+    errors = []
+    for keyword_set in keyword_sets:
+        # Fetch and filter one set at a time. Filtering the accumulated list
+        # would apply this set's exclude rules to papers another set found.
+        found = []
+        for key_name, (label, fetcher) in sources.SOURCES.items():
+            if not cfg["sources"].get(key_name):
+                continue
+            try:
+                found.extend(
+                    fetcher(keyword_set, lookback, per_set, cfg.get("contact_email", ""))
+                )
+            except Exception as error:
+                errors.append("%s / %s: %s" % (label, keyword_set["name"], error))
+        kept, _ = relevance.filter_papers(found, keyword_set, cfg)
+        papers.extend(kept)
+
+    papers = store_module.deduplicate(papers)
+    log.info("  %d papers to summarise", len(papers))
+    if not papers:
+        log.error("No papers found in that window, so there is nothing to summarise.")
+        return [], None
+
+    themes, usage, problem = ai.trend_report(
+        papers, cfg["trends"], cfg["ai"].get("interests", ""), key, log
+    )
+    if problem:
+        errors.append(problem)
+        log.error("Trend report problem: %s", problem)
+    if usage:
+        spend = ai.cost_of(usage)
+        log.info(
+            "  %d in / %d out tokens%s",
+            usage.get("input_tokens", 0),
+            usage.get("output_tokens", 0),
+            (" (about $%.3f)" % spend) if spend is not None else "",
+        )
+
+    moment = datetime.now()
+    html_text = digest_module.render_trends(
+        themes,
+        {
+            "date_label": digest_module.date_label(moment),
+            "period": moment.strftime("%Y-%m"),
+            "paper_count": len(papers),
+            "months": months,
+            "errors": errors,
+            "model": cfg["trends"]["model"],
+        },
+    )
+    os.makedirs(cfg["digest_dir"], exist_ok=True)
+    path = os.path.join(cfg["digest_dir"], "trends-%s.html" % moment.strftime("%Y-%m"))
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(html_text)
+    log.info("Trend report written: %s", path)
+
+    store.set_mark("trends")
+    store.save(record_run=False)
+    return themes, path
+
+
+def command_trends(args):
+    cfg = load_config_or_exit(args.config)
+    setup_logging(cfg["log_path"], verbose=not args.quiet)
+
+    store = store_module.Store(cfg["state_path"])
+    due, reason = store.due_mark("trends", cfg["trends"]["interval_days"])
+    if not due and not args.force:
+        log.info("Trend report not due yet (%s). Use --force to run anyway.", reason)
+        return 0
+
+    themes, path = build_trends(cfg, store)
+    if not path:
+        return 1
+    print("%d theme(s). Open %s" % (len(themes), path))
+    return 0 if themes else 1
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="paperfeed", description="Keyword-driven literature alerts."
@@ -564,6 +830,11 @@ def main(argv=None):
     status_parser.set_defaults(handler=command_status)
 
     check_parser = subparsers.add_parser("check", help="validate config.json")
+    check_parser.add_argument(
+        "--costs",
+        action="store_true",
+        help="show the AI cost estimate even when the AI features are off",
+    )
     check_parser.set_defaults(handler=command_check)
 
     email_parser = subparsers.add_parser("test-email", help="send one test message")
@@ -593,6 +864,21 @@ def main(argv=None):
     )
     search_parser.add_argument("--limit", type=int, default=25)
     search_parser.set_defaults(handler=command_search)
+
+    key_parser = subparsers.add_parser(
+        "set-key", help="store your Anthropic API key (for the AI features)"
+    )
+    key_parser.add_argument(
+        "--forget", action="store_true", help="remove the stored key instead"
+    )
+    key_parser.set_defaults(handler=command_set_key)
+
+    trends_parser = subparsers.add_parser(
+        "trends", help="summarise the themes of the last few months"
+    )
+    trends_parser.add_argument("--force", action="store_true")
+    trends_parser.add_argument("--quiet", action="store_true")
+    trends_parser.set_defaults(handler=command_trends)
 
     args = parser.parse_args(argv)
     if not args.command:
