@@ -75,7 +75,10 @@ it on later:
 - a paper collection that keeps growing on its own,
 - a visual dashboard I actually read,
 - real data analysis over the collection: what is rising, what connects to
-  what, who is publishing, how a period compares to another.
+  what, who is publishing, how a period compares to another,
+- AI that helps me make sense of all that: explaining a paper, reading the
+  trends back to me, and answering questions about my own work from the
+  papers I have kept.
 
 **Build it in this order**, and stop after each for me to look at it:
 
@@ -106,8 +109,13 @@ it on later:
 3. **Show.** A dashboard over the collection, rebuilt on every run. Charts,
    not a table of numbers — I want to see the shape of things at a glance.
    Build **one per topic as well as one overall**: I follow several fields
-   and a change in one is invisible in a combined total. It must work with
-   no API key, because I want to look at it every week.
+   and a change in one is invisible in a combined total.
+
+   Two layers here. The **charts are arithmetic** over papers already
+   fetched, so they should cost nothing and render instantly — I open this
+   every week. **On top of them, use AI to read the charts back to me**: what
+   changed, what it might mean, what I should look at first. That
+   interpretation is a large part of why the dashboard is worth having.
 4. **Analyse.** Let me search any date range I choose, not only recent days,
    and compare two periods against each other.
 
@@ -126,8 +134,15 @@ change to them has to leave the alerting intact.
 - Always write the local file before attempting anything that can fail
   (email, network, AI). That file is how we check it worked.
 - Secrets come from environment variables, never from a file in the project.
-- Any AI features are optional and off by default; the tool must be fully
-  useful with no API key.
+- **AI is part of the analysis, not a bolt-on.** Design for it from the
+  start: summarising, interpreting trends, answering questions about my own
+  work from the papers I kept. Let me choose the provider in config
+  (Anthropic, OpenAI-compatible, Gemini) and read the key from an
+  environment variable.
+- **But it must never be a single point of failure.** If the key is missing,
+  wrong, or the service is down, everything that does not need it still
+  works and the tool says what happened. Never let a failed AI call cost me
+  a digest or a dashboard.
 
 **How I want you to work**
 
@@ -165,7 +180,8 @@ Raise these one at a time, after you can see real output:
 
 relevance ranking with visible reasons · filters and muted terms · following
 specific authors · a local page for browsing and saving · charts and a
-knowledge graph · trend detection over time · optional AI summarisation
+knowledge graph · trend detection over time · AI scoring of how relevant
+each paper is to me specifically
 
 (Delivery is deliberately not on this list. It belongs in stage 1, not as a
 later addition — a tool that collects papers but never tells you about them
