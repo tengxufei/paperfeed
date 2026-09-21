@@ -35,6 +35,8 @@ import sources
 import stats as stats_module
 import store as store_module
 
+__version__ = "1.0.0"
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_CONFIG = os.path.join(HERE, "config.json")
 
@@ -578,7 +580,7 @@ def command_status(args):
     store = store_module.Store(cfg["state_path"])
     due, reason = store.due(cfg["interval_days"])
 
-    print("PaperFeed status")
+    print("PaperFeed %s" % __version__)
     print("  config      %s" % cfg["config_path"])
     print("  keyword sets")
     for entry in cfg["keyword_sets"]:
@@ -1006,7 +1008,11 @@ def command_trends(args):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        prog="paperfeed", description="Keyword-driven literature alerts."
+        prog="paperfeed",
+        description="PaperFeed %s - keyword-driven literature alerts." % __version__,
+    )
+    parser.add_argument(
+        "--version", action="version", version="PaperFeed %s" % __version__
     )
     parser.add_argument(
         "--config", default=DEFAULT_CONFIG, help="path to config.json"

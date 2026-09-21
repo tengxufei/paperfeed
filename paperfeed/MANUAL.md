@@ -1,4 +1,4 @@
-# PaperFeed — manual
+# PaperFeed 1.0 — manual
 
 A literature alert tool. You give it keywords; it searches PubMed and the
 preprint servers on a schedule, ranks what it finds, writes you a digest,
@@ -6,6 +6,10 @@ keeps the good ones, and charts what your fields are doing over time.
 
 Python standard library plus `requests`. No account, no database server, no
 build step. Everything it produces is a plain file on your Mac.
+
+**First run:** `cp config.example.json config.json`, then edit your keywords.
+Your own `config.json` is deliberately not tracked in git, so your settings
+and email address stay local.
 
 ---
 

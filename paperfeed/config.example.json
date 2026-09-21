@@ -1,41 +1,42 @@
 {
   "_about": "PaperFeed config. Keys starting with _ are comments and are ignored.",
-
   "_keyword_sets": "One block per topic you follow. Every field except 'name' is optional, but a set needs at least one of terms / all_of / authors.",
   "keyword_sets": [
     {
       "_terms": "OR'ed together: a paper matching ANY of these is a hit. Searched as exact phrases in title+abstract. A term containing [ ] is passed to PubMed as raw search syntax.",
       "name": "de novo protein design",
-      "terms": ["de novo protein design", "RFdiffusion", "ProteinMPNN"],
-
+      "terms": [
+        "de novo protein design",
+        "RFdiffusion",
+        "ProteinMPNN"
+      ],
       "_all_of": "Every term here must ALSO appear. Use it to narrow a noisy set, e.g. terms=[binder] + all_of=[protein].",
       "all_of": [],
-
       "_authors": "Follow specific people. Written as PubMed writes them: surname then initials. Papers by them get a scoring bonus. Note the search APIs are loose - 'Baker D' will also return papers by 'Baker DA' - but only an exact initial match earns the bonus.",
       "authors": [],
-
       "_exclude": "Drop papers mentioning any of these, for this set only.",
       "exclude": [],
-
       "_fields": "'title_abstract' (default, less noise) or 'all' (searches everywhere, including MeSH and full text).",
       "fields": "title_abstract",
-
       "_journals": "allow = ONLY these journals. deny = never these. Matched as substrings, so 'Nature' covers 'Nature Methods'.",
-      "journals": { "allow": [], "deny": [] },
-
+      "journals": {
+        "allow": [],
+        "deny": []
+      },
       "_sources": "Override the global sources for this set only, e.g. {\"pubmed\": false} to make it preprints-only.",
-
       "_min_score": "Override the global ranking.min_score for this set. Useful for a broad term: a title match is worth 4, so min_score 4 means the paper must be ABOUT this, not merely mention it. Hidden papers are reported and not marked as seen.",
-
       "enabled": true
     },
     {
       "name": "protein language models",
-      "terms": ["protein language model", "ESM-2", "protein structure prediction"],
+      "terms": [
+        "protein language model",
+        "ESM-2",
+        "protein structure prediction"
+      ],
       "enabled": true
     }
   ],
-
   "_ranking": "How papers are ordered. A title match is weighted above two abstract mentions on purpose - the title is what a paper is ABOUT. recency_bonus is deliberately small: inside a 14-day window almost everything is recent, so it is a tiebreaker, not a driver. Set enabled=false to go back to plain date order. min_score hides weak matches (try 2 or 3).",
   "ranking": {
     "enabled": true,
@@ -46,20 +47,17 @@
     "author_bonus": 3.0,
     "min_score": 0.0
   },
-
   "_mute": "Applies to every keyword set. Useful for an ambiguous word: 'binder' matches battery-electrode papers, so muting 'cathode' cleans that up. Muted papers are NOT remembered, so removing a mute brings them back.",
   "mute": {
     "terms": [],
     "journals": []
   },
-
   "_collect": "The collector makes your library grow on its own. Every run, papers scoring at least min_score are saved automatically, up to max_per_run. Papers you click Save on are marked 'you'; these are marked 'auto', so you can always tell them apart. Turn it off and the library only grows when you click.",
   "collect": {
     "enabled": true,
     "min_score": 6.0,
     "max_per_run": 25
   },
-
   "_ai": "OPTIONAL and off by default. Everything else in PaperFeed - including every dashboard and chart - works with no key at all. The key is read from an environment variable, exactly like the email password: export PAPERFEED_AI_KEY='...' in your shell. It is never stored in this file and never typed into a web page.",
   "_ai_provider": "'anthropic' for the Claude API, or 'openai' for OpenAI and anything that speaks its chat-completions API - Groq, DeepSeek, Together, OpenRouter, LM Studio, Ollama. For those, also set base_url, e.g. 'https://api.groq.com/openai/v1' or 'http://localhost:11434/v1' for a local model.",
   "ai": {
@@ -73,7 +71,6 @@
     "max_papers_per_run": 40,
     "batch_size": 10
   },
-
   "_trends": "OPTIONAL. Every interval_days, re-queries the last few months and writes a themed briefing. Uses the same provider and key as 'ai', with its own model.",
   "trends": {
     "enabled": false,
@@ -83,24 +80,18 @@
     "interval_days": 30,
     "email": false
   },
-
   "_interval_days": "Minimum days between digests. The scheduler wakes the script daily; it exits quietly until this many days have passed.",
   "interval_days": 3,
-
   "_lookback_days": "How far back each run searches. Keep comfortably larger than interval_days.",
   "lookback_days": 14,
-
   "_max_per_set": "Cap on papers fetched per keyword set per source.",
-  "max_per_set": 30,
-
+  "max_per_set": 100,
   "sources": {
     "pubmed": true,
     "preprints": true
   },
-
   "_contact_email": "NCBI asks that automated tools identify themselves. Sent as a User-Agent header only.",
   "contact_email": "you@example.com",
-
   "_email": "Set enabled to true once your digests look right. The password is NEVER stored here: set the environment variable named in password_env. For Gmail, use an app password.",
   "email": {
     "enabled": false,
@@ -109,7 +100,9 @@
     "username": "you@example.com",
     "password_env": "PAPERFEED_SMTP_PASSWORD",
     "from_address": "you@example.com",
-    "to_addresses": ["you@example.com"],
+    "to_addresses": [
+      "you@example.com"
+    ],
     "subject_prefix": "[PaperFeed]",
     "_send_when_empty": "Email you even when there is nothing new. Off by default; the digest file is written either way.",
     "send_when_empty": false

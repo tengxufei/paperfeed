@@ -14,3 +14,6 @@ __pycache__/
 
 # Retrospective search cache - working files, safe to delete
 cache/
+
+# Your own settings. Start from paperfeed/config.example.json.
+paperfeed/config.json

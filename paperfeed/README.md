@@ -1,4 +1,4 @@
-# PaperFeed
+# PaperFeed 1.0
 
 Keyword-driven literature alerts. You give it keywords, it checks PubMed and the
 preprint servers every few days, and it writes you a digest of papers you have
@@ -9,7 +9,8 @@ Python standard library plus `requests`. No account, no API key, no database.
 ## Quick start
 
 ```bash
-cd /Users/xufeiteng/ai_completion/research_tools/paperfeed
+cd paperfeed
+cp config.example.json config.json   # first time only; then edit your keywords
 python3 paperfeed.py check      # is my config valid?
 python3 paperfeed.py run        # fetch and write a digest
 open digests/latest.html
