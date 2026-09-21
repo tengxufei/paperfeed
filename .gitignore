@@ -11,3 +11,6 @@ library.db
 .DS_Store
 __pycache__/
 *.pyc
+
+# Retrospective search cache - working files, safe to delete
+cache/

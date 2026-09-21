@@ -107,7 +107,9 @@ def histogram(buckets, width=560, height=140, label=""):
     biggest = max(value for _, value in buckets)
     left, bottom = 30, 24
     plot_width = width - left - 10
-    plot_height = height - bottom - 10
+    # headroom for the value printed above each bar, or the tallest one
+    # has its label clipped by the top edge
+    plot_height = height - bottom - 22
     slot = plot_width / len(buckets)
 
     out = [_open(width, height, label or "distribution")]

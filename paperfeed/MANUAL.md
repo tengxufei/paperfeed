@@ -70,6 +70,7 @@ scheduler** — change `interval_days` and you never touch launchd again.
 | `python3 paperfeed.py saved` | List the papers you have kept. |
 | `python3 paperfeed.py search "text"` | Search your library. |
 | `python3 paperfeed.py search "text" --online --since 2025-01-01` | Search the sources live. |
+| `python3 paperfeed.py retro --from 2024-01-01 --to 2024-12-31` | Search a date range you choose and analyse it. |
 | `python3 paperfeed.py trends` | Write a themed briefing on the last few months. Needs an API key. |
 | `python3 paperfeed.py dashboard` | Print the path to the dashboard. |
 | `python3 paperfeed.py test-email` | Check the email settings, then send one test. |
@@ -202,6 +203,51 @@ Trend alerts need a few runs of history before they mean anything.
 
 ---
 
+## 5b. Searching a date range
+
+The feed answers *"what is new to me?"*. This answers *"what was published
+between these dates?"* — a different question, and it searches a different
+date field: the journal's publication date rather than the date the record
+reached PubMed.
+
+```bash
+python3 paperfeed.py retro --from 2024-01-01 --to 2024-12-31
+python3 paperfeed.py retro --from 2024-01-01 --to 2024-06-30 --set "IDH1 glioblastoma"
+python3 paperfeed.py retro --from 2024-01-01 --to 2024-12-31 --compare 2023-01-01:2023-12-31
+```
+
+It writes `digests/retro-<from>_<to>.html`: a timeline of papers per month,
+the most published authors, where the work came from, the subjects and how
+they connect, and the papers themselves with Save buttons.
+
+**Two things it will never do.** It does not touch `state/seen.json`, so
+looking back at 2024 cannot make your next digest skip those papers. It does
+not touch `state/topics.json` either, so historical volume cannot corrupt the
+baselines that decide what is "rising" on the live dashboard.
+
+**It pages properly.** PubMed cannot return more than 10,000 results for one
+query, so the range is sliced into months and each month is paged through.
+Nothing is silently truncated.
+
+**It caches.** Results are stored per keyword set, per source, per month
+under `cache/`. Re-running the same range is instant and works offline, and
+an overlapping range only fetches the months it does not already have.
+`--refresh` refetches; `--clear-cache` empties it. The cache is a working
+file, not your library: deleting it costs only fetch time.
+
+**One honest wrinkle.** PubMed's publication-date search and the journal's
+own issue date do not always agree — ahead-of-print articles get assigned to
+a later issue. So a search for January will return a few papers whose issue
+date reads March. The timeline holds to the range you asked for and reports
+how many fall outside it, rather than stretching the chart to cover one
+outlier.
+
+Papers found this way enter your library **only if you click Save**. The
+auto-collector is deliberately not applied, so one historical sweep cannot
+flood a library meant to record your ongoing reading.
+
+---
+
 ## 6. Email
 
 ```json
@@ -312,3 +358,63 @@ window as new. Delete `library.db` and you lose your saved papers.
 
 `paperfeed.log` records every run. `check` validates the config and lists
 settings you have not written into your file.
+
+---
+
+## 10. Hard-won details
+
+Each of these was a real bug in this tool, and every one was silent. They
+are recorded here because anyone changing the relevant code will meet them
+again.
+
+1. **PubMed's XML contains the reference list.** `.//ArticleId` matches the
+   article's identifiers *and* every cited paper's — 190 elements on one
+   record, 187 of them references. Taking the last of each type gives the
+   article a random cited paper's DOI. Scope id and author lookups to
+   `PubmedData/ArticleIdList` and `MedlineCitation/Article/AuthorList`.
+   Because DOI is the paper's identity, getting this wrong also corrupts
+   deduplication.
+
+2. **Silent truncation.** If a keyword matches more papers than your
+   per-query cap, you fetch the newest N and lose the rest with no
+   indication — so the specific papers wanted get crowded out. Both APIs
+   return a total count: compare it against what you fetched and say so.
+
+3. **Author name matching.** `"Baker D"` substring-matches `"Baker DA"`, a
+   different researcher. Require the initials to line up on a whole-token
+   boundary.
+
+4. **A single global relevance threshold cannot serve several topics.** A
+   cut-off that tames a broad term (where the word is usually in the title)
+   silences a set whose matches are legitimately in abstracts. Make the
+   threshold settable per keyword set.
+
+5. **Case-variant subjects.** MeSH headings are Title Case, author keywords
+   are not, so `Glioblastoma` and `glioblastoma` become two nodes on a
+   subject graph. Merge case-insensitively, keeping the commonest spelling.
+
+6. **Do not set `display` on a `<summary>` element.** In WebKit it stops
+   working as a disclosure control and the section silently will not toggle.
+   Style an inner wrapper.
+
+7. **Escaping, twice.** If you generate source files with a script, embedded
+   CSS and JS pass through Python's escape rules twice. `"\25b8"` in a Python
+   string is an octal escape, not a CSS one; a `\\n` in a regex became a real
+   newline and split the literal across two lines, which is a parse error
+   that kills *every* handler on the page. Use raw strings for embedded JS
+   and CSS, and prefer literal characters over escapes.
+
+8. **Route matching with `startswith`.** `"/dashboard-topic.html".startswith("/dashboard")`
+   is true, so a prefix route swallows every sibling page. Match exactly.
+
+9. **A missing email password must not be fatal.** Scheduled jobs do not read
+   your shell profile. Treating it as a config error means the scheduled run
+   aborts before writing anything — exactly the failure the local file exists
+   to prevent. Warn, skip the email, write the file.
+
+10. **Provider error codes differ.** Google answers an invalid API key with
+    HTTP 400, not 401. Read the error body, not just the status.
+
+11. **Pluralisation.** "published 1 days ago" makes a tool feel unfinished.
+    One helper, used everywhere.
+

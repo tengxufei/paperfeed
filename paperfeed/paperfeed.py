@@ -30,6 +30,7 @@ import library
 import mailer
 import phrasing
 import relevance
+import retro
 import sources
 import stats as stats_module
 import store as store_module
@@ -200,6 +201,111 @@ def build_dashboard(cfg, papers, keyword_sets, hidden_count, meta):
     except Exception as error:          # a chart must never cost you a digest
         log.error("Dashboards could not be built: %s", error)
         return 0
+
+
+def _parse_day(text, label):
+    try:
+        return date.fromisoformat(text)
+    except (ValueError, TypeError):
+        sys.stderr.write("%s needs a date like 2024-01-31, not %r\n" % (label, text))
+        return None
+
+
+def command_retro(args):
+    """Search a date range of your choosing and analyse what it returns."""
+    cfg = load_config_or_exit(args.config)
+    setup_logging(cfg["log_path"], verbose=True)
+
+    if args.clear_cache:
+        removed = retro.clear_cache(cfg["base_dir"])
+        print("Cleared %s from the cache." % phrasing.count(removed, "file"))
+        return 0
+
+    start = _parse_day(args.start, "--from")
+    end = _parse_day(args.end, "--to")
+    if not start or not end:
+        return 2
+    if end < start:
+        sys.stderr.write("--to is before --from.\n")
+        return 2
+
+    keyword_sets = [entry for entry in cfg["keyword_sets"] if entry["enabled"]]
+    if args.set:
+        wanted = args.set.lower()
+        keyword_sets = [e for e in keyword_sets if e["name"].lower() == wanted]
+        if not keyword_sets:
+            sys.stderr.write("No enabled keyword set called %r.\n" % args.set)
+            return 2
+
+    def progress(set_name, month, source, count, how):
+        log.info("  %-26s %s  %-9s %5d  %s", set_name[:26], month, source, count, how)
+
+    log.info(
+        "Searching %s to %s across %s",
+        start, end, phrasing.count(len(keyword_sets), "keyword set"),
+    )
+    papers, report = retro.search(
+        cfg, keyword_sets, start, end, refresh=args.refresh, progress=progress
+    )
+    log.info(
+        "%s after deduplication (%d from cache, %d fetched, %s)",
+        phrasing.count(len(papers), "paper"),
+        report["from_cache"], report["fetched"],
+        phrasing.count(report["months"], "month"),
+    )
+    if not papers:
+        sys.stderr.write("Nothing found in that range.\n")
+        return 1
+
+    relevance.score_all(papers, keyword_sets, cfg["ranking"])
+    papers = relevance.rank(papers)
+
+    comparison = None
+    if args.compare:
+        try:
+            other_start, other_end = [
+                _parse_day(part, "--compare") for part in args.compare.split(":")
+            ]
+        except ValueError:
+            sys.stderr.write("--compare needs START:END, e.g. 2023-01-01:2023-12-31\n")
+            return 2
+        if not other_start or not other_end:
+            return 2
+        log.info("Fetching the comparison period %s to %s", other_start, other_end)
+        other, _ = retro.search(
+            cfg, keyword_sets, other_start, other_end,
+            refresh=args.refresh, progress=progress,
+        )
+        comparison = {
+            "label": "%s to %s" % (other_start, other_end),
+            "changes": stats_module.compare(other, papers),
+        }
+
+    run = stats_module.run_stats(papers, keyword_sets)
+    page = dashboard_module.render_retro(
+        papers,
+        run,
+        stats_module.by_month(papers, start, end),
+        stats_module.top_authors(papers),
+        stats_module.top_institutions(papers),
+        comparison,
+        {
+            "range_label": "%s to %s" % (start, end),
+            "sets": [entry["name"] for entry in keyword_sets],
+            "errors": report["errors"],
+            "list_limit": args.limit,
+        },
+    )
+    os.makedirs(cfg["digest_dir"], exist_ok=True)
+    name = "retro-%s_%s.html" % (start, end)
+    path = os.path.join(cfg["digest_dir"], name)
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(page)
+
+    log.info("Written: %s", path)
+    print("\n%s found. Open %s" % (phrasing.count(len(papers), "paper"), path))
+    print("Or with the server running: http://127.0.0.1:8931/%s" % name)
+    return 0
 
 
 def command_dashboard(args):
@@ -950,6 +1056,25 @@ def main(argv=None):
         "dashboard", help="print the path to the dashboard page"
     )
     dash_parser.set_defaults(handler=command_dashboard)
+
+    retro_parser = subparsers.add_parser(
+        "retro", help="search a date range of your choosing and analyse it"
+    )
+    retro_parser.add_argument("--from", dest="start", help="first date, e.g. 2024-01-01")
+    retro_parser.add_argument("--to", dest="end", help="last date, e.g. 2024-12-31")
+    retro_parser.add_argument("--set", help="limit to one keyword set")
+    retro_parser.add_argument(
+        "--compare", help="another range to compare against, START:END"
+    )
+    retro_parser.add_argument(
+        "--refresh", action="store_true", help="ignore the cache and refetch"
+    )
+    retro_parser.add_argument(
+        "--clear-cache", action="store_true", help="delete cached results and stop"
+    )
+    retro_parser.add_argument("--limit", type=int, default=60,
+                              help="how many papers to list on the page")
+    retro_parser.set_defaults(handler=command_retro)
 
     saved_parser = subparsers.add_parser("saved", help="list your saved papers")
     saved_parser.add_argument("--limit", type=int, default=100)

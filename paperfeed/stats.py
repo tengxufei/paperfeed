@@ -216,3 +216,118 @@ def graph_data(subjects, pairs, node_limit=18, edge_limit=28, verdicts=None):
         if a in allowed and b in allowed
     ][:edge_limit]
     return nodes, edges
+
+
+# --------------------------------------------------------------------------
+# Retrospective analysis
+# --------------------------------------------------------------------------
+
+def by_month(papers, start=None, end=None):
+    """Papers per publication month. Returns (rows, outside_the_range).
+
+    Uses the journal's issue date, not the date the record appeared: a paper
+    issued in December and indexed in January belongs to December here.
+
+    Those two dates genuinely disagree, so a search by PubMed's publication
+    date returns some papers whose issue date sits outside the window you
+    asked for - ahead-of-print articles assigned to a later issue, mostly.
+    When a range is given the axis is held to it and the strays are counted
+    separately, rather than stretching the chart to cover one outlier.
+    """
+    counts = Counter()
+    outside = 0
+    first = start.strftime("%Y-%m") if start else None
+    last = end.strftime("%Y-%m") if end else None
+
+    for paper in papers:
+        when = (getattr(paper, "issued", "") or paper.published or "")[:7]
+        if len(when) != 7:
+            continue
+        if first and not (first <= when <= last):
+            outside += 1
+            continue
+        counts[when] += 1
+
+    if first:
+        rows, cursor = [], start.replace(day=1)
+        while cursor <= end:
+            label = cursor.strftime("%Y-%m")
+            rows.append((label, counts.get(label, 0)))
+            cursor = (
+                cursor.replace(year=cursor.year + 1, month=1)
+                if cursor.month == 12
+                else cursor.replace(month=cursor.month + 1)
+            )
+        return rows, outside
+    return sorted(counts.items()), outside
+
+
+def top_authors(papers, limit=12):
+    counts = Counter()
+    for paper in papers:
+        for name in paper.authors or []:
+            cleaned = " ".join(str(name).split())
+            if cleaned:
+                counts[cleaned] += 1
+    merged, _ = _canonicalise(counts)
+    return merged.most_common(limit)
+
+
+def top_institutions(papers, limit=12):
+    """Where the work came from, by senior author's institution.
+
+    Affiliations are free text, so the same place arrives spelled several
+    ways; the same case-folding used for subjects merges the obvious ones.
+    It will not catch everything - "MIT" and "Massachusetts Institute of
+    Technology" stay separate - so read this as indicative.
+    """
+    counts = Counter()
+    for paper in papers:
+        place = " ".join((getattr(paper, "affiliation", "") or "").split())
+        if place:
+            counts[place] += 1
+    merged, _ = _canonicalise(counts)
+    return merged.most_common(limit)
+
+
+def compare(before, after, limit=10):
+    """What changed between two sets of papers.
+
+    Returns (risen, fallen, appeared, vanished), each [(subject, before,
+    after)]. Shares are compared rather than raw counts, because two periods
+    rarely contain the same number of papers and a bigger period would
+    otherwise look like growth everywhere.
+    """
+    first = Counter()
+    second = Counter()
+    for paper in before:
+        first.update(subjects_of(paper)[:SUBJECTS_PER_PAPER])
+    for paper in after:
+        second.update(subjects_of(paper)[:SUBJECTS_PER_PAPER])
+    first, _ = _canonicalise(first)
+    second, _ = _canonicalise(second)
+
+    total_first = sum(first.values()) or 1
+    total_second = sum(second.values()) or 1
+
+    risen, fallen, appeared, vanished = [], [], [], []
+    for name in set(first) | set(second):
+        a, b = first.get(name, 0), second.get(name, 0)
+        if a + b < 3:                      # too rare to mean anything
+            continue
+        share_a = a / total_first
+        share_b = b / total_second
+        if a == 0:
+            appeared.append((name, a, b))
+        elif b == 0:
+            vanished.append((name, a, b))
+        elif share_b > share_a * 1.5:
+            risen.append((name, a, b))
+        elif share_a > share_b * 1.5:
+            fallen.append((name, a, b))
+
+    risen.sort(key=lambda row: -row[2])
+    fallen.sort(key=lambda row: -row[1])
+    appeared.sort(key=lambda row: -row[2])
+    vanished.sort(key=lambda row: -row[1])
+    return risen[:limit], fallen[:limit], appeared[:limit], vanished[:limit]

@@ -272,3 +272,150 @@ def render(run, history_rows, alerts, library_summary, meta):
     )
     parts.append("</div></body></html>")
     return "\n".join(parts)
+
+
+def _short_month(label):
+    """2024-03 -> Mar, and Jan carries its year so the axis stays readable."""
+    names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+             "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    try:
+        year, month = label.split("-")
+        name = names[int(month) - 1]
+        return "%s %s" % (name, year[2:]) if month == "01" else name
+    except (ValueError, IndexError):
+        return label
+
+
+def render_retro(papers, run, monthly, authors, institutions, comparison, meta):
+    """The page for a date-range search."""
+    import digest as _digest
+
+    parts = [
+        "<!doctype html>",
+        '<html lang="en"><head><meta charset="utf-8">',
+        '<meta name="viewport" content="width=device-width, initial-scale=1">',
+        "<title>PaperFeed &mdash; %s</title>" % _esc(meta.get("range_label", "")),
+        "<style>%s%s%s</style></head><body>"
+        % (_digest.STYLE, charts.CHART_CSS, DASH_CSS),
+        '<input type="checkbox" id="compact">',
+        '<div class="wrap">',
+        "<h1>%s</h1>" % _esc(meta.get("range_label", "")),
+        '<p class="meta">%s &middot; searched by publication date &middot; '
+        '<a href="dashboard.html">the live dashboard</a></p>'
+        % _esc(", ".join(meta.get("sets") or [])),
+    ]
+
+    if meta.get("errors"):
+        parts.append(
+            '<div class="errors"><strong>Some months did not come back.</strong>'
+            "<ul>%s</ul></div>"
+            % "".join("<li>%s</li>" % _esc(e) for e in meta["errors"][:6])
+        )
+
+    monthly, outside = monthly
+    span = len(monthly)
+    busiest = max(monthly, key=lambda row: row[1])[0] if monthly else "-"
+    parts.append(
+        '<div class="tiles">%s</div>'
+        % "".join([
+            _tile(run["total"], "papers found"),
+            _tile(span, "months covered"),
+            _tile(_short_month(busiest), "busiest month"),
+            _tile(
+                "%d%%" % round(100.0 * run["open_access"] / run["total"])
+                if run["total"] else "0%",
+                "free full text",
+            ),
+        ])
+    )
+
+    if monthly:
+        parts.append(
+            '<div class="panel"><h2>Published per month</h2>'
+            '<p class="hint">By the journal\'s own issue date, not when the '
+            "record was indexed. This is the shape of the field over the "
+            "period.%s</p>%s</div>"
+            % (
+                (
+                    " %s carry an issue date outside this window - usually "
+                    "ahead-of-print assigned to a later issue." % _esc(
+                        "%d paper%s" % (outside, "" if outside == 1 else "s")
+                    )
+                )
+                if outside
+                else "",
+                charts.histogram(
+                    [(_short_month(m), n) for m, n in monthly],
+                    width=620, height=170, label="papers per month",
+                ),
+            )
+        )
+
+    left = (
+        '<div class="panel"><h2>Most published authors</h2>%s</div>'
+        % (charts.bars(authors, label="papers per author")
+           or '<p class="hint">No author data.</p>')
+    )
+    right = (
+        '<div class="panel"><h2>Where the work came from</h2>'
+        '<p class="hint">Senior author\'s institution. Affiliations are free '
+        "text, so read this as indicative.</p>%s</div>"
+        % (charts.bars(institutions, label="papers per institution")
+           or '<p class="hint">No affiliation data.</p>')
+    )
+    parts.append('<div class="grid">%s%s</div>' % (left, right))
+
+    if comparison:
+        risen, fallen, appeared, vanished = comparison["changes"]
+        rows = []
+        for label, group, tone in (("appeared", appeared, "new"),
+                                   ("rising", risen, "rising"),
+                                   ("fading", fallen, "fading"),
+                                   ("gone", vanished, "fading")):
+            for name, before, after in group[:5]:
+                rows.append(
+                    '<div class="alert"><span class="flag %s">%s</span>'
+                    '<span>%s</span><span class="det">%d then, %d now</span></div>'
+                    % (tone, label, _esc(name), before, after)
+                )
+        parts.append(
+            '<div class="panel"><h2>What changed against %s</h2>'
+            '<p class="hint">Compared as shares, not raw counts, so a longer '
+            "period does not look like growth everywhere.</p>%s</div>"
+            % (_esc(comparison["label"]),
+               "".join(rows) or '<p class="hint">Nothing moved much.</p>')
+        )
+
+    if run["subjects"]:
+        verdicts = {}
+        nodes, edges = stats_module.graph_data(
+            run["subjects"], run["pairs"], verdicts=verdicts
+        )
+        parts.append(
+            '<div class="panel"><h2>Subjects over the period</h2>%s</div>'
+            % charts.bars(run["subjects"].most_common(12), label="subjects")
+        )
+        if nodes:
+            parts.append(
+                '<div class="panel"><h2>How the subjects connect</h2>%s</div>'
+                % charts.graph(nodes, edges)
+            )
+
+    shown = papers[: meta.get("list_limit", 60)]
+    if shown:
+        parts.append(
+            '<details class="set" open><summary><div class="setbar">'
+            "<span>The papers</span>"
+            '<span class="setcount">%d of %d</span></div></summary>'
+            '<div class="setbody">' % (len(shown), run["total"])
+        )
+        parts.extend(_digest._paper_html(paper, True) for paper in shown)
+        parts.append("</div></details>")
+
+    parts.append(
+        '<p class="footer">A retrospective search. It does not change what '
+        "your feed considers new, and it does not affect the trend baselines "
+        "on the live dashboard.</p>"
+    )
+    parts.append("</div></body></html>")
+    return "\n".join(parts)

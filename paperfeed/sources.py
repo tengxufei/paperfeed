@@ -39,7 +39,8 @@ class Paper:
     abstract: str = ""
     doi: str = ""
     url: str = ""
-    published: str = ""       # YYYY-MM-DD where known
+    published: str = ""       # when the record appeared - what "new" means
+    issued: str = ""          # when it was actually published, for history
     venue: str = ""           # journal name, or preprint server
     source: str = ""          # "PubMed" or "Preprint"
     set_name: str = ""        # which keyword set found it
@@ -226,6 +227,47 @@ def _pubmed_date(article):
     return _text(article, ".//PubDate/Year")
 
 
+_MONTHS = {
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+}
+
+
+def _issue_date(article):
+    """The journal's own publication date.
+
+    Distinct from the date the record entered PubMed: a paper issued in
+    December can be indexed in January, so a retrospective timeline built on
+    the entry date would put it in the wrong month.
+    """
+    node = article.find(".//Article/Journal/JournalIssue/PubDate")
+    if node is None:
+        return ""
+    year = _text(node, "Year")
+    if not year:
+        # e.g. <MedlineDate>2024 Mar-Apr</MedlineDate>
+        medline = _text(node, "MedlineDate")
+        match = re.search(r"(\d{4})", medline or "")
+        if not match:
+            return ""
+        year = match.group(1)
+        month_match = re.search(r"([A-Za-z]{3})", medline)
+        month = _MONTHS.get(month_match.group(1).lower(), 1) if month_match else 1
+        return "%s-%02d-01" % (year, month)
+
+    raw_month = _text(node, "Month")
+    if raw_month.isdigit():
+        month = int(raw_month)
+    else:
+        month = _MONTHS.get(raw_month[:3].lower(), 1) if raw_month else 1
+    day = _text(node, "Day")
+    day = int(day) if day.isdigit() else 1
+    try:
+        return date(int(year), month, day).isoformat()
+    except ValueError:
+        return "%s-%02d-01" % (year, month)
+
+
 def _parse_pubmed_xml(xml_text, set_name):
     try:
         root = ElementTree.fromstring(xml_text)
@@ -317,6 +359,7 @@ def _parse_pubmed_xml(xml_text, set_name):
                 doi=doi,
                 url=url,
                 published=_pubmed_date(article),
+                issued=_issue_date(article),
                 venue=_text(article, ".//Journal/Title"),
                 source="PubMed",
                 set_name=set_name,
@@ -453,28 +496,8 @@ def _preprint_server(item):
     return str(name).strip()
 
 
-def fetch_preprints(keyword_set, lookback_days, max_results, contact_email="", stats=None):
-    start, end = _window(lookback_days)
-    payload = _get(
-        EUROPEPMC,
-        {
-            "query": _preprint_query(keyword_set, start, end),
-            "format": "json",
-            "resultType": "core",
-            "pageSize": min(max_results, 100),   # API maximum per page
-            "sort": "P_PDATE_D desc",
-        },
-        contact_email,
-    )
-
-    items = payload.get("resultList", {}).get("result", [])[:max_results]
-    if stats is not None:
-        try:
-            stats["available"] = int(payload.get("hitCount", 0))
-        except (TypeError, ValueError):
-            pass
-        stats["fetched"] = len(items)
-
+def _parse_europepmc(items, set_name):
+    """Turn Europe PMC result items into Paper objects."""
     papers = []
     for item in items:
         title = _clean_text(item.get("title")).rstrip(".")
@@ -524,9 +547,10 @@ def fetch_preprints(keyword_set, lookback_days, max_results, contact_email="", s
                 doi=doi,
                 url=url,
                 published=(item.get("firstPublicationDate") or "").strip(),
+                issued=(item.get("firstPublicationDate") or "").strip(),
                 venue=_preprint_server(item),
                 source="Preprint",
-                set_name=keyword_set["name"],
+                set_name=set_name,
                 free_fulltext=free_fulltext,
                 fulltext_url=fulltext_url,
                 mesh_terms=mesh_terms,
@@ -536,6 +560,31 @@ def fetch_preprints(keyword_set, lookback_days, max_results, contact_email="", s
             )
         )
     return papers
+
+
+def fetch_preprints(keyword_set, lookback_days, max_results, contact_email="", stats=None):
+    start, end = _window(lookback_days)
+    payload = _get(
+        EUROPEPMC,
+        {
+            "query": _preprint_query(keyword_set, start, end),
+            "format": "json",
+            "resultType": "core",
+            "pageSize": min(max_results, 100),   # API maximum per page
+            "sort": "P_PDATE_D desc",
+        },
+        contact_email,
+    )
+
+    items = payload.get("resultList", {}).get("result", [])[:max_results]
+    if stats is not None:
+        try:
+            stats["available"] = int(payload.get("hitCount", 0))
+        except (TypeError, ValueError):
+            pass
+        stats["fetched"] = len(items)
+
+    return _parse_europepmc(items, keyword_set["name"])
 
 
 SOURCES = {
@@ -589,3 +638,110 @@ def fetch_all(keyword_set, cfg):
                 % (label, keyword_set["name"], phrasing.count(available, "paper"), fetched)
             )
     return papers, errors, notices
+
+
+# --------------------------------------------------------------------------
+# Searching an arbitrary date range
+# --------------------------------------------------------------------------
+#
+# The feed asks "what is new to me?", so it searches by the date a record
+# entered PubMed. A retrospective search asks "what was published then?",
+# which is a different question and a different date field - so these
+# functions default to the publication date instead.
+#
+# They also page. A single esearch cannot reach past 10,000 results, and a
+# busy year of a broad term goes well beyond that, so the caller slices the
+# range into months and these page within each slice.
+
+PUBMED_PAGE = 1000          # ids per esearch page
+PUBMED_FETCH_CHUNK = 200    # ids per efetch call
+EUROPEPMC_PAGE = 100        # the API maximum
+
+
+def fetch_pubmed_range(keyword_set, start, end, contact_email="",
+                       datetype="pdat", progress=None):
+    """Every PubMed paper published in [start, end]. Returns (papers, total)."""
+    query = _pubmed_query(keyword_set)
+    ids = []
+    total = 0
+    offset = 0
+
+    while True:
+        search = _get(
+            EUTILS + "/esearch.fcgi",
+            {
+                "db": "pubmed",
+                "term": query,
+                "retmode": "json",
+                "datetype": datetype,
+                "mindate": start.strftime("%Y/%m/%d"),
+                "maxdate": end.strftime("%Y/%m/%d"),
+                "retstart": offset,
+                "retmax": PUBMED_PAGE,
+            },
+            contact_email,
+        )
+        result = search.get("esearchresult", {}) or {}
+        page = result.get("idlist") or []
+        try:
+            total = int(result.get("count", 0))
+        except (TypeError, ValueError):
+            total = total or len(page)
+        ids.extend(page)
+        offset += len(page)
+        if progress:
+            progress("PubMed", len(ids), total)
+        # esearch refuses retstart + retmax beyond 10,000.
+        if not page or offset >= total or offset + PUBMED_PAGE > 10000:
+            break
+
+    papers = []
+    for index in range(0, len(ids), PUBMED_FETCH_CHUNK):
+        chunk = ids[index : index + PUBMED_FETCH_CHUNK]
+        xml_text = _get(
+            EUTILS + "/efetch.fcgi",
+            {"db": "pubmed", "id": ",".join(chunk), "retmode": "xml"},
+            contact_email,
+            expect="text",
+        )
+        papers.extend(_parse_pubmed_xml(xml_text, keyword_set["name"]))
+    return papers, total
+
+
+def fetch_preprints_range(keyword_set, start, end, contact_email="",
+                          progress=None):
+    """Every preprint first published in [start, end]. Returns (papers, total)."""
+    query = _preprint_query(keyword_set, start, end)
+    papers = []
+    cursor = "*"
+    total = 0
+
+    while True:
+        payload = _get(
+            EUROPEPMC,
+            {
+                "query": query,
+                "format": "json",
+                "resultType": "core",
+                "pageSize": EUROPEPMC_PAGE,
+                "cursorMark": cursor,
+                "sort": "P_PDATE_D desc",
+            },
+            contact_email,
+        )
+        try:
+            total = int(payload.get("hitCount", 0))
+        except (TypeError, ValueError):
+            total = total or 0
+        items = (payload.get("resultList", {}) or {}).get("result", []) or []
+        papers.extend(_parse_europepmc(items, keyword_set["name"]))
+        if progress:
+            progress("Preprints", len(papers), total)
+
+        following = payload.get("nextCursorMark")
+        # The API repeats the cursor on the last page, which is how it says
+        # "that is everything".
+        if not items or not following or following == cursor:
+            break
+        cursor = following
+    return papers, total
