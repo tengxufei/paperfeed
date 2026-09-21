@@ -715,8 +715,13 @@ def explain_set(entry, cfg, count=True):
         except Exception as error:
             print("                 Europe PMC could not be reached (%s)" % error)
 
+    # The preprint query is built twice here - once to show it, once to
+    # count it - so the same note arrives twice. Say each thing once.
+    seen = set()
     for note in notes + preprint_notes:
-        print("    note      : %s" % note)
+        if note not in seen:
+            seen.add(note)
+            print("    note      : %s" % note)
 
 
 def command_query(args):
