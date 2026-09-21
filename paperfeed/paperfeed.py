@@ -27,6 +27,7 @@ import config as config_module
 import digest as digest_module
 import library
 import mailer
+import phrasing
 import relevance
 import sources
 import store as store_module
@@ -374,10 +375,13 @@ def command_status(args):
     )
     print("  due now     %s (%s)" % ("yes" if due else "no", reason))
     print(
-        "  remembered  %d papers (%d identity keys)"
-        % (store.paper_count, len(store.seen))
+        "  remembered  %s (%s)"
+        % (
+            phrasing.count(store.paper_count, "paper"),
+            phrasing.count(len(store.seen), "identity key"),
+        )
     )
-    print("  library     %d saved paper(s)" % library.count(cfg["library_path"]))
+    print("  library     %s saved" % phrasing.count(library.count(cfg["library_path"]), "paper"))
     latest = os.path.join(cfg["digest_dir"], "latest.html")
     print("  latest      %s" % (latest if os.path.exists(latest) else "none yet"))
     return 0
@@ -604,13 +608,13 @@ def command_serve(args):
     if actual_port != args.port:
         print("Port %d was busy, using %d instead." % (args.port, actual_port))
     print("PaperFeed is serving your latest digest at %s" % url)
-    print("  %d paper(s) already in your library" % library.count(cfg["library_path"]))
+    print("  %s already in your library" % phrasing.count(library.count(cfg["library_path"]), "paper"))
     print("  Click '+ Save' on anything worth keeping. Press Ctrl-C to stop.")
     print("  (Bound to 127.0.0.1 - not reachable from your network.)")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
-        print("\nStopped. %d paper(s) in your library." % library.count(cfg["library_path"]))
+        print("\nStopped. %s in your library." % phrasing.count(library.count(cfg["library_path"]), "paper"))
     finally:
         httpd.server_close()
     return 0
@@ -654,7 +658,7 @@ def command_search(args):
                 % text
             )
             return 0
-        print("%d match(es) in your library:\n" % len(records))
+        print("%s in your library:\n" % phrasing.count(len(records), "match", "matches"))
         for index, record in enumerate(records, 1):
             print("%3d. %s" % (index, record["title"]))
             print("      %s | %s" % (record["source"], record["venue"] or "-"))
@@ -834,7 +838,7 @@ def build_trends(cfg, store):
         papers.extend(kept)
 
     papers = store_module.deduplicate(papers)
-    log.info("  %d papers to summarise", len(papers))
+    log.info("  %s to summarise", phrasing.count(len(papers), "paper"))
     if not papers:
         log.error("No papers found in that window, so there is nothing to summarise.")
         return [], None
@@ -890,7 +894,7 @@ def command_trends(args):
     themes, path = build_trends(cfg, store)
     if not path:
         return 1
-    print("%d theme(s). Open %s" % (len(themes), path))
+    print("%s. Open %s" % (phrasing.count(len(themes), "theme"), path))
     return 0 if themes else 1
 
 

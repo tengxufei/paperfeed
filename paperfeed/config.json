@@ -42,15 +42,15 @@
     "preprints": true
   },
   "_contact_email": "NCBI asks that automated tools identify themselves. Sent as a User-Agent header only.",
-  "contact_email": "feigeminiwork@gmail.com",
+  "contact_email": "tengxufei@gmail.com",
   "_email": "Set enabled to true once your digests look right. The password is NEVER stored here: set the environment variable named in password_env. For Gmail, use an app password, not your account password.",
   "email": {
     "enabled": true,
     "smtp_host": "smtp.gmail.com",
     "smtp_port": 465,
-    "username": "feigeminiwork@gmail.com",
+    "username": "tengxufei@gmail.com",
     "password_env": "PAPERFEED_SMTP_PASSWORD",
-    "from_address": "feigeminiwork@gmail.com",
+    "from_address": "tengxufei@gmail.com",
     "to_addresses": [
       "tengxufei@gmail.com"
     ],

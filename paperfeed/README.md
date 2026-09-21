@@ -91,8 +91,12 @@ Two library-wide tools sit above the list:
   papers actually support from its own reasoning, and to say plainly when
   your saved papers do not bear on the question rather than stretching them.
 
-All three need an API key (`python3 paperfeed.py set-key`). Without one the
-library still works; the panel just says the tools are off. Every DOI these
+All three need an Anthropic API key. You can paste it straight into the
+library page — the panel at the top has a field for it — or use
+`python3 paperfeed.py set-key` if you prefer the terminal. Either way it is
+checked against the API before being saved, stored in your macOS Keychain,
+and never written into this project. A link on the page removes it again.
+Without a key the library still works; the panel just offers to set one. Every DOI these
 tools cite is checked against your actual library — a citation that cannot be
 traced to a paper you saved is dropped before you see it.
 

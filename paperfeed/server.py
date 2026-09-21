@@ -344,6 +344,37 @@ if (askBtn) {
   });
 }
 
+var keyBtn = document.getElementById('key-btn');
+if (keyBtn) {
+  keyBtn.addEventListener('click', function () {
+    var input = document.getElementById('key-input');
+    var out = document.getElementById('key-out');
+    if (!input.value.trim()) { busy(out, 'Paste the key first.'); return; }
+    keyBtn.disabled = true;
+    busy(out, 'Checking the key with a small test request...');
+    post('/api/set-key', {key: input.value}).then(function (d) {
+      keyBtn.disabled = false;
+      input.value = '';
+      if (d.ok) {
+        out.className = 'out';
+        out.textContent = 'Key works, saved to ' + d.where + '. Reloading...';
+        setTimeout(function () { location.reload(); }, 900);
+      } else {
+        out.className = 'out';
+        out.textContent = d.error;
+      }
+    }).catch(function () { keyBtn.disabled = false; busy(out, 'The server went away.'); });
+  });
+}
+
+var keyForget = document.getElementById('key-forget');
+if (keyForget) {
+  keyForget.addEventListener('click', function (e) {
+    e.preventDefault();
+    post('/api/forget-key', {}).then(function () { location.reload(); });
+  });
+}
+
 var filter = 'all';
 function applyFilter() {
   document.querySelectorAll('.paper').forEach(function (c) {
@@ -435,13 +466,27 @@ def library_page(db_path, has_key, ai_on):
             'first?"></textarea>'
             '<div style="margin-top:9px"><button class="act primary" id="ask-btn">Ask</button></div>'
             '<div id="ask-out"></div></div>'
+            '<p class="meta" style="margin-top:-6px">An API key is stored. '
+            '<a href="#" id="key-forget">Remove it</a> to switch the AI tools '
+            "off.</p>"
         )
     else:
         tools = (
-            '<div class="tools"><h3>AI tools are off</h3>'
-            '<p class="hint">Run <code>python3 paperfeed.py set-key</code> to '
-            "enable explaining papers, suggesting research directions, and "
-            "answering questions against what you have saved.</p></div>"
+            '<div class="tools"><h3>Turn on the AI tools</h3>'
+            '<p class="hint">Explaining papers, suggesting research directions '
+            "and answering questions about your own work need an Anthropic API "
+            'key. Get one at <a href="https://console.anthropic.com/settings/keys">'
+            "console.anthropic.com</a>, then paste it here.</p>"
+            '<input type="password" class="ask" id="key-input" '
+            'style="min-height:0;height:38px" placeholder="sk-ant-..." '
+            'autocomplete="off">'
+            '<div style="margin-top:9px">'
+            '<button class="act primary" id="key-btn">Check and save key</button>'
+            "</div>"
+            '<p class="hint" style="margin-top:9px">It is checked against the '
+            "API before being saved, and stored in your macOS Keychain - never "
+            "in a file in this project. This page is served only to this Mac.</p>"
+            '<div id="key-out"></div></div>'
         )
 
     body = (
@@ -540,6 +585,11 @@ class Handler(BaseHTTPRequestHandler):
                 self.db_path, body.get("key", ""), body.get("status", "")
             )
             self._json({"ok": done})
+        elif self.path == "/api/set-key":
+            self._set_key(body)
+        elif self.path == "/api/forget-key":
+            ai.forget_key((self.cfg or {}).get("base_dir", ""))
+            self._json({"ok": True})
         elif self.path == "/api/explain":
             self._explain(body)
         elif self.path == "/api/directions":
@@ -553,6 +603,36 @@ class Handler(BaseHTTPRequestHandler):
     # -- page, never a broken library.
     def _interests(self):
         return ((self.cfg or {}).get("ai") or {}).get("interests", "")
+
+    def _set_key(self, body):
+        """Validate a pasted key, then store it. The key is never logged or
+        echoed back; only whether it worked."""
+        candidate = (body.get("key") or "").strip()
+        if not candidate:
+            self._json({"ok": False, "error": "nothing was pasted"})
+            return
+        cfg = self.cfg or {}
+        model = (cfg.get("ai") or {}).get("model") or ai.DEFAULT_SCORING_MODEL
+        try:
+            ai.call(candidate, model, "Reply with the single word: ok", "ok",
+                    max_tokens=10)
+        except ai.KeyRejected:
+            self._json({
+                "ok": False,
+                "error": "The API rejected that key, so it was not saved. "
+                         "Check you copied all of it - they start with sk-ant-.",
+            })
+            return
+        except ai.AIError as error:
+            self._json({
+                "ok": False,
+                "error": "Could not check the key (%s). Nothing was saved - this "
+                         "usually means a network problem rather than a bad key."
+                         % error,
+            })
+            return
+        where = ai.store_key(candidate, cfg.get("base_dir", ""))
+        self._json({"ok": True, "where": where})
 
     def _explain(self, body):
         record = library.get(self.db_path, body.get("key", ""))

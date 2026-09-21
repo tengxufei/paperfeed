@@ -13,6 +13,8 @@ without PaperFeed having to store papers you never asked it to keep.
 
 import html
 import json
+
+import phrasing
 from datetime import datetime
 
 HIGHLIGHT_COUNT = 5           # papers shown per keyword set before the fold
@@ -482,8 +484,11 @@ def render_email_html(groups, meta):
 def render_text(groups, meta):
     lines = [
         "PaperFeed - %s" % meta.get("date_label", ""),
-        "%d new papers, searched the last %d days"
-        % (meta.get("total_new", 0), meta.get("lookback_days", 0)),
+        "%s, searched the last %s"
+        % (
+            phrasing.count(meta.get("total_new", 0), "new paper"),
+            phrasing.count(meta.get("lookback_days", 0), "day"),
+        ),
         "",
     ]
     if meta.get("errors"):
@@ -560,12 +565,11 @@ def render_trends(themes, meta):
         "<title>PaperFeed trends &mdash; %s</title>" % _escape(meta.get("period", "")),
         "<style>%s</style></head><body><div class=\"wrap\">" % STYLE,
         "<h1>What's been happening</h1>",
-        '<p class="meta">%s &middot; from %d papers across %d month%s</p>'
+        '<p class="meta">%s &middot; from %s across %s</p>'
         % (
             _escape(meta.get("date_label", "")),
-            meta.get("paper_count", 0),
-            meta.get("months", 0),
-            "" if meta.get("months") == 1 else "s",
+            phrasing.count(meta.get("paper_count", 0), "paper"),
+            phrasing.count(meta.get("months", 0), "month"),
         ),
     ]
 

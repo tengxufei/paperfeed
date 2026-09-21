@@ -13,6 +13,8 @@ because you stop trusting the top of the list.
 
 from datetime import date
 
+import phrasing
+
 DEFAULT_WEIGHTS = {
     "title_weight": 4.0,      # what a paper is ABOUT — the strongest signal
     "abstract_weight": 1.0,   # a passing mention is weak
@@ -156,7 +158,7 @@ def score_paper(paper, keyword_set, weights=None, today=None):
     # term repeatedly, so breadth earns its own bonus.
     if len(matched) > 1:
         raw += settings["breadth_bonus"] * (len(matched) - 1)
-        reasons.append("%d different terms matched" % len(matched))
+        reasons.append("%s matched" % phrasing.count(len(matched), "different term"))
 
     for name in keyword_set.get("authors", []) or []:
         if author_matches(name, paper.authors):
@@ -167,10 +169,10 @@ def score_paper(paper, keyword_set, weights=None, today=None):
     age = _days_old(paper.published, today)
     if age is not None and age <= 3:
         raw += settings["recency_bonus"]
-        reasons.append("published %s" % ("today" if age <= 0 else "%d days ago" % age))
+        reasons.append("published %s" % phrasing.days_ago(age))
     elif age is not None and age <= 7:
         raw += settings["recency_bonus"] / 2
-        reasons.append("published %d days ago" % age)
+        reasons.append("published %s" % phrasing.days_ago(age))
 
     paper.score = round(min(raw, MAX_SCORE), 1)
     paper.score_reasons = reasons

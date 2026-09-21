@@ -17,6 +17,8 @@ from typing import List, Optional
 
 import requests
 
+import phrasing
+
 EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 EUROPEPMC = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
 
@@ -581,8 +583,9 @@ def fetch_all(keyword_set, cfg):
         fetched = stats.get("fetched", 0)
         if available and fetched and available > fetched:
             notices.append(
-                "%s: %r matched %d papers but only the %d most recent were "
+                "%s: %r matched %s but only the %d most recent were "
                 "fetched. Raise max_per_set, or narrow the set with all_of "
-                "or exclude." % (label, keyword_set["name"], available, fetched)
+                "or exclude."
+                % (label, keyword_set["name"], phrasing.count(available, "paper"), fetched)
             )
     return papers, errors, notices
