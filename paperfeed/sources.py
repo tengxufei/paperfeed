@@ -54,7 +54,13 @@ class Paper:
     affiliation: str = ""     # the senior (last) author's institution
     citations: Optional[int] = None   # Europe PMC only; None means unknown
     issn: str = ""            # ISSN-L: the key that finds the journal elsewhere
+    pmid: str = ""            # the other key OpenAlex accepts
     publication_types: List[str] = field(default_factory=list)  # Review, etc.
+
+    # Filled in by metrics.py when it is switched on. Empty otherwise, and
+    # every reader must cope with it being empty - the digest is written
+    # whether or not OpenAlex answered.
+    metrics: dict = field(default_factory=dict)
 
     # Filled in later by relevance.py.
     score: float = 0.0
@@ -421,6 +427,7 @@ def _parse_pubmed_xml(xml_text, set_name):
                 source="PubMed",
                 set_name=set_name,
                 issn=issn,
+                pmid=pmid,
                 publication_types=publication_types,
                 free_fulltext=bool(pmcid),
                 fulltext_url=(
@@ -657,6 +664,7 @@ def _parse_europepmc(items, set_name):
         ]
         journal = (item.get("journalInfo") or {}).get("journal") or {}
         issn = (journal.get("issn") or journal.get("essn") or "").strip()
+        pmid = str(item.get("pmid") or "").strip()
 
         doi = _normalize_doi(item.get("doi"))
         identifier = item.get("id") or ""
@@ -685,6 +693,7 @@ def _parse_europepmc(items, set_name):
                 affiliation=_europepmc_senior_affiliation(item),
                 citations=citations,
                 issn=issn,
+                pmid=pmid,
                 publication_types=publication_types,
             )
         )

@@ -38,6 +38,20 @@ DEFAULTS = {
         "max_papers_per_run": 40,
         "batch_size": 10,
     },
+    "metrics": {
+        "enabled": True,
+        "mailto": "",
+        "new_paper_days": 90,
+        "work_cache_days": 7,
+        "journal_cache_days": 30,
+        "min_credits": 50,
+        "journal_table": {
+            "path": "",
+            "issn_column": "ISSN",
+            "value_columns": {},
+            "label": "",
+        },
+    },
     "collect": {
         "enabled": False,
         "min_score": 6.0,
@@ -489,6 +503,53 @@ def settings_not_in_file(config_path):
     return missing
 
 
+def _validate_metrics(raw, config_path):
+    """The metrics block, whose nested journal_table needs its own check."""
+    defaults = DEFAULTS["metrics"]
+    simple = {k: v for k, v in defaults.items() if k != "journal_table"}
+    given = dict(raw or {})
+    table = given.pop("journal_table", None)
+
+    block = _validate_block(given, simple, "metrics")
+
+    if table is None:
+        table = dict(defaults["journal_table"])
+    if not isinstance(table, dict):
+        raise ConfigError(
+            "metrics.journal_table must be a block with 'path', "
+            "'issn_column', 'value_columns' and 'label'."
+        )
+    for key in table:
+        if key not in defaults["journal_table"]:
+            raise ConfigError(
+                "metrics.journal_table.%s is not a setting. Valid ones: %s"
+                % (key, ", ".join(sorted(defaults["journal_table"])))
+            )
+    merged = dict(defaults["journal_table"])
+    merged.update(table)
+    for key in ("path", "issn_column", "label"):
+        if not isinstance(merged[key], str):
+            raise ConfigError(
+                "metrics.journal_table.%s must be text." % key
+            )
+    if not isinstance(merged["value_columns"], dict):
+        raise ConfigError(
+            "metrics.journal_table.value_columns must map the label you want "
+            'shown to the column it lives in, e.g. {"JIF": "2024 JIF"}.'
+        )
+    for label, column in merged["value_columns"].items():
+        if not isinstance(column, str):
+            raise ConfigError(
+                "metrics.journal_table.value_columns[%r] must be a column "
+                "name, but found %r." % (label, column)
+            )
+    block["journal_table"] = merged
+
+    # The cache lives beside config.json, like every other working file.
+    block["path"] = os.path.join(os.path.dirname(config_path), "metrics.db")
+    return block
+
+
 def load(config_path):
     """Read config_path and return a validated settings dict.
 
@@ -568,6 +629,7 @@ def load(config_path):
             "               Point ai.base_url at the service for those."
             % cfg["ai"]["provider"]
         )
+    cfg["metrics"] = _validate_metrics(raw.get("metrics"), config_path)
     cfg["collect"] = _validate_block(raw.get("collect"), DEFAULTS["collect"], "collect")
     cfg["trends"] = _validate_block(raw.get("trends"), DEFAULTS["trends"], "trends")
     if cfg["ai"]["enabled"]:

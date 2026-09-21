@@ -15,6 +15,7 @@ import html
 import json
 import re
 
+import metrics
 import phrasing
 from datetime import datetime
 
@@ -152,6 +153,25 @@ details.rest { margin-top: 4px; }
 }
 .badge.preprint { background: #f4ecdf; color: #7a5a1e; }
 .badge.oa { background: #d9ead3; color: #2c5d1e; }
+.badge.kind { background: #efe7f4; color: #5c3f73; }
+.metrics { margin-top: 7px; display: flex; flex-wrap: wrap; gap: 5px; }
+.metric {
+  display: inline-block; font-size: 11.5px; padding: 2px 8px;
+  border-radius: 4px; background: #f2f5f9; color: #46505e;
+  border: 1px solid #e2e8f0; cursor: help;
+}
+.metric .src {
+  display: inline-block; margin-left: 6px; font-size: 10px;
+  color: #8a929c; text-transform: uppercase; letter-spacing: 0.02em;
+}
+.metric.quiet { background: #fafafa; color: #8a929c; font-style: italic; }
+.metric.bad { background: #fbe4e4; color: #8f2020; border-color: #f0c4c4;
+              font-weight: 600; }
+.metric.own { background: #fff6e5; border-color: #f0e0c0; color: #6b5320; }
+.sourced {
+  font-size: 12px; color: #6b727b; margin: 10px 0 0; line-height: 1.55;
+  border-left: 3px solid #dfe3e8; padding-left: 10px;
+}
 .chips { margin-top: 8px; }
 .chip {
   display: inline-block; font-size: 11px; padding: 1px 7px; margin: 0 4px 4px 0;
@@ -204,6 +224,13 @@ details p { font-size: 13.5px; color: #333; margin: 8px 0 0; }
   .badge { background: #2a3547; color: #9dbbe4; }
   .badge.preprint { background: #3b3325; color: #d7b377; }
   .badge.oa { background: #26381f; color: #a6cf92; }
+  .badge.kind { background: #322a3d; color: #c0a6dd; }
+  .metric { background: #23272e; color: #a8b0ba; border-color: #32373f; }
+  .metric .src { color: #767d87; }
+  .metric.quiet { background: #1e2126; color: #767d87; }
+  .metric.bad { background: #3a2222; color: #e8a0a0; border-color: #543030; }
+  .metric.own { background: #332c1e; border-color: #4a4130; color: #d7b377; }
+  .sourced { color: #8d949c; border-left-color: #353a42; }
   .chip { background: #282c33; color: #9aa1aa; }
   .score { background: #282c33; color: #9aa1aa; }
   .score.strong { background: #26381f; color: #a6cf92; }
@@ -272,9 +299,107 @@ def _chips(paper):
     )
 
 
+# Article kinds worth showing on the card. "Journal Article" is on almost
+# every record and says nothing, so it is not one of them.
+NOTABLE_TYPES = (
+    "Review", "Systematic Review", "Meta-Analysis", "Case Reports",
+    "Comment", "Editorial", "Letter", "Retracted Publication",
+    "Published Erratum", "Clinical Trial", "Randomized Controlled Trial",
+    "Preprint",
+)
+
+
+def _article_kind(paper):
+    """What kind of thing this is, from PubMed's own labelling."""
+    kinds = [kind for kind in (paper.publication_types or [])
+             if kind in NOTABLE_TYPES]
+    return kinds[0] if kinds else ""
+
+
+def _metrics_row(paper):
+    """Triage figures, each labelled with where it came from.
+
+    Every number here names its source in the same breath, because a bare
+    number on a card gets read as a verdict from the tool itself.
+    """
+    data = getattr(paper, "metrics", None) or {}
+    if not data:
+        return ""
+
+    bits = []
+    if data.get("retracted"):
+        bits.append(
+            '<span class="metric bad" title="OpenAlex records this work as '
+            'retracted.">retracted</span>'
+        )
+
+    citations = data.get("citations")
+    if data.get("too_new"):
+        bits.append(
+            '<span class="metric quiet" title="Published too recently for '
+            'anyone to have cited it. A zero here would be a verdict, not a '
+            'fact.">too new to have citations</span>'
+        )
+    elif citations is not None:
+        bits.append(
+            '<span class="metric">cited %d<span class="src">OpenAlex</span></span>'
+            % citations
+        )
+        fwci = data.get("fwci")
+        if fwci:
+            bits.append(
+                '<span class="metric" title="Field-Weighted Citation Impact: '
+                '1.0 is the average for papers of the same field, type and '
+                'year, so this is not a penalty for being recent.">'
+                '%.1f&times; field average<span class="src">OpenAlex FWCI</span>'
+                "</span>" % fwci
+            )
+    elif paper.citations is not None:
+        bits.append(
+            '<span class="metric">cited %d<span class="src">Europe PMC</span>'
+            "</span>" % paper.citations
+        )
+
+    journal = data.get("journal") or {}
+    citedness = journal.get("two_year_mean_citedness")
+    if citedness is not None:
+        works = journal.get("works_count")
+        bits.append(
+            '<span class="metric" title="OpenAlex 2-year mean citedness for '
+            "%s. It counts EVERY item the journal publishes, meeting "
+            "abstracts and errata included, so journals with large abstract "
+            'supplements read far below their reputation. Not an Impact '
+            'Factor.">journal citedness %.1f%s<span class="src">OpenAlex'
+            "</span></span>"
+            % (_escape(journal.get("name") or "this journal"), citedness,
+               (" over %s works" % format(works, ",")) if works else "")
+        )
+    if journal.get("in_doaj"):
+        bits.append(
+            '<span class="metric" title="Listed in the Directory of Open '
+            'Access Journals.">in DOAJ<span class="src">OpenAlex</span></span>'
+        )
+
+    table = data.get("table") or {}
+    for label, value in (table.get("values") or {}).items():
+        bits.append(
+            '<span class="metric own" title="Read from your own licensed '
+            'file. PaperFeed never fetched this number.">%s %s'
+            '<span class="src">%s</span></span>'
+            % (_escape(label), _escape(value), _escape(table.get("label", "")))
+        )
+
+    if not bits:
+        return ""
+    return '<div class="metrics">%s</div>' % "".join(bits)
+
+
 def _badges(paper):
     badge_class = "badge preprint" if paper.source == "Preprint" else "badge"
     bits = ['<span class="%s">%s</span>' % (badge_class, _escape(paper.source))]
+    kind = _article_kind(paper)
+    if kind and kind != "Preprint":
+        bits.append('<span class="badge kind">%s</span>' % _escape(kind))
     if paper.free_fulltext:
         if paper.fulltext_url:
             bits.append(
@@ -283,6 +408,13 @@ def _badges(paper):
             )
         else:
             bits.append('<span class="badge oa">free full text</span>')
+    else:
+        oa_url = (getattr(paper, "metrics", None) or {}).get("oa_url")
+        if oa_url:
+            bits.append(
+                '<a class="badge oa" href="%s">free full text</a>'
+                % _escape(oa_url)
+            )
 
     tail = []
     if paper.venue:
@@ -337,6 +469,7 @@ def _paper_html(paper, show_scores):
         parts.append('<p class="why">%s</p>' % _escape("; ".join(paper.score_reasons)))
 
     parts.append(_badges(paper))
+    parts.append(_metrics_row(paper))
     parts.append(_chips(paper))
 
     if paper.abstract:
@@ -398,6 +531,14 @@ def render_html(groups, meta):
             '<span class="sep">|</span>'
             '<a class="pf-page" href="dashboard.html">dashboard</a></nav>'
             % "".join(jump)
+        )
+
+    sourcing = list(meta.get("metrics_lines") or [])
+    if sourcing:
+        parts.append(
+            '<p class="sourced">%s<br><em>%s</em></p>'
+            % ("<br>".join(_escape(line) for line in sourcing),
+               _escape(metrics.DISCLAIMER))
         )
 
     if meta.get("errors"):

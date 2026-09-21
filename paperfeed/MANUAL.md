@@ -44,8 +44,10 @@ scheduler** — change `interval_days` and you never touch launchd again.
 |---|---|
 | `paperfeed.py` | the command you run; orchestrates everything |
 | `config.py` | reads `config.json`, explains mistakes in plain English |
+| `query.py` | reads a boolean query and translates it to both engines |
 | `sources.py` | talks to PubMed and Europe PMC; one function per source |
 | `relevance.py` | filtering and the explainable 0–10 score |
+| `metrics.py` | citation and journal figures from OpenAlex |
 | `store.py` | what has been shown before, so nothing repeats |
 | `digest.py` | renders the digest, the email, the trend report |
 | `library.py` | the papers you keep (SQLite) |
@@ -69,6 +71,10 @@ scheduler** — change `interval_days` and you never touch launchd again.
 | `python3 paperfeed.py run --set "name"` | Only one keyword set. |
 | `python3 paperfeed.py check` | Validate the config. Also lists settings you have not written into your file. |
 | `python3 paperfeed.py check --costs` | Add an estimate of what the AI features would cost. |
+| `python3 paperfeed.py check --explain` | Show how each keyword set reaches PubMed and Europe PMC, and how many it matches on each. |
+| `python3 paperfeed.py query --cheatsheet` | Print the query syntax guide. |
+| `python3 paperfeed.py query "..."` | Try a query out: read it back, show both translations, count the hits. |
+| `python3 paperfeed.py migrate-queries` | Convert old `terms` lists into queries. Dry run until `--write`. |
 | `python3 paperfeed.py status` | Last run, next run, library size. |
 | `python3 paperfeed.py serve` | Open the digest, library and dashboards in your browser. |
 | `python3 paperfeed.py saved` | List the papers you have kept. |
@@ -108,11 +114,11 @@ and names anything wrong, including which line if the JSON itself is broken.
 
 ```json
 {
-  "name": "de novo protein design",
-  "terms": ["de novo protein design", "RFdiffusion"],
-  "all_of": ["protein"],
-  "authors": ["Baker D"],
+  "name": "IDH1 in glioma",
+  "query": "(IDH1 OR \"isocitrate dehydrogenase 1\") AND (glioma OR glioblastoma)",
+  "require_title_groups": 1,
   "exclude": ["cathode"],
+  "article_types": { "exclude": ["Review"], "only": [] },
   "journals": { "allow": [], "deny": [] },
   "fields": "title_abstract",
   "min_score": 4,
@@ -120,32 +126,147 @@ and names anything wrong, including which line if the JSON itself is broken.
 }
 ```
 
-- **`terms`** — OR'ed. Searched as exact phrases in title and abstract.
-- **`all_of`** — every one must *also* appear.
-- **`authors`** — follow people. Written as PubMed writes them: `Baker D`.
+- **`query`** — what this topic is, as a boolean expression. See below.
+- **`require_title_groups`** — how many of your bracketed concepts must be
+  in the **title**, not merely mentioned. 0 by default.
 - **`exclude`** — drop papers mentioning these, for this set only.
+- **`article_types`** — filter on PubMed's own labels: `Review`, `Comment`,
+  `Editorial`, `Letter`, `Case Reports`, `Clinical Trial`, `Meta-Analysis`.
 - **`journals.deny` / `.allow`** — never / only these.
 - **`fields`** — `"title_abstract"` (default) or `"all"`.
 - **`min_score`** — hide weak matches, for this set only.
 
+The older `terms` / `all_of` / `authors` lists still work. Convert them with
+`python3 paperfeed.py migrate-queries`, which is a dry run until you add
+`--write` and prints before/after hit counts on both sources so no
+conversion changes what a set matches without telling you.
+
 Nothing a filter removes is remembered, so relaxing a filter later brings
 those papers back. Every digest says how many were hidden and why.
 
+### Writing a query
+
+```
+  IDH1                       one word, looked for in title and abstract
+  "isocitrate dehydrogenase" words in quotes are an exact phrase
+  A OR B   A AND B   NOT A   operators, always in capitals
+  ( ... )                    brackets group things together
+
+  title:IDH1                 title only
+  abstract:"survival"        abstract only
+  author:"Baker D"           surname then initials, as PubMed writes them
+  journal:"Neuro-Oncology"   journal or preprint server
+  mesh:"Glioma"              PubMed's curated subject index
+  all:CRISPR                 everywhere, including full text
+```
+
+`python3 paperfeed.py query --cheatsheet` prints this, and
+`python3 paperfeed.py query "..."` tries one out — reading it back as an
+outline, showing what each engine will be sent, and counting the hits —
+before you commit it to `config.json`.
+
+The shape that works is **synonyms grouped, groups AND'ed**:
+
+```
+(concept one, written every way) AND (concept two, written every way)
+```
+
+Two things the engines will not tell you, so PaperFeed does:
+
+- **PubMed has no abstract-only field.** `abstract:` widens to title+abstract
+  there, and the digest says so. Europe PMC can do it properly.
+- **MeSH is assigned after indexing.** Of the thirty newest papers on a
+  typical IDH1 query, twenty-two had no MeSH headings at all, and preprints
+  never have any. So put `mesh:` in an *OR* beside plain words, never on its
+  own. A query that needs MeSH in every branch cannot match a preprint, and
+  the preprint search is skipped with that reason printed.
+
+A broken query is never rejected by either engine — both answer HTTP 200
+and search for something else. PaperFeed refuses it first, and marks the
+spot.
+
 ### How papers are scored
+
+Scoring works per **concept** — each bracketed group in your query — not per
+word.
 
 | Signal | Points |
 |---|---|
-| Term in the **title** | +4 |
-| Term in the **abstract** | +1 |
-| Each extra distinct term | +1 |
+| A concept present in the **title** | +4 |
+| A concept present as a **MeSH heading** | +2 |
+| A concept present in the **abstract** | +1 |
 | Published in the last 3 days | +1 |
 | By an author you follow | +3 |
 
-A title match is worth more than two abstract mentions on purpose: the title
+A concept can only be satisfied once, however many ways you wrote it. This
+is the point: `(glioma OR glioblastoma OR astrocytoma)` is one idea, and a
+review that says all three used to out-score a paper whose title was about
+IDH1. Measured on the live set — synonym-stuffed review **1.0**, real IDH1
+paper **8.0**.
+
+A title match beats any number of abstract mentions, on purpose: the title
 is what a paper is *about*. Recency is deliberately small — inside a 14-day
 window almost everything is recent, so a large bonus would be noise.
+**Citation counts never enter this score.**
 
 Every card shows the reasons behind its score. Weights live under `ranking`.
+
+### Paper and journal figures
+
+Under `metrics`. On by default, free, and needing no key.
+
+| Shown | From | Notes |
+|---|---|---|
+| citation count | OpenAlex | withheld under 90 days old |
+| × field average (FWCI) | OpenAlex | 1.0 = typical for that field and year |
+| open access + PDF link | OpenAlex, Europe PMC | |
+| retracted | OpenAlex and PubMed | both are checked |
+| review / comment / case report | PubMed | already in the XML we fetch |
+| journal 2-yr mean citedness, h-index | OpenAlex | see the warning below |
+| in DOAJ | OpenAlex | |
+
+**No Impact Factor is fetched or shipped.** The JIF is Clarivate's,
+published in Journal Citation Reports behind a paywall, and redistributing
+it is not permitted. SJR is no better: Scimago publishes no API and its site
+refuses automated requests. If you have licensed access to either, point
+`metrics.journal_table` at your own CSV — it is read from your disk, never
+fetched, and never sent anywhere:
+
+```json
+"journal_table": {
+  "path": "~/jcr_2025.csv",
+  "issn_column": "ISSN",
+  "value_columns": { "JIF": "2024 JIF", "Quartile": "JIF Quartile" },
+  "label": "JCR 2024 (my licensed copy)"
+}
+```
+
+**Read the journal number carefully.** OpenAlex's 2-year mean citedness
+counts *every item* a journal publishes — meeting abstracts, errata,
+editorials. Journals with large abstract supplements therefore read far
+below their reputation:
+
+| | citedness | indexed works |
+|---|---|---|
+| Cell | 40.8 | 26,944 |
+| Nature | 18.9 | 448,700 |
+| PNAS | 8.6 | 172,928 |
+| Neuro-Oncology | **1.1** | 30,090 |
+| Cancer Research | **0.6** | 159,128 |
+
+Neuro-Oncology is not a weak journal; it prints thousands of conference
+abstracts nobody cites. This is why the works count is always beside the
+number, why it is never called an Impact Factor, and why nothing in
+PaperFeed is ever sorted by it. Treat all of these as triage, not verdicts.
+
+A paper under `new_paper_days` (90) shows *"too new to have citations"*
+rather than a zero. A zero would read as a judgement when there has simply
+been no opportunity.
+
+Anonymous OpenAlex use is metered: 1000 requests per about 11.5 hours, one
+credit per request however many papers it asks about. PaperFeed batches 50
+at a time and caches, so a normal run costs two or three. When the
+allowance runs low it stops and says how far it got.
 
 ### Schedule and volume
 
@@ -379,46 +500,73 @@ again.
    Because DOI is the paper's identity, getting this wrong also corrupts
    deduplication.
 
-2. **Silent truncation.** If a keyword matches more papers than your
+2. **Europe PMC sometimes answers with nothing at all.** About one call in
+   twelve returns the body `{"version": "6.9"}` — HTTP 200, no `resultList`,
+   no error. Measured: twelve identical requests, eleven returned fifteen
+   preprints and one returned none. Read as a quiet week, that silently
+   removes a whole source from a run. `_get(..., require="resultList")`
+   treats the missing key as a failure and retries.
+
+3. **Neither engine rejects a broken query.** All of these returned HTTP 200:
+   an unbalanced bracket (2088 hits, bracket dropped), `IDH1[notafield]`
+   (2254 hits, tag dropped), `ANDD` for `AND` (0 hits), and Europe PMC's
+   `BOGUSFIELD:"glioma"` (0 hits). A wrong query returns wrong papers, never
+   an error, which is why `query.py` validates before sending. PubMed does
+   record what it ignored, in `warninglist` and `errorlist` — read them.
+   `"glioblastoma multi-omics"` sat in this config for weeks matching
+   nothing while PubMed reported it as `quotedphrasesnotfound` every run.
+
+4. **PubMed rejects `sort=date`.** It says so in `warninglist.outputmessages`
+   and sorts by its default instead. That default is PMID descending, which
+   with `datetype=edat` is the order the feed wants anyway — so the request
+   is simply not made. `sort=pub_date` would be wrong: it orders by journal
+   publication date, a different question.
+
+5. **A journal-level citation average is not an Impact Factor.** OpenAlex's
+   2-year mean citedness counts every meeting abstract and erratum a journal
+   prints. Neuro-Oncology reads 1.1 and Cancer Research 0.6. Always show the
+   works count beside it, never sort by it, never call it an IF.
+
+6. **Silent truncation.** If a keyword matches more papers than your
    per-query cap, you fetch the newest N and lose the rest with no
    indication — so the specific papers wanted get crowded out. Both APIs
    return a total count: compare it against what you fetched and say so.
 
-3. **Author name matching.** `"Baker D"` substring-matches `"Baker DA"`, a
+7. **Author name matching.** `"Baker D"` substring-matches `"Baker DA"`, a
    different researcher. Require the initials to line up on a whole-token
    boundary.
 
-4. **A single global relevance threshold cannot serve several topics.** A
+8. **A single global relevance threshold cannot serve several topics.** A
    cut-off that tames a broad term (where the word is usually in the title)
    silences a set whose matches are legitimately in abstracts. Make the
    threshold settable per keyword set.
 
-5. **Case-variant subjects.** MeSH headings are Title Case, author keywords
+9. **Case-variant subjects.** MeSH headings are Title Case, author keywords
    are not, so `Glioblastoma` and `glioblastoma` become two nodes on a
    subject graph. Merge case-insensitively, keeping the commonest spelling.
 
-6. **Do not set `display` on a `<summary>` element.** In WebKit it stops
+10. **Do not set `display` on a `<summary>` element.** In WebKit it stops
    working as a disclosure control and the section silently will not toggle.
    Style an inner wrapper.
 
-7. **Escaping, twice.** If you generate source files with a script, embedded
+11. **Escaping, twice.** If you generate source files with a script, embedded
    CSS and JS pass through Python's escape rules twice. `"\25b8"` in a Python
    string is an octal escape, not a CSS one; a `\\n` in a regex became a real
    newline and split the literal across two lines, which is a parse error
    that kills *every* handler on the page. Use raw strings for embedded JS
    and CSS, and prefer literal characters over escapes.
 
-8. **Route matching with `startswith`.** `"/dashboard-topic.html".startswith("/dashboard")`
+12. **Route matching with `startswith`.** `"/dashboard-topic.html".startswith("/dashboard")`
    is true, so a prefix route swallows every sibling page. Match exactly.
 
-9. **A missing email password must not be fatal.** Scheduled jobs do not read
+13. **A missing email password must not be fatal.** Scheduled jobs do not read
    your shell profile. Treating it as a config error means the scheduled run
    aborts before writing anything — exactly the failure the local file exists
    to prevent. Warn, skip the email, write the file.
 
-10. **Provider error codes differ.** Google answers an invalid API key with
+14. **Provider error codes differ.** Google answers an invalid API key with
     HTTP 400, not 401. Read the error body, not just the status.
 
-11. **Pluralisation.** "published 1 days ago" makes a tool feel unfinished.
+15. **Pluralisation.** "published 1 days ago" makes a tool feel unfinished.
     One helper, used everywhere.
 

@@ -16,6 +16,11 @@
       "exclude": [],
       "_fields": "'title_abstract' (default, less noise) or 'all' (searches everywhere, including MeSH and full text).",
       "fields": "title_abstract",
+      "_article_types": "Filter on what KIND of paper it is, using PubMed's own labels. exclude = never these; only = nothing else. Matched as case-insensitive substrings, so \"Review\" also covers \"Systematic Review\". Useful labels: Review, Comment, Editorial, Letter, Case Reports, Clinical Trial, Randomized Controlled Trial, Meta-Analysis. Hidden papers are counted and reported.",
+      "article_types": {
+        "exclude": [],
+        "only": []
+      },
       "_journals": "allow = ONLY these journals. deny = never these. Matched as substrings, so 'Nature' covers 'Nature Methods'.",
       "journals": {
         "allow": [],
@@ -49,6 +54,27 @@
   "mute": {
     "terms": [],
     "journals": []
+  },
+  "_metrics": "Citation counts, open-access status and journal figures, to help you triage. Free and keyless: everything here comes from OpenAlex, whose data is CC0. NO IMPACT FACTOR IS FETCHED OR SHIPPED - the JIF is Clarivate's, paywalled, and redistributing it is not allowed; SJR has no API and Scimago blocks automated requests. If you have licensed access to either, put your own file in journal_table below and the tool will read it from your disk without ever fetching or sending those numbers.",
+  "_metrics_caveat": "OpenAlex's 2-year mean citedness counts EVERY item a journal publishes, meeting abstracts included, so journals with big abstract supplements read far below their reputation (Neuro-Oncology 1.1, Cancer Research 0.6). That is why the works count is always shown beside it, why it is never called an Impact Factor, and why nothing is ever sorted by it. Citation counts never affect the relevance score either.",
+  "metrics": {
+    "enabled": true,
+    "_mailto": "OpenAlex asks tools to identify themselves. Falls back to contact_email.",
+    "mailto": "",
+    "_new_paper_days": "Under this age a paper shows 'too new to have citations' rather than a zero, because a zero on a paper published last week reads as a verdict when there has been no opportunity.",
+    "new_paper_days": 90,
+    "_cache": "Figures are cached so the same paper is not looked up twice. Journal figures change about once a year, hence the longer life.",
+    "work_cache_days": 7,
+    "journal_cache_days": 30,
+    "_min_credits": "Anonymous OpenAlex use is metered: 1000 requests per ~11.5 hours, one credit per request however many papers it asks about. The tool stops enriching when fewer than this many credits remain, and says so in the digest rather than quietly leaving papers blank.",
+    "min_credits": 50,
+    "_journal_table": "Optional. Your own licensed journal metrics, read from a CSV on this machine. issn_column names the column holding the ISSN; value_columns maps the label you want shown to the column it lives in; label says where it came from. Example: {\"path\": \"~/jcr_2025.csv\", \"issn_column\": \"ISSN\", \"value_columns\": {\"JIF\": \"2024 JIF\", \"Quartile\": \"JIF Quartile\"}, \"label\": \"JCR 2024 (my licensed copy)\"}. Journals with no row show nothing, and the count of misses is reported.",
+    "journal_table": {
+      "path": "",
+      "issn_column": "ISSN",
+      "value_columns": {},
+      "label": ""
+    }
   },
   "_collect": "The collector makes your library grow on its own. Every run, papers scoring at least min_score are saved automatically, up to max_per_run. Papers you click Save on are marked 'you'; these are marked 'auto', so you can always tell them apart. Turn it off and the library only grows when you click.",
   "collect": {

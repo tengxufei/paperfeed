@@ -22,7 +22,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import ai
 import digest as digest_module
 import library
+import metrics as metrics_module
 import phrasing
+import sources
 
 BLOB = re.compile(
     r'<script type="application/json" class="pf-paper">(.*?)</script>', re.S
@@ -412,10 +414,40 @@ document.querySelectorAll('.pill').forEach(function (p) {
 """
 
 
-def library_page(db_path, has_key, ai_on, key_env="PAPERFEED_AI_KEY"):
+def _metrics_for_library(rows, cfg):
+    """Look up citation and journal figures for the saved papers.
+
+    The library is where these numbers earn their keep. A digest is full of
+    papers published this week, all of them correctly reported as too new to
+    have citations; a library holds papers from months and years ago, where
+    a citation count and a retraction flag actually say something.
+
+    Cached lookups mean opening this page normally costs no requests at all.
+    """
+    if not (cfg or {}).get("metrics", {}).get("enabled"):
+        return {}, []
+    stand_ins = []
+    for record in rows:
+        paper = sources.Paper(
+            title=record.get("title") or "",
+            doi=record.get("doi") or "",
+            published=record.get("published") or "",
+            issued=record.get("published") or "",
+            venue=record.get("venue") or "",
+            source=record.get("source") or "",
+        )
+        paper.library_key = record.get("key")
+        stand_ins.append(paper)
+    report = metrics_module.enrich(stand_ins, cfg)
+    return ({paper.library_key: paper for paper in stand_ins},
+            metrics_module.describe(report))
+
+
+def library_page(db_path, has_key, ai_on, key_env="PAPERFEED_AI_KEY", cfg=None):
     rows = library.all_saved(db_path, limit=500)
     counts = library.status_counts(db_path)
     total = len(rows)
+    enriched, sourcing = _metrics_for_library(rows, cfg)
 
     cards = []
     for record in rows:
@@ -440,7 +472,7 @@ def library_page(db_path, has_key, ai_on, key_env="PAPERFEED_AI_KEY"):
         cards.append(
             '<div class="paper" data-key="%s" data-status="%s">'
             '<div class="head"><a class="title" href="%s">%s</a></div>'
-            '<p class="byline">%s</p><div class="tags">%s</div>'
+            '<p class="byline">%s</p><div class="tags">%s</div>%s'
             '<div class="statusrow">%s%s<button class="sbtn rm">remove</button></div>'
             '<div class="out"%s>%s</div>'
             "</div>"
@@ -451,6 +483,8 @@ def library_page(db_path, has_key, ai_on, key_env="PAPERFEED_AI_KEY"):
                 html.escape(record["title"]),
                 html.escape(authors),
                 html.escape(" \u00b7 ".join(tail)),
+                digest_module._metrics_row(enriched[record["key"]])
+                if record["key"] in enriched else "",
                 buttons,
                 explain,
                 "" if record.get("ai_summary") else ' style="display:none"',
@@ -528,6 +562,9 @@ def library_page(db_path, has_key, ai_on, key_env="PAPERFEED_AI_KEY"):
             '&middot; <a href="/dashboard">dashboard</a></p>'
             % phrasing.count(total, "saved paper"),
             tools,
+            ('<p class="sourced">%s<br><em>%s</em></p>'
+             % ("<br>".join(html.escape(line) for line in sourcing),
+                html.escape(metrics_module.DISCLAIMER))) if sourcing else "",
             '<div class="pills">%s</div>' % pills,
             body,
             "<script>%s</script>" % LIBRARY_JS,
@@ -599,6 +636,7 @@ class Handler(BaseHTTPRequestHandler):
                     bool(settings["api_key"]),
                     (self.cfg or {}).get("ai"),
                     settings["api_key_env"],
+                    self.cfg,
                 )
             )
             return

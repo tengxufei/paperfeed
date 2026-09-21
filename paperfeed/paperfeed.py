@@ -28,6 +28,7 @@ import dashboard as dashboard_module
 import digest as digest_module
 import library
 import mailer
+import metrics as metrics_module
 import phrasing
 import query as query_module
 import relevance
@@ -418,6 +419,23 @@ def command_run(args):
         len(hidden),
     )
 
+    # Journal and citation figures. Like AI scoring below, this is laid on
+    # top of a digest that has to be produced whether or not it works, so
+    # enrich() swallows its own failures and reports what it managed.
+    metrics_report = {"enabled": False}
+    if new_papers and not args.dry_run:
+        metrics_report = metrics_module.enrich(new_papers, cfg, log)
+        if metrics_report.get("enriched"):
+            log.info(
+                "metrics: %d paper(s) and %d journal(s) from OpenAlex in "
+                "%d request(s), %s credits left",
+                metrics_report["enriched"], metrics_report["journals"],
+                metrics_report["requests"], metrics_report["remaining"],
+            )
+        for line in metrics_module.describe(metrics_report):
+            if "not reachable" in line or "ran low" in line:
+                log.warning("  ! %s", line)
+
     # AI scoring is strictly an enhancement. Anything that goes wrong here -
     # no key, a rejected key, a dead network, a garbled reply - leaves the
     # local ranking in place and the digest still gets written.
@@ -507,6 +525,7 @@ def command_run(args):
             else []
         ),
         "ai_note": ai_note,
+        "metrics_lines": metrics_module.describe(metrics_report),
     }
     html_text = digest_module.render_html(groups, meta)
     text_body = digest_module.render_text(groups, meta)
@@ -843,6 +862,19 @@ def command_check(args):
             "found" if settings["api_key"] else "NOT set",
         )
     )
+    table = cfg["metrics"]["journal_table"]
+    if cfg["metrics"]["enabled"]:
+        print("  metrics: on - citations, open access and journal figures from")
+        print("           OpenAlex (free, keyless, CC0). No Impact Factor is")
+        print("           fetched or shipped: it is Clarivate's and paywalled.")
+        if table["path"]:
+            print("           plus your own file: %s" % table["path"])
+        else:
+            print("           to add licensed figures of your own, set")
+            print("           metrics.journal_table.path to a CSV you have.")
+    else:
+        print("  metrics: off")
+
     print(
         "  collector: %s"
         % (
