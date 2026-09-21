@@ -71,9 +71,16 @@
     "journals": []
   },
   "ai": {
+    "_provider": "'anthropic' for the Claude API, or 'openai' for OpenAI and anything speaking its chat-completions API (Groq, DeepSeek, Together, OpenRouter, LM Studio, Ollama).",
+    "provider": "anthropic",
+    "_base_url": "Leave blank for the provider's own endpoint. Set it to point elsewhere, e.g. https://api.groq.com/openai/v1 , https://api.deepseek.com/v1 , or http://localhost:11434/v1 for a local Ollama model.",
+    "base_url": "",
+    "_api_key_env": "The environment variable holding your key. PaperFeed never stores the key itself. export PAPERFEED_AI_KEY='...' in ~/.zshrc",
+    "api_key_env": "PAPERFEED_AI_KEY",
     "enabled": false,
-    "interests": "",
     "model": "claude-haiku-4-5",
+    "_interests": "Free text describing what you care about; each paper is scored against it.",
+    "interests": "",
     "max_papers_per_run": 40,
     "batch_size": 10
   },
@@ -86,6 +93,7 @@
     "email": false
   },
   "collect": {
+    "_about": "Makes the library grow on its own: every run saves papers scoring at least min_score, up to max_per_run. Auto-saved papers are marked 'auto' so you can tell them from ones you clicked.",
     "enabled": true,
     "min_score": 6.0,
     "max_per_run": 25

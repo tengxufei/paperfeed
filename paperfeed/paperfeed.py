@@ -554,6 +554,15 @@ def command_check(args):
         )
     )
 
+    missing = config_module.settings_not_in_file(cfg["config_path"])
+    if missing:
+        print(
+            "\n  Settings you have not written into config.json, so they are\n"
+            "  using built-in defaults. Add any you want to change:"
+        )
+        for line in missing:
+            print("    %s" % line)
+
     if cfg["ai"]["enabled"] or cfg["trends"]["enabled"] or args.costs:
         estimates = ai.estimate_costs(cfg)
         print("\n  Estimated API cost (rough - actual usage is logged each run):")

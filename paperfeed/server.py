@@ -532,7 +532,10 @@ class Handler(BaseHTTPRequestHandler):
         return ai.settings_for(self.cfg or {}, which)
 
     def do_GET(self):
-        if self.path.startswith("/dashboard"):
+        # Exact match only: "/dashboard" is the overall page, but
+        # "/dashboard-idh1-glioblastoma.html" is a different page and a
+        # startswith() test would swallow every one of them.
+        if self.path.rstrip("/") == "/dashboard":
             self._send_digest_file("dashboard.html")
             return
         # index.html links to dated digests and trend reports, so serve any

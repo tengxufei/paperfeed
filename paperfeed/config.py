@@ -383,6 +383,37 @@ def _validate_email(raw):
     return email
 
 
+def settings_not_in_file(config_path):
+    """Settings that exist but are absent from the user's file.
+
+    A setting that lives only as a built-in default is invisible: there is
+    nothing in the file to edit, and no reason to believe it exists. This
+    lists them so they can be discovered without reading the source.
+    """
+    try:
+        with open(config_path, "r", encoding="utf-8") as handle:
+            raw = _strip_comments(json.load(handle))
+    except (OSError, json.JSONDecodeError):
+        return []
+
+    missing = []
+    for key, default in sorted(DEFAULTS.items()):
+        if not isinstance(default, dict):
+            if key not in raw:
+                missing.append("%s = %r" % (key, default))
+            continue
+        present = raw.get(key)
+        if not isinstance(present, dict):
+            missing.append("%s (whole block)" % key)
+            continue
+        absent = [name for name in sorted(default) if name not in present]
+        if absent:
+            missing.append(
+                "%s: %s" % (key, ", ".join("%s = %r" % (n, default[n]) for n in absent))
+            )
+    return missing
+
+
 def load(config_path):
     """Read config_path and return a validated settings dict.
 
