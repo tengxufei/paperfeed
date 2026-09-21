@@ -91,11 +91,29 @@ it on later:
    file exists if I go and look for it" — it has to reach me. Show me this
    working before moving on.
 
-2. **Keep.** The papers accumulate into a local store that grows by itself,
-   with a way for me to mark the ones I care about.
-3. **Show.** A dashboard over the collection, rebuilt on every run.
+2. **Keep what is worth reading.** Two separate things, and I want both:
+
+   - **I save papers myself.** Wherever I am reading the list — the digest
+     page, the email — I want a single action on each paper that means "keep
+     this, it is worth reading". One click, next to the paper. Not copying an
+     identifier into a terminal.
+   - **It also keeps the strongest matches on its own**, so the collection
+     still grows in the weeks I do not look at it.
+
+   Keep those two apart, so I can always tell which papers I chose and which
+   arrived by themselves. And let me see what I have saved but not yet read,
+   so the pile does not become something I never revisit.
+3. **Show.** A dashboard over the collection, rebuilt on every run. Charts,
+   not a table of numbers — I want to see the shape of things at a glance.
+   Build **one per topic as well as one overall**: I follow several fields
+   and a change in one is invisible in a combined total. It must work with
+   no API key, because I want to look at it every week.
 4. **Analyse.** Let me search any date range I choose, not only recent days,
-   and compare periods.
+   and compare two periods against each other.
+
+   One rule: looking back at an old period must not change what the tool
+   considers new. If I examine last year, next week's alert must be
+   unaffected.
 
 Stages 2 to 4 are worth nothing if stage 1 has stopped working, so any
 change to them has to leave the alerting intact.
