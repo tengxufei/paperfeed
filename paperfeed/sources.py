@@ -53,10 +53,14 @@ class Paper:
     keywords: List[str] = field(default_factory=list)
     affiliation: str = ""     # the senior (last) author's institution
     citations: Optional[int] = None   # Europe PMC only; None means unknown
+    issn: str = ""            # ISSN-L: the key that finds the journal elsewhere
+    publication_types: List[str] = field(default_factory=list)  # Review, etc.
 
     # Filled in later by relevance.py.
     score: float = 0.0
     score_reasons: List[str] = field(default_factory=list)
+    total_concepts: int = 0   # how many concepts the query asks for
+    title_concepts: int = 0   # how many of them are in this paper's title
 
     # Filled in by ai.py, only when AI scoring is switched on.
     ai_score: Optional[float] = None
@@ -375,6 +379,20 @@ def _parse_pubmed_xml(xml_text, set_name):
             for node in article.findall(".//KeywordList/Keyword")
         ]
 
+        # Both of these are already in the reply. PublicationType is how a
+        # review is told from primary research, and ISSNLinking is the key
+        # that finds the journal in other databases. Neither costs a request.
+        publication_types = [
+            node.text.strip()
+            for node in article.findall(
+                "MedlineCitation/Article/PublicationTypeList/PublicationType")
+            if node.text
+        ]
+        issn = (
+            _text(article, "MedlineCitation/MedlineJournalInfo/ISSNLinking")
+            or _text(article, "MedlineCitation/Article/Journal/ISSN")
+        )
+
         # Walk backwards: the senior author is the last one with an address.
         affiliation = ""
         for node in reversed(own_authors):
@@ -402,6 +420,8 @@ def _parse_pubmed_xml(xml_text, set_name):
                 venue=_text(article, ".//Journal/Title"),
                 source="PubMed",
                 set_name=set_name,
+                issn=issn,
+                publication_types=publication_types,
                 free_fulltext=bool(pmcid),
                 fulltext_url=(
                     "https://www.ncbi.nlm.nih.gov/pmc/articles/%s/" % pmcid
@@ -631,6 +651,13 @@ def _parse_europepmc(items, set_name):
         except (TypeError, ValueError):
             citations = None
 
+        publication_types = [
+            str(entry) for entry in
+            (item.get("pubTypeList") or {}).get("pubType") or [] if entry
+        ]
+        journal = (item.get("journalInfo") or {}).get("journal") or {}
+        issn = (journal.get("issn") or journal.get("essn") or "").strip()
+
         doi = _normalize_doi(item.get("doi"))
         identifier = item.get("id") or ""
         url = (
@@ -657,6 +684,8 @@ def _parse_europepmc(items, set_name):
                 keywords=[str(word) for word in keywords if word],
                 affiliation=_europepmc_senior_affiliation(item),
                 citations=citations,
+                issn=issn,
+                publication_types=publication_types,
             )
         )
     return papers

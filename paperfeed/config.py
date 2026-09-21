@@ -202,6 +202,26 @@ def _validate_keyword_sets(raw):
                 "Keyword set %r: 'require_title_groups' cannot be negative." % name
             )
 
+        article_types = entry.get("article_types") or {}
+        if not isinstance(article_types, dict):
+            raise ConfigError(
+                "Keyword set %r: 'article_types' must be a block with "
+                "'exclude' and/or 'only' lists, e.g. "
+                "{\"exclude\": [\"Review\", \"Comment\"]}." % name
+            )
+        for key in article_types:
+            if key not in ("exclude", "only"):
+                raise ConfigError(
+                    "Keyword set %r: article_types.%s is not a setting. Use "
+                    "'exclude' or 'only'." % (name, key)
+                )
+        for key in ("exclude", "only"):
+            if key in article_types and not isinstance(article_types[key], list):
+                raise ConfigError(
+                    "Keyword set %r: article_types.%s must be a list of "
+                    "article kinds, like [\"Review\"]." % (name, key)
+                )
+
         journals = entry.get("journals") or {}
         if not isinstance(journals, dict):
             raise ConfigError(
@@ -269,6 +289,10 @@ def _validate_keyword_sets(raw):
                 "exclude": exclude,
                 "fields": fields,
                 "journals": {"allow": list(allow), "deny": list(deny)},
+                "article_types": {
+                    "exclude": list(article_types.get("exclude") or []),
+                    "only": list(article_types.get("only") or []),
+                },
                 "sources": set_sources,
                 "min_score": set_min_score,
                 "enabled": enabled,

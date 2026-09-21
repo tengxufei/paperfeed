@@ -398,6 +398,13 @@ def command_run(args):
     low_scoring = []
     if show_scores:
         relevance.score_all(new_papers, keyword_sets, ranking)
+        # Title coverage first: "is this paper about my topic at all" is a
+        # clearer question than "did it accumulate enough points", and
+        # answering it first keeps the score threshold doing one job.
+        new_papers, thin = relevance.drop_below_title_concepts(
+            new_papers, keyword_sets
+        )
+        hidden.extend(thin)
         new_papers, low_scoring = relevance.drop_below_per_set(
             new_papers, keyword_sets, ranking.get("min_score", 0)
         )
