@@ -243,8 +243,12 @@ def _parse_pubmed_xml(xml_text, set_name):
             )
         )
 
+        # Same containment rule as the ids above: only this article's authors.
+        author_list = article.find("MedlineCitation/Article/AuthorList")
+        own_authors = author_list.findall("Author") if author_list is not None else []
+
         authors = []
-        for author in article.findall(".//Author"):
+        for author in own_authors:
             last = _text(author, "LastName")
             initials = _text(author, "Initials")
             collective = _text(author, "CollectiveName")
@@ -253,10 +257,17 @@ def _parse_pubmed_xml(xml_text, set_name):
             elif collective:
                 authors.append(collective)
 
-        ids = {
-            identifier.get("IdType"): (identifier.text or "").strip()
-            for identifier in article.findall(".//ArticleId")
-        }
+        # Scope this to the article's OWN id list. './/ArticleId' also matches
+        # every id in the reference list - one record here carried 190 of
+        # them, 187 belonging to cited papers - and keeping the last of each
+        # type silently adopted a random reference's DOI as this paper's
+        # identity, breaking its links, its "free full text" badge, and the
+        # deduplication that is keyed on DOI.
+        ids = {}
+        own_ids = article.find("PubmedData/ArticleIdList")
+        if own_ids is not None:
+            for identifier in own_ids.findall("ArticleId"):
+                ids[identifier.get("IdType")] = (identifier.text or "").strip()
         doi = _normalize_doi(ids.get("doi"))
         if not doi:
             for location in article.findall(".//ELocationID"):
@@ -268,6 +279,8 @@ def _parse_pubmed_xml(xml_text, set_name):
         # subscription, which is the practical question when you are deciding
         # whether to click.
         pmcid = ids.get("pmc", "")
+        if pmcid and not pmcid.upper().startswith("PMC"):
+            pmcid = "PMC" + pmcid
 
         mesh_terms = [
             node.text.strip()
@@ -281,7 +294,7 @@ def _parse_pubmed_xml(xml_text, set_name):
 
         # Walk backwards: the senior author is the last one with an address.
         affiliation = ""
-        for node in reversed(article.findall(".//Author")):
+        for node in reversed(own_authors):
             found = node.findtext(".//Affiliation")
             if found:
                 affiliation = _institution(found)
