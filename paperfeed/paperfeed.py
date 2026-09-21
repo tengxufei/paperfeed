@@ -458,14 +458,78 @@ def command_check(args):
     return 0
 
 
+def email_preflight(cfg):
+    """Report what we can tell before attempting a send. Never prints the
+    password itself - only its shape."""
+    settings = cfg["email"]
+    env_name = settings.get("password_env", "PAPERFEED_SMTP_PASSWORD")
+    shape = mailer.describe_password(os.environ.get(env_name, ""))
+    problems = []
+
+    print("Email settings")
+    print("  server        %s:%s" % (settings["smtp_host"], settings["smtp_port"]))
+    print("  login as      %s" % settings["username"])
+    print("  from          %s" % settings["from_address"])
+    print("  to            %s" % ", ".join(settings["to_addresses"]))
+
+    if not shape["set"]:
+        print("  password      $%s is NOT set in this shell" % env_name)
+        problems.append(
+            "Set it with:  export %s='your-app-password'" % env_name
+        )
+    else:
+        verdict = "looks like a Google app password" if shape["looks_like_app_password"] else (
+            "does NOT look like an app password"
+        )
+        print(
+            "  password      $%s is set, %d characters, %s"
+            % (env_name, shape["length"], verdict)
+        )
+        if shape["had_spaces"]:
+            print("                (it contains spaces; these are stripped automatically)")
+        if shape["length"] != 16:
+            problems.append(
+                "A Google app password is exactly 16 letters. Yours is %d "
+                "characters, which suggests it is your normal account password "
+                "- Gmail always rejects those for SMTP. Generate one at "
+                "https://myaccount.google.com/apppasswords" % shape["length"]
+            )
+
+    # Gmail will not let you send as an address the logged-in account does
+    # not own, so a mismatch here fails after authentication succeeds.
+    if (
+        "gmail" in settings["smtp_host"]
+        and settings["from_address"].strip().lower()
+        != settings["username"].strip().lower()
+    ):
+        problems.append(
+            "from_address (%s) is not the account you log in as (%s). Gmail "
+            "only lets you send as yourself, or as a verified alias. Make "
+            "them the same unless you have set up an alias."
+            % (settings["from_address"], settings["username"])
+        )
+
+    if problems:
+        print("\nLikely problems:")
+        for problem in problems:
+            print("  - %s" % problem)
+    return problems
+
+
 def command_test_email(args):
     cfg = load_config_or_exit(args.config)
-    setup_logging(cfg["log_path"])
+    setup_logging(cfg["log_path"], verbose=False)
     if not cfg["email"]["enabled"]:
         sys.stderr.write(
             "Email is disabled. Set email.enabled to true in config.json first.\n"
         )
         return 2
+
+    problems = email_preflight(cfg)
+    if problems and not args.anyway:
+        print("\nNot sending. Fix the above, or re-run with --anyway to try regardless.")
+        return 1
+    print("\nSending ...")
 
     sample = sources.Paper(
         title="PaperFeed test message",
@@ -866,6 +930,10 @@ def main(argv=None):
     check_parser.set_defaults(handler=command_check)
 
     email_parser = subparsers.add_parser("test-email", help="send one test message")
+    email_parser.add_argument(
+        "--anyway", action="store_true",
+        help="attempt the send even if the pre-flight check finds problems",
+    )
     email_parser.set_defaults(handler=command_test_email)
 
     serve_parser = subparsers.add_parser(
