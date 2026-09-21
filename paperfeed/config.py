@@ -12,6 +12,10 @@ import os
 
 DEFAULTS = {
     "interval_days": 3,
+    # Overrides interval_days when above zero. Useful for testing, and for
+    # anyone who wants to hear about a paper the hour it appears rather than
+    # three days later. The scheduler must wake at least this often too.
+    "interval_hours": 0,
     "ranking": {
         "enabled": True,
         "title_weight": 4.0,
@@ -448,6 +452,16 @@ def load(config_path):
 
     cfg["keyword_sets"] = _validate_keyword_sets(raw.get("keyword_sets"))
     cfg["interval_days"] = _positive_int(cfg, "interval_days")
+
+    hours = cfg.get("interval_hours", 0)
+    if isinstance(hours, bool) or not isinstance(hours, (int, float)):
+        raise ConfigError(
+            "'interval_hours' must be a number (0 to use interval_days "
+            "instead), but found: %r" % (hours,)
+        )
+    if hours < 0:
+        raise ConfigError("'interval_hours' cannot be negative.")
+    cfg["interval_hours"] = float(hours)
     cfg["lookback_days"] = _positive_int(cfg, "lookback_days")
     cfg["max_per_set"] = _positive_int(cfg, "max_per_set")
 

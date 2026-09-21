@@ -342,7 +342,7 @@ def command_run(args):
             except Exception as error:      # never let it break the digest
                 log.error("Trend report failed: %s", error)
 
-    due, reason = store.due(cfg["interval_days"])
+    due, reason = store.due(cfg["interval_days"], cfg["interval_hours"])
     # A dry run changes nothing, so the interval gate would only get in the
     # way of the question you are actually asking: what would I get now?
     if not due and not args.force and not args.dry_run:
@@ -578,7 +578,7 @@ def command_status(args):
     cfg = load_config_or_exit(args.config)
     setup_logging(cfg["log_path"], verbose=False)
     store = store_module.Store(cfg["state_path"])
-    due, reason = store.due(cfg["interval_days"])
+    due, reason = store.due(cfg["interval_days"], cfg["interval_hours"])
 
     print("PaperFeed %s" % __version__)
     print("  config      %s" % cfg["config_path"])
@@ -588,7 +588,14 @@ def command_status(args):
             "    %-34s %s (%d terms)"
             % (entry["name"], "on " if entry["enabled"] else "off", len(entry["terms"]))
         )
-    print("  interval    every %d days" % cfg["interval_days"])
+    print(
+        "  interval    %s"
+        % (
+            "every %g hours" % cfg["interval_hours"]
+            if cfg["interval_hours"]
+            else "every %d days" % cfg["interval_days"]
+        )
+    )
     print("  lookback    %d days" % cfg["lookback_days"])
     print(
         "  sources     %s"
@@ -628,7 +635,15 @@ def command_check(args):
     for entry in cfg["keyword_sets"]:
         if entry["enabled"]:
             print("    %s: %s" % (entry["name"], " OR ".join(entry["terms"])))
-    print("  every %d days, looking back %d days" % (cfg["interval_days"], cfg["lookback_days"]))
+    print(
+        "  %s, looking back %d days"
+        % (
+            "every %g hours" % cfg["interval_hours"]
+            if cfg["interval_hours"]
+            else "every %d days" % cfg["interval_days"],
+            cfg["lookback_days"],
+        )
+    )
     if cfg["email"]["enabled"]:
         if cfg["email"].get("password_available"):
             print("  email: enabled, password found in $%s" % cfg["email"]["password_env"])

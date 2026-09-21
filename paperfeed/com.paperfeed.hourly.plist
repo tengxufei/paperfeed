@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.paperfeed.daily</string>
+
+    <!-- Wakes PaperFeed every hour. It still decides for itself whether
+         enough time has passed, using interval_hours (or interval_days) in
+         config.json - so most wakes cost nothing and exit in milliseconds. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/Users/xufeiteng/ai_completion/research_tools/paperfeed/paperfeed.py</string>
+        <string>run</string>
+        <string>--quiet</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/xufeiteng/ai_completion/research_tools/paperfeed</string>
+
+    <key>StartInterval</key>
+    <integer>3600</integer>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/xufeiteng/ai_completion/research_tools/paperfeed/state/launchd.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/xufeiteng/ai_completion/research_tools/paperfeed/state/launchd.err.log</string>
+
+    <!-- launchd does not read ~/.zshrc, so a scheduled run cannot see the
+         variables you exported there. Paste the two values here for the
+         scheduled run to send email and use AI, then:
+             chmod 600 ~/Library/LaunchAgents/com.paperfeed.daily.plist
+         Leave them out and the digest is still written - only the email and
+         the AI scoring are skipped. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PAPERFEED_SMTP_PASSWORD</key>
+        <string>PASTE-YOUR-APP-PASSWORD-HERE</string>
+        <key>PAPERFEED_AI_KEY</key>
+        <string>PASTE-YOUR-GEMINI-KEY-HERE</string>
+    </dict>
+</dict>
+</plist>

@@ -142,15 +142,34 @@ class Store:
             for key in paper_keys:
                 self.seen.setdefault(key, today)
 
-    def due(self, interval_days):
-        """Has enough time passed since the last digest?"""
+    @staticmethod
+    def _describe_gap(seconds, prefix):
+        """Say the wait in whichever unit reads naturally."""
+        if seconds < 3600:
+            return "%s %d minutes" % (prefix, round(seconds / 60))
+        if seconds < 86400 * 2:
+            return "%s %.1f hours" % (prefix, seconds / 3600)
+        return "%s %.1f days" % (prefix, seconds / 86400)
+
+    def due(self, interval_days, interval_hours=0):
+        """Has enough time passed since the last digest?
+
+        interval_hours wins when set, so a short cadence can be expressed
+        without writing interval_days as a fraction.
+        """
+        gap = (
+            timedelta(hours=interval_hours)
+            if interval_hours
+            else timedelta(days=interval_days)
+        )
         if self.last_run is None:
             return True, "first run"
         elapsed = _now() - self.last_run
-        if elapsed >= timedelta(days=interval_days):
-            return True, "%.1f days since last run" % (elapsed.total_seconds() / 86400)
-        remaining = timedelta(days=interval_days) - elapsed
-        return False, "next run in %.1f days" % (remaining.total_seconds() / 86400)
+        if elapsed >= gap:
+            return True, self._describe_gap(elapsed.total_seconds(), "waited")
+        return False, self._describe_gap(
+            (gap - elapsed).total_seconds(), "next run in"
+        )
 
     def due_mark(self, name, interval_days):
         """Same interval gate as runs, for anything on its own cadence."""

@@ -176,10 +176,19 @@ def call(settings, system, user_text, max_tokens=2000, effort=None, timeout=120)
             body["output_config"] = {"effort": effort}
     elif provider == "gemini":
         headers = {"content-type": "application/json", "x-goog-api-key": key}
+        # Gemini 2.5 models think by default, and those thinking tokens come
+        # out of maxOutputTokens. Left alone, a 700-token budget was spending
+        # 668 on thinking and returning a 28-token answer cut off mid-word.
+        # Off for the short structured asks; a real budget only where the
+        # caller asked for reasoning effort.
+        generation = {
+            "maxOutputTokens": max_tokens,
+            "thinkingConfig": {"thinkingBudget": 2048 if effort else 0},
+        }
         body = {
             "systemInstruction": {"parts": [{"text": system}]},
             "contents": [{"role": "user", "parts": [{"text": user_text}]}],
-            "generationConfig": {"maxOutputTokens": max_tokens},
+            "generationConfig": generation,
         }
     else:
         headers = {
@@ -252,10 +261,18 @@ def call(settings, system, user_text, max_tokens=2000, effort=None, timeout=120)
             parts = ((candidates[0].get("content") or {}).get("parts")) or []
             text = "".join(part.get("text", "") for part in parts)
             usage = payload.get("usageMetadata", {}) or {}
+            if candidates[0].get("finishReason") == "MAX_TOKENS" and not text.strip():
+                raise AIError(
+                    "the reply was cut off before any text came back (the "
+                    "token budget went on internal reasoning). Try a larger "
+                    "max_tokens."
+                )
             return text, {
                 "input_tokens": usage.get("promptTokenCount", 0),
-                "output_tokens": usage.get("candidatesTokenCount", 0),
+                "output_tokens": usage.get("candidatesTokenCount", 0)
+                + usage.get("thoughtsTokenCount", 0),
                 "model": model,
+                "truncated": candidates[0].get("finishReason") == "MAX_TOKENS",
             }
         if provider == "anthropic":
             text = "".join(

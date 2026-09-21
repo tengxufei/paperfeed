@@ -81,6 +81,18 @@ INJECTED_JS = r"""
     }
   }
 
+  // The digest is also opened as a plain file, where /library would be a
+  // dead link, so the entry is added here rather than baked into the file.
+  var jump = document.querySelector('nav.jump');
+  if (jump && !jump.querySelector('.pf-lib')) {
+    var link = document.createElement('a');
+    link.className = 'pf-lib';
+    link.href = '/library';
+    link.textContent = 'library';
+    var spacer = jump.querySelector('.spacer');
+    jump.insertBefore(link, spacer || null);
+  }
+
   cards.forEach(function (card, index) {
     var info = state[index];
     var blob = card.querySelector('script.pf-paper');
@@ -272,6 +284,7 @@ document.querySelectorAll('.sbtn[data-status]').forEach(function (b) {
           o.classList.toggle('on', o.dataset.status === b.dataset.status);
         });
         card.dataset.status = b.dataset.status;
+        refreshCounts();
         applyFilter();
       });
   });
@@ -281,7 +294,7 @@ document.querySelectorAll('.sbtn.rm').forEach(function (b) {
   b.addEventListener('click', function () {
     var card = b.closest('.paper');
     post('/api/unsave', {key: card.dataset.key}).then(function (d) {
-      if (d.ok) { card.remove(); }
+      if (d.ok) { card.remove(); refreshCounts(); }
     });
   });
 });
@@ -353,6 +366,22 @@ if (askBtn) {
   });
 }
 
+// The counts are rendered once on the server, so they have to be recomputed
+// in the page whenever a status changes - otherwise the pills go stale the
+// moment you click anything.
+function refreshCounts() {
+  var cards = document.querySelectorAll('.paper');
+  var tally = { all: cards.length, unread: 0, reading: 0, read: 0 };
+  cards.forEach(function (card) {
+    var state = card.dataset.status || 'unread';
+    if (tally[state] !== undefined) { tally[state] += 1; }
+  });
+  document.querySelectorAll('.pill').forEach(function (pill) {
+    var slot = pill.querySelector('.n');
+    if (slot) { slot.textContent = tally[pill.dataset.filter] || 0; }
+  });
+}
+
 var filter = 'all';
 function applyFilter() {
   document.querySelectorAll('.paper').forEach(function (c) {
@@ -416,15 +445,15 @@ def library_page(db_path, has_key, ai_on, key_env="PAPERFEED_AI_KEY"):
         )
 
     pills = "".join(
-        '<span class="pill%s" data-filter="%s">%s%s</span>'
+        '<span class="pill%s" data-filter="%s">%s <b class="n">%d</b></span>'
         % (
             " on" if value == "all" else "",
             value,
             label,
-            "" if value == "all" else " (%d)" % counts.get(value, 0),
+            total if value == "all" else counts.get(value, 0),
         )
         for value, label in (
-            ("all", "all %d" % total), ("unread", "unread"),
+            ("all", "all"), ("unread", "unread"),
             ("reading", "reading"), ("read", "read"),
         )
     )
