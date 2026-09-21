@@ -119,6 +119,21 @@ def read_key(ai_cfg=None):
     return os.environ.get(key_env_name(ai_cfg), "").strip()
 
 
+def describe_model(cfg, which="ai"):
+    """How to name the thing that did the scoring, on the page.
+
+    The digest used to call every AI score "Claude's", whichever provider was
+    actually configured. Attributing a judgement to the wrong model is not a
+    cosmetic slip.
+    """
+    block = cfg.get(which) or {}
+    provider = (block.get("provider") or "").strip()
+    model = (block.get("model") or "").strip()
+    pretty = {"anthropic": "Claude", "openai": "OpenAI",
+              "gemini": "Gemini"}.get(provider, provider or "the AI")
+    return "%s (%s)" % (pretty, model) if model else pretty
+
+
 def settings_for(cfg, which="ai"):
     """Provider settings from config plus the environment."""
     ai_cfg = cfg.get("ai") or {}

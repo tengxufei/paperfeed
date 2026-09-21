@@ -20,11 +20,6 @@ DASH_CSS = """
             color:#55606d; border:0; margin:0 0 4px; padding:0; }
 .panel p.hint { font-size:12.5px; color:#77818d; margin:0 0 10px; }
 .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
-.dnav { display:flex; flex-wrap:wrap; gap:7px; margin:0 0 18px; }
-.dnav a { font-size:12.5px; padding:5px 11px; border-radius:13px;
-          background:#eceff3; color:#55606d; text-decoration:none; }
-.dnav a:hover { background:#dfe5ee; }
-.dnav a.on { background:#11467f; color:#fff; }
 .tiles { display:flex; flex-wrap:wrap; gap:10px; margin:0 0 16px; }
 .tile { flex:1 1 130px; background:#fff; border:1px solid #e2e4e8;
         border-radius:8px; padding:12px 14px; }
@@ -45,8 +40,6 @@ DASH_CSS = """
 @media (max-width:640px) { .grid { grid-template-columns:1fr; } }
 @media (prefers-color-scheme: dark) {
   .panel, .tile { background:#1f2228; border-color:#33373d; }
-  .dnav a { background:#282c33; color:#9aa1aa; }
-  .dnav a.on { background:#2c5b96; color:#fff; }
   .panel h2 { color:#b9bec6; } .tile b { color:#86b3ec; }
   .alert { border-bottom-color:#2a2f36; }
   .flag.new { background:#26381f; color:#a6cf92; }
@@ -86,17 +79,6 @@ def slug(name):
     return "dashboard-%s.html" % _re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:40]
 
 
-def _nav(sets_order, active):
-    links = ['<a class="%s" href="dashboard.html">All topics</a>'
-             % ("on" if active is None else "")]
-    for name in sets_order:
-        links.append(
-            '<a class="%s" href="%s">%s</a>'
-            % ("on" if active == name else "", slug(name), _esc(name))
-        )
-    return '<nav class="dnav">%s</nav>' % "".join(links)
-
-
 def render(run, history_rows, alerts, library_summary, meta):
     """run: the dict from stats.run_stats. history_rows: newest-first index.json."""
     scope = meta.get("scope")            # None = every topic, else a set name
@@ -109,12 +91,30 @@ def render(run, history_rows, alerts, library_summary, meta):
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
         "<title>PaperFeed &mdash; dashboard</title>",
-        "<style>%s%s%s</style></head><body><div class=\"wrap\">"
-        % (digest_module.STYLE, charts.CHART_CSS, DASH_CSS),
+        "<style>%s%s%s%s</style></head><body class=\"shell\">"
+        % (digest_module.STYLE, digest_module.SHELL_CSS, charts.CHART_CSS, DASH_CSS),
+        digest_module.sidebar(
+            dict(meta, show_scores=False, library_total=library_summary.get("total"),
+                 sources_label="dashboard"),
+            "dashboard",
+            topics=[
+                {"label": "All topics", "href": "dashboard.html",
+                 "active": scope is None},
+            ] + [
+                {"label": name, "href": slug(name), "active": scope == name,
+                 "count": run["per_set"].get(name)}
+                for name in (meta.get("sets_order") or run["sets_order"])
+            ],
+            stats=[
+                (run["total"], "new this run"),
+                (len(run["per_set"]), "topics with hits"),
+                (library_summary.get("total", 0), "in your library"),
+                (meta.get("hidden", 0), "hidden by filters"),
+            ],
+        ),
+        '<div class="wrap">',
         "<h1>%s</h1>" % (_esc(scope) if scope else "Dashboard"),
-        '<p class="meta">%s &middot; <a href="latest.html">this run\'s digest</a> '
-        '&middot; <a href="index.html">all digests</a></p>' % _esc(meta.get("date_label", "")),
-        _nav(meta.get("sets_order") or run["sets_order"], scope),
+        '<p class="meta">%s</p>' % _esc(meta.get("date_label", "")),
     ]
 
     # --- the numbers at a glance ---
@@ -270,7 +270,10 @@ def render(run, history_rows, alerts, library_summary, meta):
         '<p class="footer">Rebuilt by every run. Charts are drawn into the '
         "page itself, so this file works offline and prints.</p>"
     )
-    parts.append("</div></body></html>")
+    parts.append("</div>")
+    parts.append(digest_module.shell_close())
+    parts.append("<script>%s</script>" % digest_module.SHELL_JS)
+    parts.append("</body></html>")
     return "\n".join(parts)
 
 

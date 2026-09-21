@@ -58,20 +58,31 @@ body {
 /* compact mode (A1) - pure CSS, driven by a checkbox, so the file still
    needs no JavaScript to work */
 #compact { position: absolute; opacity: 0; pointer-events: none; }
-#compact:checked ~ .wrap .paper {
+#compact:checked ~ .wrap .paper,
+#compact:checked ~ .app .paper {
   padding: 6px 12px; margin-bottom: 5px; border-radius: 5px;
 }
 #compact:checked ~ .wrap .paper .byline,
 #compact:checked ~ .wrap .paper .why,
 #compact:checked ~ .wrap .paper .chips,
 #compact:checked ~ .wrap .paper details,
-#compact:checked ~ .wrap .paper .ai-why { display: none; }
-#compact:checked ~ .wrap .paper .head { align-items: center; }
-#compact:checked ~ .wrap .paper a.title { font-size: 14px; font-weight: 500; }
-#compact:checked ~ .wrap .paper .tags {
+#compact:checked ~ .wrap .paper .ai-why,
+#compact:checked ~ .app .paper .byline,
+#compact:checked ~ .app .paper .why,
+#compact:checked ~ .app .paper .chips,
+#compact:checked ~ .app .paper .metrics,
+#compact:checked ~ .app .paper details,
+#compact:checked ~ .app .paper .ai-why { display: none; }
+#compact:checked ~ .wrap .paper .head,
+#compact:checked ~ .app .paper .head { align-items: center; }
+#compact:checked ~ .wrap .paper a.title,
+#compact:checked ~ .app .paper a.title { font-size: 14px; font-weight: 500; }
+#compact:checked ~ .wrap .paper .tags,
+#compact:checked ~ .app .paper .tags {
   margin: 2px 0 0 48px; font-size: 11px; opacity: .8;
 }
-#compact:checked ~ .wrap .showing { margin-bottom: 6px; }
+#compact:checked ~ .wrap .showing,
+#compact:checked ~ .app .showing { margin-bottom: 6px; }
 h1 { font-size: 22px; margin: 0 0 4px; }
 .meta { color: #666; font-size: 13px; margin-bottom: 6px; }
 .counts { color: #666; font-size: 13px; margin: 0 0 24px; }
@@ -172,6 +183,10 @@ details.rest { margin-top: 4px; }
   font-size: 12px; color: #6b727b; margin: 10px 0 0; line-height: 1.55;
   border-left: 3px solid #dfe3e8; padding-left: 10px;
 }
+.score.ai .tag {
+  font-size: 8.5px; font-weight: 700; letter-spacing: .06em;
+  opacity: .8; margin-right: 3px; vertical-align: 1px;
+}
 .chips { margin-top: 8px; }
 .chip {
   display: inline-block; font-size: 11px; padding: 1px 7px; margin: 0 4px 4px 0;
@@ -247,6 +262,326 @@ details p { font-size: 13.5px; color: #333; margin: 8px 0 0; }
   .meta, .counts, .hidden-note { color: #98a0a8; }
 }
 """
+
+
+
+# --------------------------------------------------------------------------
+# The shell every page sits in: a left rail, and the page beside it
+# --------------------------------------------------------------------------
+#
+# The digest is opened three ways - straight off disk, through `serve`, and
+# (in its own separate render) as an email. So the rail is pure CSS and the
+# drawer on a narrow screen is a checkbox, not a script: the file works with
+# JavaScript switched off, exactly as the compact-mode toggle already does.
+
+SHELL_CSS = r"""
+:root {
+  --rail: 248px; --ink: #1a1a1a; --dim: #6a727c; --line: #e2e5ea;
+  --panel: #ffffff; --page: #f6f7f9; --accent: #11467f; --accent-soft: #eaf0f8;
+}
+body.shell { padding: 0; }
+.app { display: flex; align-items: flex-start; min-height: 100vh; }
+.side {
+  width: var(--rail); flex: 0 0 var(--rail); align-self: stretch;
+  background: var(--panel); border-right: 1px solid var(--line);
+  padding: 20px 16px 40px; position: sticky; top: 0; height: 100vh;
+  overflow-y: auto; box-sizing: border-box;
+}
+.main { flex: 1 1 auto; min-width: 0; padding: 22px 18px 64px; }
+.main > .wrap { max-width: 860px; margin: 0 auto; }
+
+.brand { display: flex; align-items: baseline; gap: 8px; margin: 0 0 2px; }
+.brand b { font-size: 17px; letter-spacing: -0.01em; color: var(--ink); }
+.brand span { font-size: 11px; color: var(--dim); }
+.side .when { font-size: 11.5px; color: var(--dim); margin: 0 0 18px; }
+
+.rail-h {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em;
+  color: #9aa1aa; margin: 20px 0 7px; font-weight: 600;
+}
+.rail-nav { display: flex; flex-direction: column; gap: 1px; }
+.rail-nav a {
+  display: flex; align-items: center; gap: 9px; padding: 7px 9px;
+  border-radius: 7px; text-decoration: none; font-size: 13.5px;
+  color: #3d4550;
+}
+.rail-nav a:hover { background: #f1f3f6; }
+.rail-nav a.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.rail-nav a .ico { width: 15px; text-align: center; opacity: .75; font-size: 13px; }
+.rail-nav a .n {
+  margin-left: auto; font-size: 11px; color: var(--dim);
+  background: #f0f2f5; border-radius: 9px; padding: 0 6px; font-weight: 600;
+}
+.rail-nav a.on .n { background: #ffffff; color: var(--accent); }
+.rail-nav a.off { opacity: .45; cursor: help; }
+
+.rail-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.rail-stat {
+  background: #f7f8fa; border: 1px solid var(--line); border-radius: 7px;
+  padding: 7px 8px;
+}
+.rail-stat b { display: block; font-size: 16px; line-height: 1.2; color: var(--ink); }
+.rail-stat span { font-size: 10.5px; color: var(--dim); }
+
+.key { font-size: 11.5px; color: var(--dim); line-height: 1.5; }
+.key .row { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
+.key .row > :first-child { flex: 0 0 auto; margin-top: 1px; }
+
+.filterbox {
+  width: 100%; box-sizing: border-box; font: inherit; font-size: 13px;
+  padding: 7px 10px; border: 1px solid var(--line); border-radius: 7px;
+  background: #fbfbfc; color: var(--ink);
+}
+.filterbox:focus { outline: none; border-color: #b9c8dd; background: #fff; }
+.viewopts { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; }
+.viewopts label {
+  display: flex; align-items: center; gap: 7px; cursor: pointer;
+  color: #46505e; user-select: none;
+}
+.switch .dot {
+  width: 26px; height: 15px; border-radius: 8px; background: #d8dde4;
+  position: relative; transition: background .15s; flex: 0 0 auto;
+}
+.switch .dot::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 11px;
+  height: 11px; border-radius: 50%; background: #fff; transition: left .15s;
+}
+#compact:checked ~ .app .switch .dot { background: #5b87c4; }
+#compact:checked ~ .app .switch .dot::after { left: 13px; }
+.hitcount { font-size: 11.5px; color: var(--dim); margin: 8px 0 0; }
+
+/* The drawer button and scrim exist only on narrow screens. */
+#navtoggle { position: absolute; opacity: 0; pointer-events: none; }
+.topbar { display: none; }
+.scrim { display: none; }
+
+@media (max-width: 899px) {
+  .side {
+    position: fixed; z-index: 60; top: 0; left: 0; bottom: 0; height: 100%;
+    transform: translateX(-100%); transition: transform .18s ease-out;
+    box-shadow: 0 0 24px rgba(0,0,0,.14);
+  }
+  #navtoggle:checked ~ .app .side { transform: none; }
+  #navtoggle:checked ~ .app .scrim {
+    display: block; position: fixed; inset: 0; z-index: 50;
+    background: rgba(20,24,30,.34);
+  }
+  .main { padding-top: 8px; }
+  .topbar {
+    display: flex; align-items: center; gap: 10px; position: sticky; top: 0;
+    z-index: 30; margin: -8px -18px 12px; padding: 9px 14px;
+    background: rgba(246,247,249,.95); backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar label.burger {
+    cursor: pointer; font-size: 17px; line-height: 1; padding: 3px 9px;
+    border: 1px solid var(--line); border-radius: 7px; background: #fff;
+    color: #3d4550;
+  }
+  .topbar .here { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e7e9ec; --dim: #8d949c; --line: #2c3037; --panel: #1a1d22;
+    --page: #14161a; --accent: #9dbbe4; --accent-soft: #23303f;
+  }
+  .rail-nav a { color: #b9c0c8; }
+  .rail-nav a:hover { background: #22262c; }
+  .rail-nav a .n { background: #23272e; color: #8d949c; }
+  .rail-nav a.on .n { background: #14161a; color: var(--accent); }
+  .rail-stat { background: #1e2126; border-color: #2c3037; }
+  .filterbox { background: #1e2126; border-color: #2c3037; color: #e7e9ec; }
+  .filterbox:focus { background: #23272e; border-color: #3d4550; }
+  .viewopts label { color: #b9c0c8; }
+  .switch .dot { background: #363b43; }
+  .topbar { background: rgba(20,22,26,.95); }
+  .topbar label.burger { background: #1a1d22; color: #b9c0c8; }
+}
+"""
+
+# Filtering and the view switches. Everything here degrades to "no filtering"
+# if it never runs, which is why the page is readable without it.
+SHELL_JS = r"""
+(function () {
+  // Opened straight off disk, /library is a dead link - there is no server
+  // to answer it. Say so instead of offering a link that goes nowhere.
+  if (location.protocol === 'file:') {
+    document.querySelectorAll('a[data-needs-server]').forEach(function (link) {
+      link.removeAttribute('href');
+      link.classList.add('off');
+      link.title = 'Run: python3 paperfeed.py serve';
+    });
+  }
+
+  var box = document.querySelector('.filterbox');
+  var opts = document.querySelectorAll('.viewopts input');
+  var count = document.querySelector('.hitcount');
+  var cards = Array.prototype.slice.call(document.querySelectorAll('.paper'));
+  if (!cards.length) { return; }
+
+  var text = cards.map(function (card) {
+    return (card.textContent || '').toLowerCase();
+  });
+
+  function wanted(card, index, needle) {
+    if (needle && text[index].indexOf(needle) === -1) { return false; }
+    // Pages with their own filter (the library's status pills) hand it in
+    // here rather than setting display themselves. Two scripts both hiding
+    // and showing the same cards would take it in turns to undo each other.
+    if (window.pfExtraFilter && !window.pfExtraFilter(card)) { return false; }
+    for (var i = 0; i < opts.length; i++) {
+      if (!opts[i].checked) { continue; }
+      var rule = opts[i].getAttribute('data-rule');
+      if (rule === 'oa' && !card.querySelector('.badge.oa')) { return false; }
+      if (rule === 'primary' && card.querySelector('.badge.kind')) { return false; }
+      if (rule === 'nonew' && card.querySelector('.metric.quiet')) { return false; }
+    }
+    return true;
+  }
+
+  function apply() {
+    var needle = box ? box.value.trim().toLowerCase() : '';
+    var shown = 0;
+    cards.forEach(function (card, index) {
+      var keep = wanted(card, index, needle);
+      card.style.display = keep ? '' : 'none';
+      if (keep) { shown++; }
+    });
+    // A section whose papers are all hidden is just a confusing empty
+    // heading, so it goes too.
+    document.querySelectorAll('details.set').forEach(function (block) {
+      var any = block.querySelector('.paper:not([style*="none"])');
+      block.style.display = any ? '' : 'none';
+    });
+    if (count) {
+      count.textContent = (shown === cards.length)
+        ? (cards.length + ' papers')
+        : ('showing ' + shown + ' of ' + cards.length);
+    }
+  }
+
+  if (box) { box.addEventListener('input', apply); }
+  opts.forEach(function (option) { option.addEventListener('change', apply); });
+  window.pfApplyFilters = apply;
+  apply();
+})();
+"""
+
+
+def _rail_link(href, icon, label, count=None, active=False, needs_server=False):
+    number = '<span class="n">%s</span>' % _escape(str(count)) if count is not None else ""
+    return (
+        '<a class="%s" href="%s"%s><span class="ico">%s</span>%s%s</a>'
+        % ("on" if active else "", _escape(href),
+           " data-needs-server" if needs_server else "",
+           icon, _escape(label), number)
+    )
+
+
+def _score_key(meta):
+    """What the numbers in front of a title mean.
+
+    They used to be two bare digits with a tooltip. A tooltip cannot be
+    reached on a phone, and an unexplained number is one you stop trusting -
+    the same reason the score reasons are printed on every card.
+    """
+    rows = []
+    if meta.get("ai_label"):
+        rows.append(
+            '<div class="row"><span class="score ai"><span class="tag">AI</span>9'
+            "</span><span>How well it matches what you said you care about, "
+            "judged by %s. 0&ndash;10.</span></div>" % _escape(meta["ai_label"])
+        )
+    rows.append(
+        '<div class="row"><span class="score strong" style="--fill:80%">8.0</span>'
+        "<span>PaperFeed's own score, out of 10. A concept in the title is "
+        "worth 4, a MeSH heading 2, a mention in the abstract 1. The bar "
+        "behind it fills with the score; hover for the reasons, which are "
+        "also printed under each title.</span></div>"
+    )
+    if meta.get("ai_label"):
+        rows.append(
+            "<div class=\"row\"><span></span><span>Papers are ordered by the "
+            "AI score where there is one, and by PaperFeed's own score "
+            "otherwise.</span></div>"
+        )
+    return '<div class="key">%s</div>' % "".join(rows)
+
+
+def sidebar(meta, active, topics=(), extras="", stats=()):
+    """The left rail, shared by the digest, the library and the dashboards."""
+    here = {"digest": "Digest", "library": "Library",
+            "dashboard": "Dashboard", "index": "All digests",
+            "retro": "Date-range search"}.get(active, "PaperFeed")
+
+    parts = [
+        '<input type="checkbox" id="navtoggle">',
+        '<div class="app">',
+        '<label class="scrim" for="navtoggle"></label>',
+        '<aside class="side">',
+        '<p class="brand"><b>PaperFeed</b><span>%s</span></p>'
+        % _escape(meta.get("sources_label", "") or "literature alerts"),
+        '<p class="when">%s</p>' % _escape(meta.get("date_label", "")),
+        '<div class="rail-nav">',
+        _rail_link(meta.get("digest_href", "latest.html"), "&#9635;", "Digest",
+                   meta.get("total_new"), active == "digest"),
+        _rail_link(meta.get("library_href", "/library"), "&#9733;", "Library",
+                   meta.get("library_total"), active == "library",
+                   needs_server=True),
+        _rail_link(meta.get("dashboard_href", "dashboard.html"), "&#9680;",
+                   "Dashboard", None, active == "dashboard"),
+        _rail_link("index.html", "&#9776;", "All digests", None, active == "index"),
+        "</div>",
+    ]
+
+    if stats:
+        parts.append('<p class="rail-h">At a glance</p><div class="rail-stats">')
+        for value, label in stats:
+            parts.append('<div class="rail-stat"><b>%s</b><span>%s</span></div>'
+                         % (_escape(str(value)), _escape(label)))
+        parts.append("</div>")
+
+    if topics:
+        parts.append('<p class="rail-h">Topics</p><div class="rail-nav">')
+        for topic in topics:
+            parts.append(_rail_link(topic["href"], "&#8226;", topic["label"],
+                                    topic.get("count"), topic.get("active")))
+        parts.append("</div>")
+
+    if extras:
+        parts.append(extras)
+
+    if meta.get("show_scores", True):
+        parts.append('<p class="rail-h">What the numbers mean</p>')
+        parts.append(_score_key(meta))
+
+    parts.extend([
+        "</aside>",
+        '<main class="main">',
+        '<div class="topbar"><label class="burger" for="navtoggle">&#9776;</label>'
+        '<span class="here">%s</span></div>' % _escape(here),
+    ])
+    return "\n".join(parts)
+
+
+def shell_close():
+    return "</main></div>"
+
+
+def search_panel(placeholder="Filter these papers", options=()):
+    """The filter box and view switches that sit in the rail."""
+    rows = "".join(
+        '<label><input type="checkbox" data-rule="%s">%s</label>'
+        % (_escape(rule), _escape(label)) for rule, label in options
+    )
+    return (
+        '<p class="rail-h">Filter</p>'
+        '<input class="filterbox" type="search" placeholder="%s" '
+        'aria-label="%s">'
+        '<div class="viewopts" style="margin-top:8px">%s</div>'
+        '<p class="hitcount"></p>' % (_escape(placeholder), _escape(placeholder), rows)
+    )
 
 
 def _shorten(text, limit):
@@ -428,14 +763,19 @@ def _badges(paper):
     return '<div class="tags">%s%s</div>' % (" ".join(bits), " &middot; ".join(tail))
 
 
-def _paper_html(paper, show_scores):
+def _paper_html(paper, show_scores, ai_label=""):
     parts = ['<div class="paper" data-doi="%s">' % _escape(paper.doi)]
 
     head = ['<div class="head">']
     if getattr(paper, "ai_score", None) is not None:
+        # Labelled "AI", not left as a bare number. Two unexplained numbers
+        # in front of a title is a puzzle, and a tooltip is no answer on a
+        # phone. The sidebar carries the full key.
         head.append(
-            '<span class="score ai" title="Claude\'s relevance score">%.0f</span>'
-            % paper.ai_score
+            '<span class="score ai" title="%s">'
+            '<span class="tag">AI</span>%.0f</span>'
+            % (_escape(ai_label or "relevance scored by the AI, 0-10"),
+               paper.ai_score)
         )
     if show_scores:
         head.append(
@@ -443,7 +783,8 @@ def _paper_html(paper, show_scores):
             % (
                 _score_class(paper.score),
                 int(min(100, paper.score * 10)),
-                _escape("; ".join(paper.score_reasons) or "no matching terms"),
+                _escape("PaperFeed's own score out of 10 - " +
+                        ("; ".join(paper.score_reasons) or "no matching terms")),
                 paper.score,
             )
         )
@@ -500,13 +841,39 @@ def render_html(groups, meta):
     """groups is a list of (keyword set name, [Paper]) — including empty ones."""
     total = meta.get("total_new", 0)
     show_scores = meta.get("show_scores", True)
+    topics = [
+        {"label": name, "href": "#" + _slug(name), "count": len(papers)}
+        for name, papers in groups
+    ]
+    counts = meta.get("source_counts") or {}
+    glance = [(total, "new this run")]
+    for label, number in sorted(counts.items()):
+        glance.append((number, "from %s" % label))
+    if meta.get("hidden_count"):
+        glance.append((meta["hidden_count"], "hidden by filters"))
+
+    panel = search_panel(
+        "Filter these papers",
+        (("oa", "free full text only"),
+         ("primary", "hide reviews and comments"),
+         ("nonew", "hide papers with no citations yet")),
+    ) + (
+        # A plain <label for> drives the real checkbox, which lives outside
+        # .app because the compact-mode CSS reaches it as a sibling. No
+        # script, and no second checkbox to get out of step with the first.
+        '<p class="rail-h">View</p><div class="viewopts">'
+        '<label class="switch" for="compact"><span class="dot"></span>'
+        "compact list</label></div>"
+    )
+
     parts = [
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
         "<title>PaperFeed &mdash; %s</title>" % _escape(meta.get("date_label", "")),
-        "<style>%s</style></head><body>" % STYLE,
+        "<style>%s%s</style></head><body class=\"shell\">" % (STYLE, SHELL_CSS),
         '<input type="checkbox" id="compact">',
+        sidebar(meta, "digest", topics=topics, extras=panel, stats=glance),
         '<div class="wrap">',
         "<h1>PaperFeed</h1>",
         '<p class="meta">%s &middot; %d new paper%s &middot; searched the last %d days</p>'
@@ -518,20 +885,6 @@ def render_html(groups, meta):
         ),
         _counts_line(meta),
     ]
-
-    jump = [
-        '<a href="#%s">%s <b>%d</b></a>' % (_slug(name), _escape(name), len(papers))
-        for name, papers in groups
-        if papers
-    ]
-    if jump:
-        parts.append(
-            '<nav class="jump">%s<span class="spacer"></span>'
-            '<label for="compact">compact list</label>'
-            '<span class="sep">|</span>'
-            '<a class="pf-page" href="dashboard.html">dashboard</a></nav>'
-            % "".join(jump)
-        )
 
     sourcing = list(meta.get("metrics_lines") or [])
     if sourcing:
@@ -585,13 +938,16 @@ def render_html(groups, meta):
                     '<p class="showing">Top %d of %d, best first</p>'
                     % (len(best), len(papers))
                 )
-            parts.extend(_paper_html(paper, show_scores) for paper in best)
+            parts.extend(_paper_html(paper, show_scores, meta.get("ai_label", ""))
+                         for paper in best)
             if rest:
                 parts.append(
                     '<details class="rest"><summary>Show the other %d</summary>'
                     % len(rest)
                 )
-                parts.extend(_paper_html(paper, show_scores) for paper in rest)
+                parts.extend(
+                    _paper_html(paper, show_scores, meta.get("ai_label", ""))
+                    for paper in rest)
                 parts.append("</details>")
             parts.append("</div></details>")
 
@@ -609,7 +965,10 @@ def render_html(groups, meta):
         'Edit config.json to change keywords, filters or the schedule. '
         '<a href="index.html">All digests</a>.</p>' % _escape(meta.get("sources_label", ""))
     )
-    parts.append("</div></body></html>")
+    parts.append("</div>")
+    parts.append(shell_close())
+    parts.append("<script>%s</script>" % SHELL_JS)
+    parts.append("</body></html>")
     return "\n".join(part for part in parts if part)
 
 

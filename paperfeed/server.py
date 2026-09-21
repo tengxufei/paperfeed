@@ -399,9 +399,16 @@ function refreshCounts() {
 }
 
 var filter = 'all';
+// The status pills do not hide cards themselves. They declare what they
+// want and let the shared filter decide, so the search box and the pills
+// combine instead of overwriting one another.
+window.pfExtraFilter = function (card) {
+  return filter === 'all' || card.dataset.status === filter;
+};
 function applyFilter() {
+  if (window.pfApplyFilters) { window.pfApplyFilters(); return; }
   document.querySelectorAll('.paper').forEach(function (c) {
-    c.style.display = (filter === 'all' || c.dataset.status === filter) ? '' : 'none';
+    c.style.display = window.pfExtraFilter(c) ? '' : 'none';
   });
 }
 document.querySelectorAll('.pill').forEach(function (p) {
@@ -550,25 +557,58 @@ def library_page(db_path, has_key, ai_on, key_env="PAPERFEED_AI_KEY", cfg=None):
         "<b>+ Save</b> on anything worth keeping.</div>"
     )
 
+    by_topic = {}
+    for record in rows:
+        by_topic[record.get("set_name") or "unsorted"] = (
+            by_topic.get(record.get("set_name") or "unsorted", 0) + 1
+        )
+    meta = {
+        "date_label": "%d saved" % total,
+        "sources_label": "your library",
+        "library_total": total,
+        "digest_href": "/",
+        "library_href": "/library",
+        "dashboard_href": "/dashboard",
+        "show_scores": False,
+        "ai_label": ai.describe_model(cfg or {}) if cfg else "",
+    }
+    panel = digest_module.search_panel(
+        "Search your library",
+        (("oa", "free full text only"),
+         ("primary", "hide reviews and comments")),
+    )
+    glance = [(counts.get("unread", 0), "unread"),
+              (counts.get("reading", 0), "reading"),
+              (counts.get("read", 0), "read"),
+              (total, "saved in all")]
+    topics = [
+        {"label": name, "href": "#", "count": number}
+        for name, number in sorted(by_topic.items(), key=lambda kv: -kv[1])
+    ]
+
     return "\n".join(
         [
             '<!doctype html><html lang="en"><head><meta charset="utf-8">',
             '<meta name="viewport" content="width=device-width, initial-scale=1">',
             "<title>PaperFeed &mdash; library</title>",
-            "<style>%s%s</style></head><body><div class=\"wrap\">"
-            % (digest_module.STYLE, LIBRARY_CSS),
+            "<style>%s%s%s</style></head><body class=\"shell\">"
+            % (digest_module.STYLE, digest_module.SHELL_CSS, LIBRARY_CSS),
+            digest_module.sidebar(meta, "library", topics=topics,
+                                  extras=panel, stats=glance),
+            '<div class="wrap">',
             "<h1>Your library</h1>",
-            '<p class="meta">%s &middot; <a href="/">back to the digest</a> '
-            '&middot; <a href="/dashboard">dashboard</a></p>'
-            % phrasing.count(total, "saved paper"),
+            '<p class="meta">%s</p>' % phrasing.count(total, "saved paper"),
             tools,
             ('<p class="sourced">%s<br><em>%s</em></p>'
              % ("<br>".join(html.escape(line) for line in sourcing),
                 html.escape(metrics_module.DISCLAIMER))) if sourcing else "",
             '<div class="pills">%s</div>' % pills,
             body,
+            "</div>",
+            digest_module.shell_close(),
+            "<script>%s</script>" % digest_module.SHELL_JS,
             "<script>%s</script>" % LIBRARY_JS,
-            "</div></body></html>",
+            "</body></html>",
         ]
     )
 

@@ -294,12 +294,44 @@ dashboard to choose the threshold.
 your Mac only — not reachable from your network, which is why it needs no
 login. Ctrl-C stops it. If the port is busy it steps to the next free one.
 
+### The sidebar, on every page
+
+The digest, the library and the dashboards share one left-hand rail:
+
+- **Digest / Library / Dashboard / All digests**, with the current page
+  marked. The Library entry needs `serve` to be running; opened straight off
+  disk it dims itself and says so rather than being a dead link.
+- **At a glance** — the numbers for that page.
+- **Topics** — jump to a section on the digest, switch dashboards, see how
+  your library splits.
+- **Filter** — type to narrow the papers on the page, plus switches for
+  *free full text only*, *hide reviews and comments*, and (on the digest)
+  *hide papers with no citations yet*. These stack with the library's
+  unread/reading/read pills, and the count underneath says how many of how
+  many are showing. Nothing is refetched; it is the page you already have.
+- **What the numbers mean** — the key below, always on screen.
+
+On a narrow screen the rail becomes a drawer behind the ☰ button. It is a
+checkbox, not a script, so it works with JavaScript off.
+
+### The two numbers in front of a title
+
+| | |
+|---|---|
+| **AI 9** | How well the paper matches what you wrote in `interests`, judged by whichever model you configured, 0–10. Only appears when AI scoring is on, and the tooltip names the actual model. |
+| **8.0** | PaperFeed's own score out of 10, with the bar behind it filled to match. A concept in the title is worth 4, a MeSH heading 2, a mention in the abstract 1, an author you follow 3. |
+
+Papers are ordered by the AI score where there is one and by PaperFeed's own
+score otherwise, so a run that only sent the first 40 papers to the API still
+sorts sensibly. The reasons behind the local score are printed under every
+title, not just hidden in a tooltip — a tooltip cannot be reached on a phone.
+
 ### The digest
 
 Each keyword set is a collapsible section showing its **top 5**, with the
-rest behind a second fold. A sticky bar at the top jumps between topics, and
-**compact list** collapses every card to one line. Papers with free full text
-are badged and linked. Each card carries a **+ Save** button.
+rest behind a second fold. **compact list** in the rail collapses every card
+to one line. Papers with free full text are badged and linked. Each card
+carries a **+ Save** button.
 
 Printing gives a clean page: navigation drops out, abstracts expand, and each
 link's URL is printed after its title.
@@ -310,6 +342,11 @@ Your kept papers. Set each to **unread / reading / read** and filter by it.
 With an API key, each paper gets an **Explain this** button, and two
 library-wide tools: **suggest research directions** and **ask about a problem
 in your own work**.
+
+This is also where citation counts mean something: a digest is full of
+papers published this week, all correctly reported as too new to be cited,
+while a library holds papers old enough for a count — or a retraction flag —
+to tell you something.
 
 ### The dashboards
 

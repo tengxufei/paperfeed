@@ -526,6 +526,8 @@ def command_run(args):
         ),
         "ai_note": ai_note,
         "metrics_lines": metrics_module.describe(metrics_report),
+        "ai_label": ai.describe_model(cfg) if used_ai else "",
+        "library_total": library.count(cfg["library_path"]),
     }
     html_text = digest_module.render_html(groups, meta)
     text_body = digest_module.render_text(groups, meta)
