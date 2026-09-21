@@ -357,6 +357,10 @@ if (askBtn) {
                 a.suggestions.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') +
                 '</ul></div>';
       }
+      if (a.used) {
+        html += '<div class="refs" style="margin-top:7px">read ' + a.used +
+                ' of your ' + a.total + ' saved papers (titles and abstracts)</div>';
+      }
       if (a.papers && a.papers.length) {
         html += '<div class="refs" style="margin-top:7px">drawing on: ' +
                 a.papers.map(function (doi) {
@@ -469,8 +473,10 @@ def library_page(db_path, has_key, ai_on, key_env="PAPERFEED_AI_KEY"):
             '<button class="act primary" id="dir-btn">Suggest research directions</button>'
             '<div id="dir-out"></div></div>'
             '<div class="tools"><h3>Stuck on something?</h3>'
-            '<p class="hint">Describe a problem in your own work. Answered from '
-            "your saved papers, with what they do and do not cover.</p>"
+            '<p class="hint">Describe a problem in your own work. Every saved '
+            "paper&rsquo;s title and abstract is read, and the answer says "
+            "which ones it drew on and what they do not cover. It has no "
+            "access to full text.</p>"
             '<textarea class="ask" id="ask-text" placeholder="e.g. My designed '
             'binders express well but show no binding by BLI. What should I check '
             'first?"></textarea>'

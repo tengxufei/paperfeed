@@ -691,7 +691,16 @@ def _context_line(interests):
     return "Background on this researcher: %s\n\n" % interests if interests else ""
 
 
-def _library_listing(papers, abstract_chars=400, limit=80):
+LIBRARY_LIMIT = 200     # papers read per AI call; reported, never silent
+
+
+def _library_listing(papers, abstract_chars=400, limit=LIBRARY_LIMIT):
+    """The library, flattened into text for the prompt.
+
+    This is plain context-stuffing, not retrieval: every saved paper is
+    listed, and the model reads them all. Title, venue, DOI and the opening
+    of the abstract only - never full text, which PaperFeed does not have.
+    """
     lines = []
     for record in papers[:limit]:
         lines.append(
@@ -791,15 +800,25 @@ def troubleshoot(question, papers, interests, settings):
     start, end = text.find("{"), text.rfind("}")
     if start == -1 or end < start:
         # Better to show prose we did not expect than to lose the answer.
-        return {"answer": text.strip(), "suggestions": [], "papers": [], "gap": ""}, usage, None
+        return (
+            {"answer": text.strip(), "suggestions": [], "papers": [], "gap": "",
+             "used": min(len(papers), LIBRARY_LIMIT), "total": len(papers)},
+            usage, None,
+        )
     try:
         parsed = json.loads(text[start : end + 1])
     except json.JSONDecodeError:
-        return {"answer": text.strip(), "suggestions": [], "papers": [], "gap": ""}, usage, None
+        return (
+            {"answer": text.strip(), "suggestions": [], "papers": [], "gap": "",
+             "used": min(len(papers), LIBRARY_LIMIT), "total": len(papers)},
+            usage, None,
+        )
 
     known = {p["doi"].lower() for p in papers if p.get("doi")}
     return (
         {
+            "used": min(len(papers), LIBRARY_LIMIT),
+            "total": len(papers),
             "answer": str(parsed.get("answer", ""))[:4000],
             "suggestions": [str(s)[:400] for s in (parsed.get("suggestions") or [])][:6],
             "papers": _validated_dois(parsed.get("papers"), known),
