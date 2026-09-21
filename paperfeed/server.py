@@ -275,7 +275,13 @@ function esc(s) {
   var d = document.createElement('div'); d.textContent = s == null ? '' : s;
   return d.innerHTML;
 }
-function busy(el, message) { el.className = 'out busy'; el.textContent = message; }
+// The output panel is rendered with an inline display:none until a paper
+// has a summary. Changing className does not clear an inline style, so it
+// has to be cleared explicitly or the answer arrives invisibly.
+function show(el) { el.style.display = ''; }
+function busy(el, message) {
+  show(el); el.className = 'out busy'; el.textContent = message;
+}
 
 document.querySelectorAll('.sbtn[data-status]').forEach(function (b) {
   b.addEventListener('click', function () {
@@ -310,6 +316,7 @@ document.querySelectorAll('button.explain').forEach(function (b) {
     busy(out, 'Reading the paper...');
     post('/api/explain', {key: card.dataset.key}).then(function (d) {
       b.disabled = false;
+      show(out);
       if (d.ok) { out.className = 'out'; out.textContent = d.summary;
                   b.textContent = 'Explain again'; }
       else { out.className = 'out'; out.textContent = 'Could not explain: ' + d.error; }
