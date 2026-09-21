@@ -481,3 +481,209 @@ def trend_report(papers, trends_cfg, interests, key, log=None):
             }
         )
     return themes, usage, None
+
+
+# --------------------------------------------------------------------------
+# Working with your saved library
+# --------------------------------------------------------------------------
+
+EXPLAIN_SYSTEM = (
+    "You explain a paper to a working researcher who has already read the "
+    "title and abstract. Skip preamble and restatement. Be concrete about "
+    "method and evidence. If the abstract does not say something, say that "
+    "it does not say, rather than filling the gap with a plausible guess."
+)
+
+EXPLAIN_TEMPLATE = """{context}Explain this paper.
+
+TITLE: {title}
+VENUE: {venue}
+ABSTRACT: {abstract}
+
+Write four short labelled sections, no more than two sentences each:
+
+What they did - the actual method, concretely.
+Why it matters - what changes if this holds up.
+Watch out for - the limitation or missing control you would probe first.
+Worth reading if - who should spend the time on the full text.
+
+Plain prose. No bullet characters, no markdown, no headings beyond those four
+labels followed by a colon."""
+
+DIRECTIONS_SYSTEM = (
+    "You are a senior colleague reading someone's collection of saved papers "
+    "and suggesting where the field is open. You are specific and testable: "
+    "a direction is only useful if someone could start on it next week. "
+    "Ground every direction in papers from the list, cited by DOI. Never "
+    "invent a paper."
+)
+
+DIRECTIONS_TEMPLATE = """{context}Here are the papers this researcher has chosen to keep:
+
+{papers}
+
+What they keep is a signal about what they care about. Identify 3 to 5
+research directions that this collection points toward but that the papers
+themselves have not resolved - gaps, unanswered questions, or combinations
+nobody in this set has tried.
+
+Be concrete enough to act on. Avoid "more work is needed" phrasing.
+
+Reply with ONLY a JSON array, no other text:
+[{{"direction": "<short name>", "why": "<one paragraph: what is open, and \
+what in these papers suggests it>", "first_step": "<one concrete experiment \
+or analysis to start with>", "papers": ["<doi>", "<doi>"]}}]"""
+
+TROUBLESHOOT_SYSTEM = (
+    "You help a researcher with a concrete problem in their own work, using "
+    "only the papers they have saved as evidence. You distinguish clearly "
+    "between what the papers actually support and what is your own "
+    "suggestion. If the saved papers do not address the problem, say so "
+    "plainly instead of stretching them to fit - that is a useful answer."
+)
+
+TROUBLESHOOT_TEMPLATE = """{context}The researcher's problem, in their words:
+
+{question}
+
+Their saved papers:
+
+{papers}
+
+Answer the problem. Where a saved paper is genuinely relevant, cite it by
+DOI and say what it contributes. Where you are reasoning beyond the papers,
+label that clearly as your own suggestion rather than something they support.
+If none of the papers really bear on this, say that first.
+
+Reply with ONLY a JSON object, no other text:
+{{"answer": "<two to four short paragraphs>", \
+"suggestions": ["<concrete thing to try>", "..."], \
+"papers": ["<doi of a paper you actually used>"], \
+"gap": "<what the saved papers do not tell them, or empty>"}}"""
+
+
+def _context_line(interests):
+    interests = (interests or "").strip()
+    return "Background on this researcher: %s\n\n" % interests if interests else ""
+
+
+def _library_listing(papers, abstract_chars=400, limit=80):
+    lines = []
+    for record in papers[:limit]:
+        lines.append(
+            "- %s | %s | doi:%s | %s"
+            % (
+                record.get("title", ""),
+                record.get("venue") or record.get("source", ""),
+                record.get("doi") or "none",
+                " ".join((record.get("abstract") or "").split())[:abstract_chars],
+            )
+        )
+    return "\n".join(lines)
+
+
+def explain_paper(record, interests, key, model=None):
+    """A short, concrete explanation of one saved paper."""
+    model = model or DEFAULT_SCORING_MODEL
+    prompt = EXPLAIN_TEMPLATE.format(
+        context=_context_line(interests),
+        title=record.get("title", ""),
+        venue=record.get("venue") or record.get("source", ""),
+        abstract=" ".join((record.get("abstract") or "").split())[:4000]
+        or "(no abstract available - say so rather than guessing)",
+    )
+    try:
+        text, usage = call(key, model, EXPLAIN_SYSTEM, prompt, max_tokens=700)
+    except AIError as error:
+        return "", {}, str(error)
+    return text.strip(), usage, None
+
+
+def _validated_dois(raw_list, known):
+    out = []
+    for value in raw_list or []:
+        doi = re.sub(r"^doi:", "", str(value).strip().lower())
+        if doi and doi in known and doi not in out:
+            out.append(doi)
+    return out
+
+
+def research_directions(papers, interests, key, model=None):
+    """Where this collection points that the papers have not gone."""
+    if not papers:
+        return [], {}, "there is nothing saved yet"
+    model = model or DEFAULT_TRENDS_MODEL
+    prompt = DIRECTIONS_TEMPLATE.format(
+        context=_context_line(interests), papers=_library_listing(papers)
+    )
+    try:
+        text, usage = call(
+            key, model, DIRECTIONS_SYSTEM, prompt, max_tokens=4000,
+            effort="medium", timeout=240,
+        )
+    except AIError as error:
+        return [], {}, str(error)
+
+    try:
+        rows = _extract_json_array(text)
+    except AIError as error:
+        return [], usage, str(error)
+
+    known = {p["doi"].lower() for p in papers if p.get("doi")}
+    directions = []
+    for row in rows:
+        if not isinstance(row, dict) or not row.get("direction"):
+            continue
+        directions.append(
+            {
+                "direction": str(row["direction"])[:160],
+                "why": str(row.get("why", ""))[:2000],
+                "first_step": str(row.get("first_step", ""))[:800],
+                "papers": _validated_dois(row.get("papers"), known),
+            }
+        )
+    return directions, usage, None
+
+
+def troubleshoot(question, papers, interests, key, model=None):
+    """Answer a problem in the researcher's own work from their saved papers."""
+    question = (question or "").strip()
+    if not question:
+        return None, {}, "no question was asked"
+    if not papers:
+        return None, {}, "there is nothing saved yet to answer from"
+
+    model = model or DEFAULT_TRENDS_MODEL
+    prompt = TROUBLESHOOT_TEMPLATE.format(
+        context=_context_line(interests),
+        question=question[:2000],
+        papers=_library_listing(papers),
+    )
+    try:
+        text, usage = call(
+            key, model, TROUBLESHOOT_SYSTEM, prompt, max_tokens=4000,
+            effort="medium", timeout=240,
+        )
+    except AIError as error:
+        return None, {}, str(error)
+
+    start, end = text.find("{"), text.rfind("}")
+    if start == -1 or end < start:
+        # Better to show prose we did not expect than to lose the answer.
+        return {"answer": text.strip(), "suggestions": [], "papers": [], "gap": ""}, usage, None
+    try:
+        parsed = json.loads(text[start : end + 1])
+    except json.JSONDecodeError:
+        return {"answer": text.strip(), "suggestions": [], "papers": [], "gap": ""}, usage, None
+
+    known = {p["doi"].lower() for p in papers if p.get("doi")}
+    return (
+        {
+            "answer": str(parsed.get("answer", ""))[:4000],
+            "suggestions": [str(s)[:400] for s in (parsed.get("suggestions") or [])][:6],
+            "papers": _validated_dois(parsed.get("papers"), known),
+            "gap": str(parsed.get("gap", ""))[:800],
+        },
+        usage,
+        None,
+    )

@@ -34,6 +34,8 @@ CREATE TABLE IF NOT EXISTS saved (
     score      REAL,
     note       TEXT DEFAULT '',
     tags       TEXT DEFAULT '',
+    status     TEXT DEFAULT 'unread',
+    ai_summary TEXT DEFAULT '',
     saved_at   TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS saved_by_date ON saved(saved_at DESC);
@@ -61,6 +63,9 @@ def keys_for(payload):
     return store.keys(_Identity(payload))
 
 
+STATUSES = ("unread", "reading", "read")
+
+
 def connect(path):
     directory = os.path.dirname(path)
     if directory:
@@ -68,7 +73,59 @@ def connect(path):
     connection = sqlite3.connect(path)
     connection.row_factory = sqlite3.Row
     connection.executescript(SCHEMA)
+
+    # Add columns introduced after a library was already created, so an
+    # existing library.db keeps working instead of erroring on a new field.
+    have = {row[1] for row in connection.execute("PRAGMA table_info(saved)")}
+    for column, ddl in (
+        ("status", "ALTER TABLE saved ADD COLUMN status TEXT DEFAULT 'unread'"),
+        ("ai_summary", "ALTER TABLE saved ADD COLUMN ai_summary TEXT DEFAULT ''"),
+    ):
+        if column not in have:
+            connection.execute(ddl)
     return connection
+
+
+def set_status(path, key, status):
+    """Mark a paper unread / reading / read."""
+    if status not in STATUSES:
+        return False
+    with connect(path) as connection:
+        cursor = connection.execute(
+            "UPDATE saved SET status = ? WHERE key = ?", (status, key)
+        )
+        return cursor.rowcount > 0
+
+
+def set_summary(path, key, summary):
+    """Cache an AI explanation so it is paid for once, not once per view."""
+    with connect(path) as connection:
+        cursor = connection.execute(
+            "UPDATE saved SET ai_summary = ? WHERE key = ?", (summary, key)
+        )
+        return cursor.rowcount > 0
+
+
+def get(path, key):
+    if not os.path.exists(path):
+        return None
+    with connect(path) as connection:
+        row = connection.execute(
+            "SELECT * FROM saved WHERE key = ?", (key,)
+        ).fetchone()
+    return _as_dict(row) if row else None
+
+
+def status_counts(path):
+    if not os.path.exists(path):
+        return {}
+    with connect(path) as connection:
+        return {
+            row["status"] or "unread": row["n"]
+            for row in connection.execute(
+                "SELECT status, COUNT(*) AS n FROM saved GROUP BY status"
+            )
+        }
 
 
 def save(path, payload):

@@ -593,7 +593,7 @@ def command_serve(args):
     try:
         httpd = server.serve(
             digest_path, cfg["library_path"], args.port,
-            config_path=cfg["config_path"],
+            config_path=cfg["config_path"], cfg=cfg,
         )
     except OSError as error:
         sys.stderr.write("Could not start the local server: %s\n" % error)

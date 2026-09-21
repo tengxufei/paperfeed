@@ -69,6 +69,33 @@ is uploaded.
 If port 8931 is busy it quietly steps to the next free one and tells you which
 it used. `--port` picks your own.
 
+## Working with what you saved
+
+`paperfeed serve` then **View library**. Every paper gets:
+
+- **unread / reading / read** — click to set. The filter pills at the top let
+  you pull up just what you have not read yet.
+- **remove** — drop it from the library.
+- **Explain this** — a short, concrete take on the paper: what they actually
+  did, why it matters, the limitation to probe first, and who should read the
+  full text. The answer is cached, so you pay for it once.
+
+Two library-wide tools sit above the list:
+
+- **Suggest research directions** — reads everything you have saved and
+  proposes 3–5 directions the collection points toward but does not close,
+  each with a concrete first step and the papers it came from. What you
+  choose to keep is a signal, and this reads that signal back to you.
+- **Stuck on something?** — describe a problem in your own work and get an
+  answer grounded in your saved papers. It is told to distinguish what the
+  papers actually support from its own reasoning, and to say plainly when
+  your saved papers do not bear on the question rather than stretching them.
+
+All three need an API key (`python3 paperfeed.py set-key`). Without one the
+library still works; the panel just says the tools are off. Every DOI these
+tools cite is checked against your actual library — a citation that cannot be
+traced to a paper you saved is dropped before you see it.
+
 ## Finding things again
 
 ```bash

@@ -19,6 +19,7 @@ import re
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import ai
 import digest as digest_module
 import library
 
@@ -26,7 +27,7 @@ BLOB = re.compile(
     r'<script type="application/json" class="pf-paper">(.*?)</script>', re.S
 )
 
-INJECTED_CSS = """
+INJECTED_CSS = r"""
 .pf-bar {
   position: sticky; top: 0; z-index: 10; margin: -24px -16px 20px;
   padding: 10px 16px; background: #11467f; color: #fff; font-size: 13px;
@@ -49,13 +50,13 @@ INJECTED_CSS = """
 }
 """
 
-INJECTED_JS = """
+INJECTED_JS = r"""
 (function () {
   var state = JSON.parse(document.getElementById('pf-state').textContent);
   var cards = document.querySelectorAll('.paper');
 
   function paint(button, saved) {
-    button.textContent = saved ? '\\u2713 Saved' : '+ Save';
+    button.textContent = saved ? '✓ Saved' : '+ Save';
     button.className = saved ? 'pf-save on' : 'pf-save';
   }
 
@@ -193,43 +194,277 @@ def build_page(page, db_path, config_path=""):
     return page + injection
 
 
-def library_page(db_path):
-    rows = library.all_saved(db_path)
+LIBRARY_CSS = r"""
+.tools { background:#fff; border:1px solid #e2e4e8; border-radius:8px;
+         padding:14px 16px; margin-bottom:14px; }
+.tools h3 { margin:0 0 8px; font-size:14px; text-transform:uppercase;
+            letter-spacing:.05em; color:#55606d; }
+.tools p.hint { font-size:12.5px; color:#77818d; margin:0 0 10px; }
+button.act { font:inherit; font-size:13px; cursor:pointer; padding:6px 13px;
+             border-radius:6px; border:1px solid #c3c8cf; background:#f4f5f7;
+             color:#33507a; }
+button.act:hover { background:#e8edf4; }
+button.act[disabled] { opacity:.5; cursor:default; }
+button.act.primary { background:#11467f; border-color:#11467f; color:#fff; }
+button.act.primary:hover { background:#0e3a6a; }
+textarea.ask { width:100%; min-height:70px; font:inherit; font-size:13.5px;
+               padding:9px 11px; border:1px solid #ccd2da; border-radius:6px;
+               resize:vertical; background:#fff; color:inherit; }
+.pills { margin:0 0 16px; }
+.pill { display:inline-block; font-size:12.5px; padding:4px 11px; margin-right:6px;
+        border-radius:12px; background:#eceff3; color:#55606d; cursor:pointer;
+        border:1px solid transparent; }
+.pill.on { background:#11467f; color:#fff; }
+.statusrow { margin-top:9px; display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+.sbtn { font:inherit; font-size:12px; cursor:pointer; padding:3px 10px;
+        border-radius:11px; border:1px solid #ccd2da; background:#fff; color:#6a727c; }
+.sbtn.on { background:#d9ead3; border-color:#a9cb99; color:#2c5d1e; font-weight:600; }
+.sbtn.rm { margin-left:auto; color:#9a5a45; border-color:#e0cec8; }
+.out { margin-top:10px; font-size:13.5px; line-height:1.6; white-space:pre-wrap;
+       background:#f7f8fa; border-left:3px solid #b9c2cd; padding:10px 12px;
+       border-radius:0 6px 6px 0; }
+.out.busy { color:#77818d; font-style:italic; white-space:normal; }
+.dircard { background:#f7f8fa; border-left:3px solid #6f86a8; padding:11px 13px;
+           margin:0 0 10px; border-radius:0 6px 6px 0; }
+.dircard h4 { margin:0 0 6px; font-size:14.5px; color:#11467f; }
+.dircard .step { margin-top:7px; font-size:13px; color:#3c5a33; }
+.dircard .refs { margin-top:7px; font-size:12px; }
+@media (prefers-color-scheme: dark) {
+  .tools { background:#1f2228; border-color:#33373d; }
+  button.act { background:#282c33; border-color:#3c424a; color:#9dbbe4; }
+  button.act.primary { background:#2c5b96; border-color:#2c5b96; color:#fff; }
+  textarea.ask { background:#16181c; border-color:#3c424a; color:#e6e6e6; }
+  .pill { background:#282c33; color:#9aa1aa; }
+  .pill.on { background:#2c5b96; color:#fff; }
+  .sbtn { background:#1f2228; border-color:#3c424a; color:#9aa1aa; }
+  .sbtn.on { background:#26381f; border-color:#3f5c33; color:#a6cf92; }
+  .out, .dircard { background:#22262c; }
+}
+"""
+
+LIBRARY_JS = r"""
+function post(url, body) {
+  return fetch(url, {method:'POST', headers:{'Content-Type':'application/json'},
+                     body: JSON.stringify(body || {})}).then(function (r) { return r.json(); });
+}
+function esc(s) {
+  var d = document.createElement('div'); d.textContent = s == null ? '' : s;
+  return d.innerHTML;
+}
+function busy(el, message) { el.className = 'out busy'; el.textContent = message; }
+
+document.querySelectorAll('.sbtn[data-status]').forEach(function (b) {
+  b.addEventListener('click', function () {
+    var card = b.closest('.paper');
+    post('/api/status', {key: card.dataset.key, status: b.dataset.status})
+      .then(function (d) {
+        if (!d.ok) { return; }
+        card.querySelectorAll('.sbtn[data-status]').forEach(function (o) {
+          o.classList.toggle('on', o.dataset.status === b.dataset.status);
+        });
+        card.dataset.status = b.dataset.status;
+        applyFilter();
+      });
+  });
+});
+
+document.querySelectorAll('.sbtn.rm').forEach(function (b) {
+  b.addEventListener('click', function () {
+    var card = b.closest('.paper');
+    post('/api/unsave', {key: card.dataset.key}).then(function (d) {
+      if (d.ok) { card.remove(); }
+    });
+  });
+});
+
+document.querySelectorAll('button.explain').forEach(function (b) {
+  b.addEventListener('click', function () {
+    var card = b.closest('.paper');
+    var out = card.querySelector('.out');
+    b.disabled = true;
+    busy(out, 'Reading the paper...');
+    post('/api/explain', {key: card.dataset.key}).then(function (d) {
+      b.disabled = false;
+      if (d.ok) { out.className = 'out'; out.textContent = d.summary;
+                  b.textContent = 'Explain again'; }
+      else { out.className = 'out'; out.textContent = 'Could not explain: ' + d.error; }
+    }).catch(function () { b.disabled = false; busy(out, 'The server went away.'); });
+  });
+});
+
+var dirBtn = document.getElementById('dir-btn');
+if (dirBtn) {
+  dirBtn.addEventListener('click', function () {
+    var out = document.getElementById('dir-out');
+    dirBtn.disabled = true;
+    busy(out, 'Reading your whole library and looking for openings. This takes a minute.');
+    post('/api/directions', {}).then(function (d) {
+      dirBtn.disabled = false;
+      if (!d.ok) { out.className = 'out'; out.textContent = 'Could not do that: ' + d.error; return; }
+      out.className = '';
+      out.innerHTML = d.directions.map(function (x) {
+        return '<div class="dircard"><h4>' + esc(x.direction) + '</h4>' +
+               '<div>' + esc(x.why) + '</div>' +
+               (x.first_step ? '<div class="step"><b>Start with:</b> ' + esc(x.first_step) + '</div>' : '') +
+               (x.papers.length ? '<div class="refs">from: ' + x.papers.map(function (doi) {
+                   return '<a href="https://doi.org/' + esc(doi) + '">' + esc(doi) + '</a>';
+                 }).join(' &middot; ') + '</div>' : '') + '</div>';
+      }).join('');
+    }).catch(function () { dirBtn.disabled = false; busy(out, 'The server went away.'); });
+  });
+}
+
+var askBtn = document.getElementById('ask-btn');
+if (askBtn) {
+  askBtn.addEventListener('click', function () {
+    var q = document.getElementById('ask-text').value;
+    var out = document.getElementById('ask-out');
+    if (!q.trim()) { busy(out, 'Describe the problem first.'); return; }
+    askBtn.disabled = true;
+    busy(out, 'Thinking about your problem against what you have saved...');
+    post('/api/troubleshoot', {question: q}).then(function (d) {
+      askBtn.disabled = false;
+      if (!d.ok) { out.className = 'out'; out.textContent = 'Could not do that: ' + d.error; return; }
+      var a = d.result;
+      var html = esc(a.answer).replace(/\n/g, '<br>');
+      if (a.suggestions && a.suggestions.length) {
+        html += '<div style="margin-top:9px"><b>Things to try</b><ul>' +
+                a.suggestions.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') +
+                '</ul></div>';
+      }
+      if (a.papers && a.papers.length) {
+        html += '<div class="refs" style="margin-top:7px">drawing on: ' +
+                a.papers.map(function (doi) {
+                  return '<a href="https://doi.org/' + esc(doi) + '">' + esc(doi) + '</a>';
+                }).join(' &middot; ') + '</div>';
+      }
+      if (a.gap) { html += '<div style="margin-top:9px;color:#8a6420"><b>Your saved papers do not cover:</b> ' + esc(a.gap) + '</div>'; }
+      out.className = 'out'; out.innerHTML = html;
+    }).catch(function () { askBtn.disabled = false; busy(out, 'The server went away.'); });
+  });
+}
+
+var filter = 'all';
+function applyFilter() {
+  document.querySelectorAll('.paper').forEach(function (c) {
+    c.style.display = (filter === 'all' || c.dataset.status === filter) ? '' : 'none';
+  });
+}
+document.querySelectorAll('.pill').forEach(function (p) {
+  p.addEventListener('click', function () {
+    filter = p.dataset.filter;
+    document.querySelectorAll('.pill').forEach(function (o) { o.classList.toggle('on', o === p); });
+    applyFilter();
+  });
+});
+"""
+
+
+def library_page(db_path, has_key, ai_on):
+    rows = library.all_saved(db_path, limit=500)
+    counts = library.status_counts(db_path)
+    total = len(rows)
+
     cards = []
     for record in rows:
-        authors = ", ".join(record["authors"][:8])
+        status = record.get("status") or "unread"
+        authors = ", ".join(record["authors"][:6])
         tail = [
-            bit
-            for bit in (record["source"], record["venue"], record["published"])
-            if bit
+            bit for bit in (record["source"], record["venue"], record["published"]) if bit
         ]
+        buttons = "".join(
+            '<button class="sbtn%s" data-status="%s">%s</button>'
+            % (" on" if status == value else "", value, label)
+            for value, label in (
+                ("unread", "unread"), ("reading", "reading"), ("read", "read")
+            )
+        )
+        explain = (
+            '<button class="act explain">%s</button>'
+            % ("Explain again" if record.get("ai_summary") else "Explain this")
+            if has_key
+            else ""
+        )
         cards.append(
-            '<div class="paper"><div class="head">'
-            '<a class="title" href="%s">%s</a></div>'
+            '<div class="paper" data-key="%s" data-status="%s">'
+            '<div class="head"><a class="title" href="%s">%s</a></div>'
             '<p class="byline">%s</p><div class="tags">%s</div>'
-            "<div class=\"tags\">saved %s</div></div>"
+            '<div class="statusrow">%s%s<button class="sbtn rm">remove</button></div>'
+            '<div class="out"%s>%s</div>'
+            "</div>"
             % (
+                html.escape(record["key"]),
+                html.escape(status),
                 html.escape(record["url"] or ""),
                 html.escape(record["title"]),
                 html.escape(authors),
-                html.escape(" · ".join(tail)),
-                html.escape((record["saved_at"] or "")[:10]),
+                html.escape(" \u00b7 ".join(tail)),
+                buttons,
+                explain,
+                "" if record.get("ai_summary") else ' style="display:none"',
+                html.escape(record.get("ai_summary") or ""),
             )
         )
+
+    pills = "".join(
+        '<span class="pill%s" data-filter="%s">%s%s</span>'
+        % (
+            " on" if value == "all" else "",
+            value,
+            label,
+            "" if value == "all" else " (%d)" % counts.get(value, 0),
+        )
+        for value, label in (
+            ("all", "all %d" % total), ("unread", "unread"),
+            ("reading", "reading"), ("read", "read"),
+        )
+    )
+
+    if has_key and ai_on is not None:
+        tools = (
+            '<div class="tools"><h3>Where this collection points</h3>'
+            '<p class="hint">Reads everything you have saved and suggests '
+            "directions these papers open up but do not close.</p>"
+            '<button class="act primary" id="dir-btn">Suggest research directions</button>'
+            '<div id="dir-out"></div></div>'
+            '<div class="tools"><h3>Stuck on something?</h3>'
+            '<p class="hint">Describe a problem in your own work. Answered from '
+            "your saved papers, with what they do and do not cover.</p>"
+            '<textarea class="ask" id="ask-text" placeholder="e.g. My designed '
+            'binders express well but show no binding by BLI. What should I check '
+            'first?"></textarea>'
+            '<div style="margin-top:9px"><button class="act primary" id="ask-btn">Ask</button></div>'
+            '<div id="ask-out"></div></div>'
+        )
+    else:
+        tools = (
+            '<div class="tools"><h3>AI tools are off</h3>'
+            '<p class="hint">Run <code>python3 paperfeed.py set-key</code> to '
+            "enable explaining papers, suggesting research directions, and "
+            "answering questions against what you have saved.</p></div>"
+        )
+
+    body = (
+        cards
+        and "\n".join(cards)
+        or '<div class="empty">Nothing saved yet. Open the digest and click '
+        "<b>+ Save</b> on anything worth keeping.</div>"
+    )
+
     return "\n".join(
         [
-            "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">",
+            '<!doctype html><html lang="en"><head><meta charset="utf-8">',
             '<meta name="viewport" content="width=device-width, initial-scale=1">',
             "<title>PaperFeed &mdash; library</title>",
-            "<style>%s</style></head><body><div class=\"wrap\">"
-            % digest_module.STYLE,
+            "<style>%s%s</style></head><body><div class=\"wrap\">"
+            % (digest_module.STYLE, LIBRARY_CSS),
             "<h1>Your library</h1>",
-            '<p class="meta">%d saved paper%s &middot; <a href="/">back to the digest</a></p>'
-            % (len(rows), "" if len(rows) == 1 else "s"),
-            "\n".join(cards)
-            if cards
-            else '<div class="empty">Nothing saved yet. Open the digest and '
-            "click <b>+ Save</b> on anything worth keeping.</div>",
+            '<p class="meta">%d saved paper%s &middot; '
+            '<a href="/">back to the digest</a></p>' % (total, "" if total == 1 else "s"),
+            tools,
+            '<div class="pills">%s</div>' % pills,
+            body,
+            "<script>%s</script>" % LIBRARY_JS,
             "</div></body></html>",
         ]
     )
@@ -239,6 +474,7 @@ class Handler(BaseHTTPRequestHandler):
     digest_path = ""
     db_path = ""
     config_path = ""
+    cfg = None
     server_version = "PaperFeed"
 
     def log_message(self, fmt, *args):      # quieter than the default
@@ -255,9 +491,19 @@ class Handler(BaseHTTPRequestHandler):
     def _json(self, payload, status=200):
         self._send(json.dumps(payload), status, "application/json")
 
+    def _ai_key(self):
+        cfg = self.cfg or {}
+        return ai.read_key(cfg.get("base_dir", ""))
+
     def do_GET(self):
         if self.path.startswith("/library"):
-            self._send(library_page(self.db_path))
+            self._send(
+                library_page(
+                    self.db_path,
+                    bool(self._ai_key()),
+                    (self.cfg or {}).get("ai"),
+                )
+            )
             return
         if self.path not in ("/", "/index.html"):
             self._send("<h1>Not found</h1>", 404)
@@ -289,15 +535,82 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/unsave":
             removed = library.remove(self.db_path, body.get("key", ""))
             self._json({"ok": True, "removed": removed})
+        elif self.path == "/api/status":
+            done = library.set_status(
+                self.db_path, body.get("key", ""), body.get("status", "")
+            )
+            self._json({"ok": done})
+        elif self.path == "/api/explain":
+            self._explain(body)
+        elif self.path == "/api/directions":
+            self._directions()
+        elif self.path == "/api/troubleshoot":
+            self._troubleshoot(body)
         else:
             self._json({"ok": False, "error": "unknown endpoint"}, 404)
+
+    # -- the AI endpoints. Each fails soft: an error becomes a message on the
+    # -- page, never a broken library.
+    def _interests(self):
+        return ((self.cfg or {}).get("ai") or {}).get("interests", "")
+
+    def _explain(self, body):
+        record = library.get(self.db_path, body.get("key", ""))
+        if not record:
+            self._json({"ok": False, "error": "that paper is not in your library"})
+            return
+        key = self._ai_key()
+        if not key:
+            self._json({"ok": False, "error": "no API key stored - run set-key"})
+            return
+        summary, usage, error = ai.explain_paper(
+            record, self._interests(), key,
+            ((self.cfg or {}).get("ai") or {}).get("model"),
+        )
+        if error:
+            self._json({"ok": False, "error": error})
+            return
+        library.set_summary(self.db_path, record["key"], summary)
+        self._json({"ok": True, "summary": summary, "cost": ai.cost_of(usage)})
+
+    def _directions(self):
+        key = self._ai_key()
+        if not key:
+            self._json({"ok": False, "error": "no API key stored - run set-key"})
+            return
+        papers = library.all_saved(self.db_path, limit=200)
+        directions, usage, error = ai.research_directions(
+            papers, self._interests(), key,
+            ((self.cfg or {}).get("trends") or {}).get("model"),
+        )
+        if error:
+            self._json({"ok": False, "error": error})
+            return
+        self._json(
+            {"ok": True, "directions": directions, "cost": ai.cost_of(usage)}
+        )
+
+    def _troubleshoot(self, body):
+        key = self._ai_key()
+        if not key:
+            self._json({"ok": False, "error": "no API key stored - run set-key"})
+            return
+        papers = library.all_saved(self.db_path, limit=200)
+        result, usage, error = ai.troubleshoot(
+            body.get("question", ""), papers, self._interests(), key,
+            ((self.cfg or {}).get("trends") or {}).get("model"),
+        )
+        if error:
+            self._json({"ok": False, "error": error})
+            return
+        self._json({"ok": True, "result": result, "cost": ai.cost_of(usage)})
 
 
 PORT_IN_USE = (48, 98)    # macOS, Linux
 
 
 def serve(digest_path, db_path, port=8931, host="127.0.0.1", attempts=12,
-          config_path=""):
+          config_path="", cfg=None):
     """Start the server, stepping past ports another program already holds.
 
     Other tools squat on tidy round ports (8765 was taken on the machine this
@@ -306,6 +619,7 @@ def serve(digest_path, db_path, port=8931, host="127.0.0.1", attempts=12,
     Handler.digest_path = digest_path
     Handler.db_path = db_path
     Handler.config_path = config_path
+    Handler.cfg = cfg
     for candidate in range(port, port + attempts):
         try:
             return ThreadingHTTPServer((host, candidate), Handler)
