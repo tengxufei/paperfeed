@@ -47,7 +47,34 @@ routinely strip stylesheets and ignore media queries, so the email version
 writes its styling directly onto each element and skips the collapsible
 abstracts. It is built for a phone screen. The full version stays on your Mac.
 
-## The dashboard
+## A library that grows on its own
+
+```json
+"collect": { "enabled": true, "min_score": 6.0, "max_per_run": 25 }
+```
+
+With the collector on, every run saves the papers scoring at least
+`min_score` into your library automatically, up to `max_per_run`. Papers you
+clicked are marked **you**; these are marked **auto**, so you can always tell
+which is which, and either can be removed.
+
+This is what makes the analysis worth having: a library that only grows when
+you remember to click never accumulates enough history to show a trend.
+
+Use the score histogram on the dashboard to choose `min_score`. On a typical
+run here, 6.0 means "the paper matched in its title and on more than one
+term" — restrictive enough that the library stays worth reading.
+
+## The dashboards
+
+**No AI and no API key is involved in any of this.** Every number is
+arithmetic over papers already fetched, and every chart is SVG written by
+Python. It costs nothing and works offline.
+
+There is one dashboard per keyword set, plus an overall one, because
+following several fields means each needs its own baseline — a topic heating
+up is invisible in a combined count. Switch between them with the pills at
+the top.
 
 Rebuilt by every run, at `digests/dashboard.html` (or **Dashboard** in the
 top bar while `serve` is running):
@@ -133,12 +160,35 @@ Two library-wide tools sit above the list:
   papers actually support from its own reasoning, and to say plainly when
   your saved papers do not bear on the question rather than stretching them.
 
-All three need an Anthropic API key. You can paste it straight into the
-library page — the panel at the top has a field for it — or use
-`python3 paperfeed.py set-key` if you prefer the terminal. Either way it is
-checked against the API before being saved, stored in your macOS Keychain,
-and never written into this project. A link on the page removes it again.
-Without a key the library still works; the panel just offers to set one. Every DOI these
+These three need an API key. **The dashboards and everything else do not.**
+
+The key is read from an environment variable, exactly like the email
+password — never stored in a file here, never typed into a web page:
+
+```bash
+echo "export PAPERFEED_AI_KEY='your-api-key'" >> ~/.zshrc && source ~/.zshrc
+```
+
+### It does not have to be Anthropic
+
+```json
+"ai": { "provider": "openai", "base_url": "", "model": "gpt-4o-mini" }
+```
+
+- `"provider": "anthropic"` — the Claude API.
+- `"provider": "openai"` — OpenAI, and anything else speaking its
+  chat-completions API. Point `base_url` at the service:
+
+| Service | `base_url` |
+|---|---|
+| OpenAI | leave blank |
+| Groq | `https://api.groq.com/openai/v1` |
+| DeepSeek | `https://api.deepseek.com/v1` |
+| OpenRouter | `https://openrouter.ai/api/v1` |
+| Ollama (local, free) | `http://localhost:11434/v1` |
+
+Cost estimates only exist for models with a published price in the table;
+anything else simply reports cost as unknown rather than guessing. Every DOI these
 tools cite is checked against your actual library — a citation that cannot be
 traced to a paper you saved is dropped before you see it.
 

@@ -53,18 +53,28 @@
     "journals": []
   },
 
-  "_ai": "OPTIONAL and off by default. Scores each paper against 'interests' and writes one line on why it matters to you. Needs an Anthropic API key: run 'python3 paperfeed.py set-key' - the key goes in your macOS Keychain, never in this file. PaperFeed works completely without it; if the key is missing, wrong, or the network is down, it falls back to the local ranking and still writes the digest.",
+  "_collect": "The collector makes your library grow on its own. Every run, papers scoring at least min_score are saved automatically, up to max_per_run. Papers you click Save on are marked 'you'; these are marked 'auto', so you can always tell them apart. Turn it off and the library only grows when you click.",
+  "collect": {
+    "enabled": true,
+    "min_score": 6.0,
+    "max_per_run": 25
+  },
+
+  "_ai": "OPTIONAL and off by default. Everything else in PaperFeed - including every dashboard and chart - works with no key at all. The key is read from an environment variable, exactly like the email password: export PAPERFEED_AI_KEY='...' in your shell. It is never stored in this file and never typed into a web page.",
+  "_ai_provider": "'anthropic' for the Claude API, or 'openai' for OpenAI and anything that speaks its chat-completions API - Groq, DeepSeek, Together, OpenRouter, LM Studio, Ollama. For those, also set base_url, e.g. 'https://api.groq.com/openai/v1' or 'http://localhost:11434/v1' for a local model.",
   "ai": {
     "enabled": false,
-    "_interests": "Free text. The more specific, the better the triage. e.g. 'I design de novo protein binders; I care about experimental validation and hit rates, not new architectures for their own sake.'",
-    "interests": "",
+    "provider": "anthropic",
+    "base_url": "",
     "model": "claude-haiku-4-5",
-    "_max_papers_per_run": "Cost cap: only the top N papers after filtering get sent.",
+    "api_key_env": "PAPERFEED_AI_KEY",
+    "_interests": "Free text. The more specific, the better the triage.",
+    "interests": "",
     "max_papers_per_run": 40,
     "batch_size": 10
   },
 
-  "_trends": "OPTIONAL and off by default. Every interval_days it re-queries the last few months and writes digests/trends-YYYY-MM.html: the themes of the period with representative papers. Stores nothing extra - it re-fetches each time, which is what keeps it compatible with keeping only papers you chose. Your existing daily scheduler runs it; there is no second cron job.",
+  "_trends": "OPTIONAL. Every interval_days, re-queries the last few months and writes a themed briefing. Uses the same provider and key as 'ai', with its own model.",
   "trends": {
     "enabled": false,
     "months": 3,

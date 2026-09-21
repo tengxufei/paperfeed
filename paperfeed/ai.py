@@ -42,160 +42,197 @@ RETRYABLE = (429, 500, 502, 503, 529)
 MAX_ATTEMPTS = 3
 
 
+# PaperFeed talks to whichever model service you point it at. Two request
+# shapes cover almost everything: Anthropic's Messages API, and the OpenAI
+# chat-completions shape that OpenAI, Groq, DeepSeek, Together, OpenRouter,
+# LM Studio and Ollama all speak. Choose with ai.provider, and set
+# ai.base_url when your service lives somewhere else.
+PROVIDERS = {
+    "anthropic": {
+        "base_url": "https://api.anthropic.com",
+        "path": "/v1/messages",
+        "label": "Anthropic",
+        "example_models": ["claude-haiku-4-5", "claude-sonnet-5"],
+    },
+    "openai": {
+        "base_url": "https://api.openai.com/v1",
+        "path": "/chat/completions",
+        "label": "OpenAI-compatible",
+        "example_models": ["gpt-4o-mini", "llama-3.3-70b-versatile"],
+    },
+}
+
+ANTHROPIC_VERSION = "2023-06-01"
+
+# Prices per million tokens, used only for the estimate shown before you
+# switch anything on. A model that is not listed reports cost as unknown.
+PRICING = {
+    "claude-haiku-4-5": {"input": 1.00, "output": 5.00},
+    "claude-sonnet-5": {"input": 2.00, "output": 10.00},
+    "claude-opus-5": {"input": 5.00, "output": 25.00},
+    "gpt-4o-mini": {"input": 0.15, "output": 0.60},
+    "gpt-4o": {"input": 2.50, "output": 10.00},
+}
+
+DEFAULT_SCORING_MODEL = "claude-haiku-4-5"
+DEFAULT_TRENDS_MODEL = "claude-sonnet-5"
+DEFAULT_KEY_ENV = "PAPERFEED_AI_KEY"
+
+RETRYABLE = (429, 500, 502, 503, 529)
+MAX_ATTEMPTS = 3
+
+
 class AIError(Exception):
-    """Something went wrong talking to the API. Never fatal to a run."""
+    """Something went wrong talking to the service. Never fatal to a run."""
 
 
 class KeyRejected(AIError):
-    """The API said no to this key. Worth telling the user loudly."""
+    """The service said no to this key. Worth telling the user loudly."""
 
 
 # --------------------------------------------------------------------------
 # The key
 # --------------------------------------------------------------------------
 
-def _fallback_path(base_dir):
-    return os.path.join(base_dir, "state", "credentials.json")
+def key_env_name(ai_cfg):
+    return (ai_cfg or {}).get("api_key_env") or DEFAULT_KEY_ENV
 
 
-def read_key(base_dir=""):
-    """Find the key: environment first, then Keychain, then the fallback file."""
-    from_env = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    if from_env:
-        return from_env
+def read_key(ai_cfg=None):
+    """The API key, from the environment and nowhere else.
 
-    try:
-        result = subprocess.run(
-            [
-                "security", "find-generic-password",
-                "-a", KEYCHAIN_ACCOUNT, "-s", KEYCHAIN_SERVICE, "-w",
-            ],
-            capture_output=True, text=True, timeout=10,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            return result.stdout.strip()
-    except (OSError, subprocess.SubprocessError):
-        pass      # no Keychain (not a Mac, or locked) - try the file
-
-    path = _fallback_path(base_dir)
-    if os.path.exists(path):
-        try:
-            with open(path, "r", encoding="utf-8") as handle:
-                return (json.load(handle).get("anthropic_api_key") or "").strip()
-        except (OSError, json.JSONDecodeError):
-            return ""
-    return ""
-
-
-def store_key(key, base_dir=""):
-    """Put the key in the Keychain, or a 0600 file if that is unavailable.
-
-    Returns a short description of where it went.
+    The same arrangement as the SMTP password: PaperFeed never stores it,
+    never writes it into this project, and never asks for it in a web page.
+    You export it in your shell, and put it in the launchd plist if you want
+    scheduled runs to use it too.
     """
-    try:
-        result = subprocess.run(
-            [
-                "security", "add-generic-password",
-                "-a", KEYCHAIN_ACCOUNT, "-s", KEYCHAIN_SERVICE,
-                "-w", key, "-U",
-            ],
-            capture_output=True, text=True, timeout=15,
-        )
-        if result.returncode == 0:
-            return "macOS Keychain"
-    except (OSError, subprocess.SubprocessError):
-        pass
-
-    path = _fallback_path(base_dir)
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as handle:
-        json.dump({"anthropic_api_key": key}, handle)
-    os.chmod(path, 0o600)
-    return path
+    return os.environ.get(key_env_name(ai_cfg), "").strip()
 
 
-def forget_key(base_dir=""):
-    removed = []
-    try:
-        result = subprocess.run(
-            [
-                "security", "delete-generic-password",
-                "-a", KEYCHAIN_ACCOUNT, "-s", KEYCHAIN_SERVICE,
-            ],
-            capture_output=True, text=True, timeout=10,
-        )
-        if result.returncode == 0:
-            removed.append("Keychain")
-    except (OSError, subprocess.SubprocessError):
-        pass
-    path = _fallback_path(base_dir)
-    if os.path.exists(path):
-        os.remove(path)
-        removed.append(path)
-    return removed
-
+def settings_for(cfg, which="ai"):
+    """Provider settings from config plus the environment."""
+    ai_cfg = cfg.get("ai") or {}
+    model = ai_cfg.get("model") or DEFAULT_SCORING_MODEL
+    if which == "trends":
+        model = (cfg.get("trends") or {}).get("model") or model
+    return {
+        "provider": ai_cfg.get("provider") or "anthropic",
+        "base_url": ai_cfg.get("base_url") or "",
+        "model": model,
+        "api_key": read_key(ai_cfg),
+        "api_key_env": key_env_name(ai_cfg),
+    }
 
 # --------------------------------------------------------------------------
 # The API
 # --------------------------------------------------------------------------
 
-def call(key, model, system, user_text, max_tokens=2000, effort=None, timeout=120):
-    """One Messages API request. Returns (text, usage dict)."""
+def _endpoint(settings):
+    provider = settings.get("provider") or "anthropic"
+    spec = PROVIDERS.get(provider)
+    if not spec:
+        raise AIError(
+            "ai.provider is %r, which I do not know how to talk to. Use %s."
+            % (provider, " or ".join(sorted(PROVIDERS)))
+        )
+    base = (settings.get("base_url") or spec["base_url"]).rstrip("/")
+    return provider, base + spec["path"]
+
+
+def call(settings, system, user_text, max_tokens=2000, effort=None, timeout=120):
+    """One request to whichever service is configured. Returns (text, usage)."""
+    key = (settings or {}).get("api_key") or ""
     if not key:
         raise AIError("no API key available")
+    provider, url = _endpoint(settings)
+    model = settings.get("model") or DEFAULT_SCORING_MODEL
 
-    body = {
-        "model": model,
-        "max_tokens": max_tokens,
-        "system": system,
-        "messages": [{"role": "user", "content": user_text}],
-    }
-    if effort:
-        body["output_config"] = {"effort": effort}
-
-    headers = {
-        "content-type": "application/json",
-        "x-api-key": key,
-        "anthropic-version": API_VERSION,
-    }
+    if provider == "anthropic":
+        headers = {
+            "content-type": "application/json",
+            "x-api-key": key,
+            "anthropic-version": ANTHROPIC_VERSION,
+        }
+        body = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "system": system,
+            "messages": [{"role": "user", "content": user_text}],
+        }
+        if effort:
+            body["output_config"] = {"effort": effort}
+    else:
+        headers = {
+            "content-type": "application/json",
+            "authorization": "Bearer %s" % key,
+        }
+        body = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user_text},
+            ],
+        }
 
     last = None
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
-            response = requests.post(
-                API_URL, headers=headers, json=body, timeout=timeout
-            )
+            response = requests.post(url, headers=headers, json=body, timeout=timeout)
         except requests.RequestException as error:
-            last = "could not reach the API (%s)" % type(error).__name__
+            last = "could not reach %s (%s)" % (url, type(error).__name__)
             if attempt < MAX_ATTEMPTS:
                 time.sleep(2 ** attempt)
             continue
 
-        if response.status_code == 401:
+        if response.status_code in (401, 403):
             raise KeyRejected(
-                "the API rejected your key (401). Run "
-                "'python3 paperfeed.py set-key' to enter a new one."
+                "%s rejected the key in $%s (HTTP %d). Check the key, and that "
+                "it belongs to the service named in ai.provider."
+                % (
+                    PROVIDERS[provider]["label"],
+                    settings.get("api_key_env", DEFAULT_KEY_ENV),
+                    response.status_code,
+                )
+            )
+        if response.status_code == 404:
+            raise AIError(
+                "%s returned 404 for %s - check ai.model (%r) and ai.base_url."
+                % (PROVIDERS[provider]["label"], url, model)
             )
         if response.status_code == 400:
-            raise AIError("the API rejected the request (400): %s" % response.text[:200])
+            raise AIError(
+                "the service rejected the request (400): %s" % response.text[:200]
+            )
         if response.status_code in RETRYABLE:
-            last = "the API was busy (HTTP %d)" % response.status_code
+            last = "the service was busy (HTTP %d)" % response.status_code
             if attempt < MAX_ATTEMPTS:
                 time.sleep(2 ** attempt)
             continue
         if response.status_code != 200:
-            raise AIError("unexpected HTTP %d: %s" % (response.status_code, response.text[:200]))
+            raise AIError(
+                "unexpected HTTP %d: %s" % (response.status_code, response.text[:200])
+            )
 
         payload = response.json()
-        text = "".join(
-            block.get("text", "")
-            for block in payload.get("content", [])
-            if block.get("type") == "text"
-        )
-        usage = payload.get("usage", {}) or {}
+        if provider == "anthropic":
+            text = "".join(
+                block.get("text", "")
+                for block in payload.get("content", [])
+                if block.get("type") == "text"
+            )
+            usage = payload.get("usage", {}) or {}
+            tokens_in = usage.get("input_tokens", 0)
+            tokens_out = usage.get("output_tokens", 0)
+        else:
+            choices = payload.get("choices") or [{}]
+            text = ((choices[0].get("message") or {}).get("content")) or ""
+            usage = payload.get("usage", {}) or {}
+            tokens_in = usage.get("prompt_tokens", 0)
+            tokens_out = usage.get("completion_tokens", 0)
         return text, {
-            "input_tokens": usage.get("input_tokens", 0),
-            "output_tokens": usage.get("output_tokens", 0),
+            "input_tokens": tokens_in,
+            "output_tokens": tokens_out,
             "model": model,
         }
 
@@ -203,7 +240,7 @@ def call(key, model, system, user_text, max_tokens=2000, effort=None, timeout=12
 
 
 def cost_of(usage):
-    """Dollars for one call's usage, or None for a model we have no price for."""
+    """Dollars for one call, or None when the model has no published price here."""
     price = PRICING.get(usage.get("model", ""))
     if not price:
         return None
@@ -235,6 +272,7 @@ def estimate_costs(cfg):
     batches = max(1, -(-papers // batch_size))
     scoring = {
         "model": ai_cfg.get("model") or DEFAULT_SCORING_MODEL,
+        "provider": ai_cfg.get("provider") or "anthropic",
         "input_tokens": papers * TOKENS_PER_PAPER_IN + batches * TOKENS_PER_BATCH_OVERHEAD,
         "output_tokens": papers * TOKENS_PER_PAPER_OUT,
     }
@@ -313,7 +351,7 @@ def _paper_block(index, paper, abstract_chars=900):
     )
 
 
-def score_papers(papers, ai_cfg, key, log=None):
+def score_papers(papers, ai_cfg, settings, log=None):
     """Attach paper.ai_score and paper.ai_reason where possible.
 
     Returns (how_many_scored, total_usage, error_message_or_None). Never
@@ -323,7 +361,7 @@ def score_papers(papers, ai_cfg, key, log=None):
     if not interests:
         return 0, {}, "ai.interests is empty, so there is nothing to score against"
 
-    model = ai_cfg.get("model") or DEFAULT_SCORING_MODEL
+    model = settings.get("model") or DEFAULT_SCORING_MODEL
     limit = int(ai_cfg.get("max_papers_per_run") or 40)
     batch_size = max(1, int(ai_cfg.get("batch_size") or 10))
     candidates = papers[:limit]
@@ -343,7 +381,7 @@ def score_papers(papers, ai_cfg, key, log=None):
 
         try:
             text, usage = call(
-                key, model, SCORING_SYSTEM, prompt, max_tokens=180 * len(batch) + 200
+                settings, SCORING_SYSTEM, prompt, max_tokens=180 * len(batch) + 200
             )
         except KeyRejected:
             raise
@@ -416,12 +454,12 @@ Reply with ONLY a JSON array, no other text:
 "cooling": "<optional, may be omitted>"}}]"""
 
 
-def trend_report(papers, trends_cfg, interests, key, log=None):
+def trend_report(papers, trends_cfg, interests, settings, log=None):
     """Returns (themes list, usage, error_message_or_None)."""
     if not papers:
         return [], {}, "no papers found in that window"
 
-    model = trends_cfg.get("model") or DEFAULT_TRENDS_MODEL
+    model = settings.get("model") or DEFAULT_TRENDS_MODEL
     limit = int(trends_cfg.get("max_papers") or 300)
     months = int(trends_cfg.get("months") or 3)
     selection = papers[:limit]
@@ -445,7 +483,7 @@ def trend_report(papers, trends_cfg, interests, key, log=None):
 
     try:
         text, usage = call(
-            key, model, TRENDS_SYSTEM, prompt, max_tokens=8000, effort="medium",
+            settings, TRENDS_SYSTEM, prompt, max_tokens=8000, effort="medium",
             timeout=300,
         )
     except AIError as error:
@@ -582,9 +620,8 @@ def _library_listing(papers, abstract_chars=400, limit=80):
     return "\n".join(lines)
 
 
-def explain_paper(record, interests, key, model=None):
+def explain_paper(record, interests, settings):
     """A short, concrete explanation of one saved paper."""
-    model = model or DEFAULT_SCORING_MODEL
     prompt = EXPLAIN_TEMPLATE.format(
         context=_context_line(interests),
         title=record.get("title", ""),
@@ -593,7 +630,7 @@ def explain_paper(record, interests, key, model=None):
         or "(no abstract available - say so rather than guessing)",
     )
     try:
-        text, usage = call(key, model, EXPLAIN_SYSTEM, prompt, max_tokens=700)
+        text, usage = call(settings, EXPLAIN_SYSTEM, prompt, max_tokens=700)
     except AIError as error:
         return "", {}, str(error)
     return text.strip(), usage, None
@@ -608,17 +645,16 @@ def _validated_dois(raw_list, known):
     return out
 
 
-def research_directions(papers, interests, key, model=None):
+def research_directions(papers, interests, settings):
     """Where this collection points that the papers have not gone."""
     if not papers:
         return [], {}, "there is nothing saved yet"
-    model = model or DEFAULT_TRENDS_MODEL
     prompt = DIRECTIONS_TEMPLATE.format(
         context=_context_line(interests), papers=_library_listing(papers)
     )
     try:
         text, usage = call(
-            key, model, DIRECTIONS_SYSTEM, prompt, max_tokens=4000,
+            settings, DIRECTIONS_SYSTEM, prompt, max_tokens=4000,
             effort="medium", timeout=240,
         )
     except AIError as error:
@@ -645,7 +681,7 @@ def research_directions(papers, interests, key, model=None):
     return directions, usage, None
 
 
-def troubleshoot(question, papers, interests, key, model=None):
+def troubleshoot(question, papers, interests, settings):
     """Answer a problem in the researcher's own work from their saved papers."""
     question = (question or "").strip()
     if not question:
@@ -653,7 +689,6 @@ def troubleshoot(question, papers, interests, key, model=None):
     if not papers:
         return None, {}, "there is nothing saved yet to answer from"
 
-    model = model or DEFAULT_TRENDS_MODEL
     prompt = TROUBLESHOOT_TEMPLATE.format(
         context=_context_line(interests),
         question=question[:2000],
@@ -661,7 +696,7 @@ def troubleshoot(question, papers, interests, key, model=None):
     )
     try:
         text, usage = call(
-            key, model, TROUBLESHOOT_SYSTEM, prompt, max_tokens=4000,
+            settings, TROUBLESHOOT_SYSTEM, prompt, max_tokens=4000,
             effort="medium", timeout=240,
         )
     except AIError as error:

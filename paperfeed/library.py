@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS saved (
     note       TEXT DEFAULT '',
     tags       TEXT DEFAULT '',
     status     TEXT DEFAULT 'unread',
+    origin     TEXT DEFAULT 'you',
     ai_summary TEXT DEFAULT '',
     saved_at   TEXT NOT NULL
 );
@@ -80,6 +81,7 @@ def connect(path):
     for column, ddl in (
         ("status", "ALTER TABLE saved ADD COLUMN status TEXT DEFAULT 'unread'"),
         ("ai_summary", "ALTER TABLE saved ADD COLUMN ai_summary TEXT DEFAULT ''"),
+        ("origin", "ALTER TABLE saved ADD COLUMN origin TEXT DEFAULT 'you'"),
     ):
         if column not in have:
             connection.execute(ddl)
@@ -128,8 +130,12 @@ def status_counts(path):
         }
 
 
-def save(path, payload):
-    """Add a paper. Returns (key, was_already_there)."""
+def save(path, payload, origin="you"):
+    """Add a paper. Returns (key, was_already_there).
+
+    origin is "you" for a click and "auto" for the collector, so the library
+    can show which papers you chose and which arrived by themselves.
+    """
     every_key = keys_for(payload)
     key = every_key[0]
     alt_key = every_key[1] if len(every_key) > 1 else ""
@@ -144,8 +150,8 @@ def save(path, payload):
             return existing["key"], True
         connection.execute(
             "INSERT INTO saved (key, alt_key, doi, title, authors, abstract, venue, "
-            "published, source, url, set_name, score, saved_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "published, source, url, set_name, score, origin, saved_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 key,
                 alt_key,
@@ -159,6 +165,7 @@ def save(path, payload):
                 payload.get("url", ""),
                 payload.get("set_name", ""),
                 float(payload.get("score") or 0),
+                origin,
                 datetime.now(timezone.utc).isoformat(timespec="seconds"),
             ),
         )
@@ -190,10 +197,10 @@ def count(path):
         return connection.execute("SELECT COUNT(*) AS n FROM saved").fetchone()["n"]
 
 
-def summary(path):
+def summary(path, set_name=None):
     """Counts for the dashboard: how many, what state, from which topic."""
     if not os.path.exists(path):
-        return {"total": 0, "status": {}, "by_set": []}
+        return {"total": 0, "status": {}, "by_set": [], "origins": {}, "over_time": []}
     with connect(path) as connection:
         total = connection.execute("SELECT COUNT(*) AS n FROM saved").fetchone()["n"]
         status = {
@@ -209,7 +216,26 @@ def summary(path):
                 "GROUP BY set_name ORDER BY n DESC"
             )
         ]
-    return {"total": total, "status": status, "by_set": by_set}
+        origins = {
+            row["origin"] or "you": row["n"]
+            for row in connection.execute(
+                "SELECT origin, COUNT(*) AS n FROM saved GROUP BY origin"
+            )
+        }
+        over_time = [
+            (row["day"], row["n"])
+            for row in connection.execute(
+                "SELECT substr(saved_at,1,10) AS day, COUNT(*) AS n FROM saved "
+                "GROUP BY day ORDER BY day"
+            )
+        ]
+    return {
+        "total": total,
+        "status": status,
+        "by_set": by_set,
+        "origins": origins,
+        "over_time": over_time,
+    }
 
 
 def _as_dict(row):

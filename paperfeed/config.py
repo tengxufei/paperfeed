@@ -24,10 +24,18 @@ DEFAULTS = {
     "mute": {"terms": [], "journals": []},
     "ai": {
         "enabled": False,
-        "interests": "",
+        "provider": "anthropic",
+        "base_url": "",
         "model": "claude-haiku-4-5",
+        "api_key_env": "PAPERFEED_AI_KEY",
+        "interests": "",
         "max_papers_per_run": 40,
         "batch_size": 10,
+    },
+    "collect": {
+        "enabled": False,
+        "min_score": 6.0,
+        "max_per_run": 25,
     },
     "trends": {
         "enabled": False,
@@ -249,6 +257,14 @@ def _validate_block(raw, defaults, label):
                 raise ConfigError(
                     "%s.%s must be true or false, but found: %r" % (label, key, value)
                 )
+        elif isinstance(default, float):
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ConfigError(
+                    "%s.%s must be a number, but found: %r" % (label, key, value)
+                )
+            if value < 0:
+                raise ConfigError("%s.%s cannot be negative." % (label, key))
+            block[key] = float(value)
         elif isinstance(default, int):
             if isinstance(value, bool) or not isinstance(value, int):
                 raise ConfigError(
@@ -426,6 +442,14 @@ def load(config_path):
         )
 
     cfg["ai"] = _validate_block(raw.get("ai"), DEFAULTS["ai"], "ai")
+    if cfg["ai"]["provider"] not in ("anthropic", "openai"):
+        raise ConfigError(
+            "ai.provider is %r. Use \"anthropic\", or \"openai\" for OpenAI and "
+            "anything that speaks its chat-completions API (Groq, DeepSeek, "
+            "Together, OpenRouter, Ollama - set ai.base_url for those)."
+            % cfg["ai"]["provider"]
+        )
+    cfg["collect"] = _validate_block(raw.get("collect"), DEFAULTS["collect"], "collect")
     cfg["trends"] = _validate_block(raw.get("trends"), DEFAULTS["trends"], "trends")
     if cfg["ai"]["enabled"] and not (cfg["ai"].get("interests") or "").strip():
         raise ConfigError(

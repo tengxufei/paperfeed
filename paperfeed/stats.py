@@ -117,14 +117,32 @@ def _load(path):
         return []
 
 
-def record(path, subjects, total):
-    """Append this run's subject counts. Returns the full history."""
+ALL = "__all__"
+
+
+def record(path, buckets, totals):
+    """Append this run's subject counts, per keyword set and overall.
+
+    buckets: {bucket_name: Counter}, including ALL for the whole run.
+    totals:  {bucket_name: int}
+
+    Stored per set because a researcher following several fields needs to
+    know that one of them is heating up, which an overall count hides.
+    """
     history = _load(path)
     history.append(
         {
             "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            "total": total,
-            "subjects": {name: int(count) for name, count in subjects.most_common(120)},
+            "total": totals.get(ALL, 0),
+            "sets": {
+                name: {
+                    "total": totals.get(name, 0),
+                    "subjects": {
+                        term: int(count) for term, count in counter.most_common(80)
+                    },
+                }
+                for name, counter in buckets.items()
+            },
         }
     )
     history = history[-MAX_RUNS_KEPT:]
@@ -138,7 +156,16 @@ def record(path, subjects, total):
     return history
 
 
-def alerts(history, current, limit=8):
+def _bucket_subjects(entry, bucket):
+    """Read one bucket out of a history entry, tolerating the older shape."""
+    sets = entry.get("sets")
+    if isinstance(sets, dict):
+        return (sets.get(bucket) or {}).get("subjects") or {}
+    # entries written before per-set history existed only had an overall count
+    return entry.get("subjects") or {} if bucket == ALL else {}
+
+
+def alerts(history, current, limit=8, bucket=ALL):
     """Classify subjects against their own past.
 
     Returns [(subject, now, verdict, detail)] where verdict is one of
@@ -153,9 +180,11 @@ def alerts(history, current, limit=8):
     seen_before = Counter()
     appearances = Counter()
     for entry in past:
-        for name, count in (entry.get("subjects") or {}).items():
+        for name, count in _bucket_subjects(entry, bucket).items():
             seen_before[name] += count
             appearances[name] += 1
+    if not appearances:
+        return []
 
     out = []
     for name, now in current.most_common(60):

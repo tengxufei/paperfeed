@@ -84,5 +84,10 @@
     "model": "claude-sonnet-5",
     "interval_days": 30,
     "email": false
+  },
+  "collect": {
+    "enabled": true,
+    "min_score": 6.0,
+    "max_per_run": 25
   }
 }

@@ -101,34 +101,105 @@ def update_index(cfg, record):
         handle.write(digest_module.render_index(records))
 
 
+def collect_papers(cfg, papers):
+    """Auto-save the strongest papers from this run.
+
+    The library used to grow only when you clicked Save. With the collector
+    on it also accumulates by itself, which is what makes the dashboard's
+    history worth analysing. Each row records whether it arrived by a click
+    or by the collector, so you can always tell them apart.
+    """
+    settings = cfg["collect"]
+    if not settings["enabled"] or not papers:
+        return 0
+
+    threshold = settings["min_score"]
+    candidates = [paper for paper in papers if paper.score >= threshold]
+    candidates = relevance.rank_with_ai(candidates)[: settings["max_per_run"]]
+
+    added = 0
+    for paper in candidates:
+        try:
+            _, already = library.save(
+                cfg["library_path"], digest_module.paper_payload(paper), origin="auto"
+            )
+            added += not already
+        except Exception as error:        # a full disk must not lose the digest
+            log.error("Could not auto-save %r: %s", paper.title[:50], error)
+            break
+    if added:
+        log.info(
+            "Collector kept %s scoring %.1f or more (library now %s)",
+            phrasing.count(added, "paper"),
+            threshold,
+            phrasing.count(library.count(cfg["library_path"]), "paper"),
+        )
+    return added
+
+
 def build_dashboard(cfg, papers, keyword_sets, hidden_count, meta):
-    """Rebuild digests/dashboard.html from this run. Never fatal."""
+    """Rebuild the dashboards: one overall, one per keyword set.
+
+    A researcher following several fields needs each one on its own terms -
+    a topic heating up is invisible in a combined count.
+    """
     try:
-        run = stats_module.run_stats(papers, keyword_sets)
+        names = [entry["name"] for entry in keyword_sets]
+        by_set = {name: [p for p in papers if p.set_name == name] for name in names}
+
+        overall = stats_module.run_stats(papers, keyword_sets)
+        per_set = {name: stats_module.run_stats(by_set[name], keyword_sets)
+                   for name in names}
+
         history = stats_module.record(
             os.path.join(cfg["base_dir"], "state", "topics.json"),
-            run["subjects"],
-            run["total"],
+            dict(
+                [(stats_module.ALL, overall["subjects"])]
+                + [(name, per_set[name]["subjects"]) for name in names]
+            ),
+            dict(
+                [(stats_module.ALL, overall["total"])]
+                + [(name, per_set[name]["total"]) for name in names]
+            ),
         )
-        alerts = stats_module.alerts(history, run["subjects"])
-        page = dashboard_module.render(
-            run,
-            dashboard_module._history(cfg["digest_dir"]),
-            alerts,
-            library.summary(cfg["library_path"]),
-            {"date_label": meta["date_label"], "hidden": hidden_count},
-        )
-        path = os.path.join(cfg["digest_dir"], "dashboard.html")
-        with open(path, "w", encoding="utf-8") as handle:
-            handle.write(page)
-        log.info("Dashboard written: %s", path)
-        if alerts:
-            for name, now, verdict, _ in alerts[:4]:
-                log.info("  %-7s %s (%d this run)", verdict, name, now)
-        return path
+        index_rows = dashboard_module._history(cfg["digest_dir"])
+        summary = library.summary(cfg["library_path"])
+
+        pages = [(None, overall, "dashboard.html")]
+        for name in names:
+            pages.append((name, per_set[name], dashboard_module.slug(name)))
+
+        written = 0
+        for scope, run, filename in pages:
+            alerts = stats_module.alerts(
+                history, run["subjects"],
+                bucket=scope if scope else stats_module.ALL,
+            )
+            page = dashboard_module.render(
+                run,
+                index_rows,
+                alerts,
+                summary,
+                {
+                    "date_label": meta["date_label"],
+                    "hidden": hidden_count if scope is None else 0,
+                    "scope": scope,
+                    "sets_order": names,
+                },
+            )
+            with open(os.path.join(cfg["digest_dir"], filename), "w",
+                      encoding="utf-8") as handle:
+                handle.write(page)
+            written += 1
+            if scope and alerts:
+                for name_, now, verdict, _ in alerts[:2]:
+                    log.info("  %-7s %s in %r (%d this run)", verdict, name_, scope, now)
+
+        log.info("Dashboards written: %d (one overall, one per keyword set)", written)
+        return written
     except Exception as error:          # a chart must never cost you a digest
-        log.error("Dashboard could not be built: %s", error)
-        return None
+        log.error("Dashboards could not be built: %s", error)
+        return 0
 
 
 def command_dashboard(args):
@@ -237,16 +308,16 @@ def command_run(args):
     ai_note = None
     used_ai = False
     if cfg["ai"]["enabled"] and new_papers and not args.dry_run:
-        key = ai.read_key(cfg["base_dir"])
-        if not key:
+        settings = ai.settings_for(cfg)
+        if not settings["api_key"]:
             ai_note = (
-                "AI scoring is switched on but no API key is stored. "
-                "Run 'python3 paperfeed.py set-key'. Ranked locally instead."
+                "AI scoring is on but $%s is not set in this environment, so "
+                "papers were ranked locally instead." % settings["api_key_env"]
             )
         else:
             try:
                 scored, usage, problem = ai.score_papers(
-                    new_papers, cfg["ai"], key, log
+                    new_papers, cfg["ai"], settings, log
                 )
                 used_ai = scored > 0
                 if scored:
@@ -350,6 +421,7 @@ def command_run(args):
     )
     store.save(record_run=True)
 
+    collect_papers(cfg, new_papers)
     build_dashboard(cfg, new_papers, keyword_sets, len(hidden), meta)
 
     update_index(
@@ -461,13 +533,24 @@ def command_check(args):
     else:
         print("  email: disabled")
 
-    has_key = bool(ai.read_key(cfg["base_dir"]))
+    settings = ai.settings_for(cfg)
     print(
-        "  AI scoring: %s | trend report: %s | API key stored: %s"
+        "  AI: %s via %s (%s), key in $%s: %s"
         % (
             "on" if cfg["ai"]["enabled"] else "off",
-            "on" if cfg["trends"]["enabled"] else "off",
-            "yes" if has_key else "no",
+            cfg["ai"]["provider"],
+            cfg["ai"]["base_url"] or "default endpoint",
+            settings["api_key_env"],
+            "found" if settings["api_key"] else "NOT set",
+        )
+    )
+    print(
+        "  collector: %s"
+        % (
+            "on, saving papers scoring %.1f or more (max %d a run)"
+            % (cfg["collect"]["min_score"], cfg["collect"]["max_per_run"])
+            if cfg["collect"]["enabled"]
+            else "off - the library only grows when you click Save"
         )
     )
 
@@ -789,146 +872,6 @@ def command_search(args):
     return 0
 
 
-def command_set_key(args):
-    cfg = load_config_or_exit(args.config)
-
-    if args.forget:
-        removed = ai.forget_key(cfg["base_dir"])
-        print("Removed the stored key from: %s" % (", ".join(removed) or "nowhere"))
-        return 0
-
-    print("Paste your Anthropic API key. It will not be shown as you type.")
-    print("Get one at https://console.anthropic.com/settings/keys")
-    try:
-        key = getpass.getpass("API key: ").strip()
-    except (EOFError, KeyboardInterrupt):
-        print("\nCancelled.")
-        return 1
-    if not key:
-        sys.stderr.write("Nothing entered, nothing stored.\n")
-        return 1
-
-    # Check it before storing it, so a bad key fails here in front of you
-    # rather than silently at 08:00 in three days' time.
-    print("Checking the key with a small test request ...")
-    try:
-        _, usage = ai.call(
-            key,
-            cfg["ai"].get("model") or ai.DEFAULT_SCORING_MODEL,
-            "Reply with the single word: ok",
-            "ok",
-            max_tokens=10,
-        )
-    except ai.KeyRejected:
-        sys.stderr.write(
-            "\nThat key was rejected by the API, so it has NOT been stored.\n"
-            "Check you copied all of it (they start with sk-ant-).\n"
-        )
-        return 1
-    except ai.AIError as error:
-        sys.stderr.write(
-            "\nCould not check the key: %s\n"
-            "Nothing was stored. This usually means a network problem rather "
-            "than a bad key - try again in a moment.\n" % error
-        )
-        return 1
-
-    where = ai.store_key(key, cfg["base_dir"])
-    print("Key works and is stored in: %s" % where)
-    print("It is not written into config.json or any file in this project.")
-    if not cfg["ai"]["enabled"]:
-        print("\nAI scoring is still off. To switch it on, set in config.json:")
-        print('    "ai": { "enabled": true, "interests": "...what you care about..." }')
-    return 0
-
-
-def build_trends(cfg, store):
-    """Fetch a few months of papers and have them summarised into themes.
-
-    Shared by the `trends` command and by a scheduled run, so the daily
-    launchd job can produce it without a second scheduler.
-    Returns (themes, path) - path is None if nothing was written.
-    """
-    key = ai.read_key(cfg["base_dir"])
-    if not key:
-        log.error(
-            "The trend report needs an API key. Run 'python3 paperfeed.py set-key'."
-        )
-        return [], None
-
-    months = cfg["trends"]["months"]
-    lookback = months * 31
-    keyword_sets = [entry for entry in cfg["keyword_sets"] if entry["enabled"]]
-    per_set = max(10, min(100, cfg["trends"]["max_papers"] // max(1, len(keyword_sets))))
-
-    log.info(
-        "Building a trend report over %d months from %d keyword set(s)",
-        months,
-        len(keyword_sets),
-    )
-
-    papers = []
-    errors = []
-    for keyword_set in keyword_sets:
-        # Fetch and filter one set at a time. Filtering the accumulated list
-        # would apply this set's exclude rules to papers another set found.
-        found = []
-        for key_name, (label, fetcher) in sources.SOURCES.items():
-            if not cfg["sources"].get(key_name):
-                continue
-            try:
-                found.extend(
-                    fetcher(keyword_set, lookback, per_set, cfg.get("contact_email", ""))
-                )
-            except Exception as error:
-                errors.append("%s / %s: %s" % (label, keyword_set["name"], error))
-        kept, _ = relevance.filter_papers(found, keyword_set, cfg)
-        papers.extend(kept)
-
-    papers = store_module.deduplicate(papers)
-    log.info("  %s to summarise", phrasing.count(len(papers), "paper"))
-    if not papers:
-        log.error("No papers found in that window, so there is nothing to summarise.")
-        return [], None
-
-    themes, usage, problem = ai.trend_report(
-        papers, cfg["trends"], cfg["ai"].get("interests", ""), key, log
-    )
-    if problem:
-        errors.append(problem)
-        log.error("Trend report problem: %s", problem)
-    if usage:
-        spend = ai.cost_of(usage)
-        log.info(
-            "  %d in / %d out tokens%s",
-            usage.get("input_tokens", 0),
-            usage.get("output_tokens", 0),
-            (" (about $%.3f)" % spend) if spend is not None else "",
-        )
-
-    moment = datetime.now()
-    html_text = digest_module.render_trends(
-        themes,
-        {
-            "date_label": digest_module.date_label(moment),
-            "period": moment.strftime("%Y-%m"),
-            "paper_count": len(papers),
-            "months": months,
-            "errors": errors,
-            "model": cfg["trends"]["model"],
-        },
-    )
-    os.makedirs(cfg["digest_dir"], exist_ok=True)
-    path = os.path.join(cfg["digest_dir"], "trends-%s.html" % moment.strftime("%Y-%m"))
-    with open(path, "w", encoding="utf-8") as handle:
-        handle.write(html_text)
-    log.info("Trend report written: %s", path)
-
-    store.set_mark("trends")
-    store.save(record_run=False)
-    return themes, path
-
-
 def command_trends(args):
     cfg = load_config_or_exit(args.config)
     setup_logging(cfg["log_path"], verbose=not args.quiet)
@@ -1017,14 +960,6 @@ def main(argv=None):
     )
     search_parser.add_argument("--limit", type=int, default=25)
     search_parser.set_defaults(handler=command_search)
-
-    key_parser = subparsers.add_parser(
-        "set-key", help="store your Anthropic API key (for the AI features)"
-    )
-    key_parser.add_argument(
-        "--forget", action="store_true", help="remove the stored key instead"
-    )
-    key_parser.set_defaults(handler=command_set_key)
 
     trends_parser = subparsers.add_parser(
         "trends", help="summarise the themes of the last few months"

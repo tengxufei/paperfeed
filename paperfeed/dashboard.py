@@ -20,6 +20,11 @@ DASH_CSS = """
             color:#55606d; border:0; margin:0 0 4px; padding:0; }
 .panel p.hint { font-size:12.5px; color:#77818d; margin:0 0 10px; }
 .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.dnav { display:flex; flex-wrap:wrap; gap:7px; margin:0 0 18px; }
+.dnav a { font-size:12.5px; padding:5px 11px; border-radius:13px;
+          background:#eceff3; color:#55606d; text-decoration:none; }
+.dnav a:hover { background:#dfe5ee; }
+.dnav a.on { background:#11467f; color:#fff; }
 .tiles { display:flex; flex-wrap:wrap; gap:10px; margin:0 0 16px; }
 .tile { flex:1 1 130px; background:#fff; border:1px solid #e2e4e8;
         border-radius:8px; padding:12px 14px; }
@@ -40,6 +45,8 @@ DASH_CSS = """
 @media (max-width:640px) { .grid { grid-template-columns:1fr; } }
 @media (prefers-color-scheme: dark) {
   .panel, .tile { background:#1f2228; border-color:#33373d; }
+  .dnav a { background:#282c33; color:#9aa1aa; }
+  .dnav a.on { background:#2c5b96; color:#fff; }
   .panel h2 { color:#b9bec6; } .tile b { color:#86b3ec; }
   .alert { border-bottom-color:#2a2f36; }
   .flag.new { background:#26381f; color:#a6cf92; }
@@ -74,8 +81,25 @@ def _tile(value, caption):
     )
 
 
+def slug(name):
+    import re as _re
+    return "dashboard-%s.html" % _re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:40]
+
+
+def _nav(sets_order, active):
+    links = ['<a class="%s" href="dashboard.html">All topics</a>'
+             % ("on" if active is None else "")]
+    for name in sets_order:
+        links.append(
+            '<a class="%s" href="%s">%s</a>'
+            % ("on" if active == name else "", slug(name), _esc(name))
+        )
+    return '<nav class="dnav">%s</nav>' % "".join(links)
+
+
 def render(run, history_rows, alerts, library_summary, meta):
     """run: the dict from stats.run_stats. history_rows: newest-first index.json."""
+    scope = meta.get("scope")            # None = every topic, else a set name
     subjects = run["subjects"]
     verdicts = {name: verdict for name, _, verdict, _ in alerts}
     nodes, edges = stats_module.graph_data(subjects, run["pairs"], verdicts=verdicts)
@@ -87,9 +111,10 @@ def render(run, history_rows, alerts, library_summary, meta):
         "<title>PaperFeed &mdash; dashboard</title>",
         "<style>%s%s%s</style></head><body><div class=\"wrap\">"
         % (digest_module.STYLE, charts.CHART_CSS, DASH_CSS),
-        "<h1>Dashboard</h1>",
+        "<h1>%s</h1>" % (_esc(scope) if scope else "Dashboard"),
         '<p class="meta">%s &middot; <a href="latest.html">this run\'s digest</a> '
         '&middot; <a href="index.html">all digests</a></p>' % _esc(meta.get("date_label", "")),
+        _nav(meta.get("sets_order") or run["sets_order"], scope),
     ]
 
     # --- the numbers at a glance ---
@@ -110,7 +135,7 @@ def render(run, history_rows, alerts, library_summary, meta):
     )
 
     # --- where the run came from ---
-    if run["per_set"]:
+    if run["per_set"] and not scope:
         ordered = [
             (name, run["per_set"].get(name, 0), i)
             for i, name in enumerate(run["sets_order"])
@@ -133,6 +158,18 @@ def render(run, history_rows, alerts, library_summary, meta):
             )
         )
 
+    if scope:
+        parts.append(
+            '<div class="panel"><h2>Where this topic came from</h2>%s</div>'
+            % charts.stacked(
+                [
+                    (name, count, 3 + i)
+                    for i, (name, count) in enumerate(sorted(run["per_source"].items()))
+                ],
+                label="papers by source",
+            )
+        )
+
     # --- score distribution + volume over time ---
     left = (
         '<div class="panel"><h2>How relevant, really</h2>'
@@ -140,10 +177,17 @@ def render(run, history_rows, alerts, library_summary, meta):
         "low, tighten the keywords or raise min_score.</p>%s</div>"
         % charts.histogram(run["score_buckets"], width=420, label="score distribution")
     )
-    series = [
-        (row.get("date_label", "")[:10] or "?", row.get("total", 0))
-        for row in reversed(history_rows[:14])
-    ]
+    if scope:
+        series = [
+            (row.get("date_label", "")[:10] or "?",
+             (row.get("sets") or {}).get(scope, 0))
+            for row in reversed(history_rows[:14])
+        ]
+    else:
+        series = [
+            (row.get("date_label", "")[:10] or "?", row.get("total", 0))
+            for row in reversed(history_rows[:14])
+        ]
     right = (
         '<div class="panel"><h2>Volume over time</h2>'
         '<p class="hint">New papers per run. A flat line near zero means a '
