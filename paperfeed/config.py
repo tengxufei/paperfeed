@@ -359,12 +359,11 @@ def _validate_email(raw):
 
     password_env = email.get("password_env") or "PAPERFEED_SMTP_PASSWORD"
     email["password_env"] = password_env
-    if not os.environ.get(password_env):
-        raise ConfigError(
-            "Email is enabled but the environment variable %s is not set.\n"
-            "PaperFeed never stores your password in a file. Set it with:\n"
-            "    export %s='your-app-password'" % (password_env, password_env)
-        )
+    # A missing password must NOT be a fatal config error. Scheduled runs do
+    # not read your shell profile, so treating this as fatal meant a launchd
+    # run aborted before writing anything - exactly the failure the local
+    # digest file exists to protect you from. Skip the email, keep the file.
+    email["password_available"] = bool(os.environ.get(password_env))
     return email
 
 

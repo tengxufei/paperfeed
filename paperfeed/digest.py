@@ -15,6 +15,7 @@ import html
 import json
 from datetime import datetime
 
+HIGHLIGHT_COUNT = 5           # papers shown per keyword set before the fold
 ABSTRACT_CHARS = 700          # the file can afford a fuller abstract
 EMAIL_ABSTRACT_CHARS = 320    # email should stay skimmable
 MAX_CHIPS = 5
@@ -39,6 +40,32 @@ h2 {
 }
 h2 .count { color: #888; font-weight: normal; text-transform: none; letter-spacing: 0; }
 .highlights { border-bottom-color: #b98b3a; color: #8a6420; }
+details.set { margin: 0 0 18px; }
+details.set > summary {
+  list-style: none; cursor: pointer; user-select: none;
+  /* no `display` here: in WebKit it stops <summary> toggling at all */
+  padding: 11px 14px; border-radius: 8px;
+  background: #e9edf2; border: 1px solid #d6dbe2;
+  font-size: 15px; font-weight: 600; color: #26456f;
+}
+details.set > summary::-webkit-details-marker { display: none; }
+.setbar { display: flex; align-items: baseline; gap: 10px; }
+.setbar::before { content: "\u25b8"; font-size: 12px; color: #7d8894;
+  transition: transform .15s ease; display: inline-block; }
+
+details.set[open] > summary .setbar::before { transform: rotate(90deg); }
+details.set > summary:hover { background: #dfe5ee; }
+.setcount {
+  margin-left: auto; font-weight: 600; font-size: 12px; color: #55606d;
+  background: #fff; border-radius: 10px; padding: 1px 9px;
+}
+.setbody { padding: 14px 0 0; }
+.showing { font-size: 12px; color: #7d8894; margin: 0 0 10px 2px; }
+details.rest > summary {
+  cursor: pointer; font-size: 13px; color: #11467f; padding: 8px 2px;
+  width: fit-content;
+}
+details.rest { margin-top: 4px; }
 .paper {
   background: #fff; border: 1px solid #e2e4e8; border-radius: 8px;
   padding: 14px 16px; margin-bottom: 12px;
@@ -114,6 +141,10 @@ details p { font-size: 13.5px; color: #333; margin: 8px 0 0; }
   .score { background: #282c33; color: #9aa1aa; }
   .score.strong { background: #26381f; color: #a6cf92; }
   .score.ai { background: #322a3d; color: #c0a6dd; }
+  details.set > summary { background: #23272e; border-color: #353a42; color: #a8c4e8; }
+  details.set > summary:hover { background: #2a2f37; }
+  .setcount { background: #16181c; color: #98a0a8; }
+  .showing { color: #79828d; }
   .ai-why { color: #c0a6dd; }
   .theme { background: #1f2228; border-color: #33373d; }
   .theme h3 { color: #86b3ec; }
@@ -303,21 +334,34 @@ def render_html(groups, meta):
             "appeared in an earlier digest.</div>" % meta.get("lookback_days", 0)
         )
     else:
-        highlights = meta.get("top_papers") or []
-        if highlights and total > len(highlights):
-            parts.append(
-                '<h2 class="highlights">Top %d this run</h2>' % len(highlights)
-            )
-            parts.extend(_paper_html(paper, show_scores) for paper in highlights)
-
+        # One collapsible section per keyword set. Each opens on its best
+        # few papers; the rest of that set stays behind a second fold, so a
+        # 200-paper run is still a page you can read top to bottom.
+        cut = meta.get("highlight_count", HIGHLIGHT_COUNT)
         for name, papers in groups:
             if not papers:
                 continue
+            best, rest = papers[:cut], papers[cut:]
+            parts.append('<details class="set" open><summary><div class="setbar">')
+            parts.append("<span>%s</span>" % _escape(name))
             parts.append(
-                '<h2>%s <span class="count">(%d)</span></h2>'
-                % (_escape(name), len(papers))
+                '<span class="setcount">%d new</span></div></summary>'
+                '<div class="setbody">' % len(papers)
             )
-            parts.extend(_paper_html(paper, show_scores) for paper in papers)
+            if rest:
+                parts.append(
+                    '<p class="showing">Top %d of %d, best first</p>'
+                    % (len(best), len(papers))
+                )
+            parts.extend(_paper_html(paper, show_scores) for paper in best)
+            if rest:
+                parts.append(
+                    '<details class="rest"><summary>Show the other %d</summary>'
+                    % len(rest)
+                )
+                parts.extend(_paper_html(paper, show_scores) for paper in rest)
+                parts.append("</details>")
+            parts.append("</div></details>")
 
     empty_names = [name for name, papers in groups if not papers]
     if empty_names and total:
@@ -411,11 +455,20 @@ def render_email_html(groups, meta):
             'font-size:14px;">No new papers this time.</p>'
         )
     else:
+        cut = meta.get("highlight_count", HIGHLIGHT_COUNT)
         for name, papers in groups:
             if not papers:
                 continue
-            parts.append('<h2 style="%s">%s (%d)</h2>' % (E_H2, _escape(name), len(papers)))
-            parts.extend(_paper_email(paper, show_scores) for paper in papers)
+            parts.append(
+                '<h2 style="%s">%s (%d)</h2>' % (E_H2, _escape(name), len(papers))
+            )
+            parts.extend(_paper_email(paper, show_scores) for paper in papers[:cut])
+            if len(papers) > cut:
+                parts.append(
+                    '<p style="font-size:13px;color:#777;margin:0 0 12px;">'
+                    "and %d more in this topic &mdash; see the full digest on "
+                    "your Mac.</p>" % (len(papers) - cut)
+                )
 
     parts.append(
         '<p style="font-size:12px;color:#888;margin-top:28px;">'

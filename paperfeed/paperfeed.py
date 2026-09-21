@@ -318,6 +318,13 @@ def command_run(args):
     email_settings = cfg["email"]
     if not email_settings["enabled"]:
         log.info("Email is switched off in config.json (email.enabled).")
+    elif not email_settings.get("password_available", True):
+        log.warning(
+            "Email is on but %s is not set in this environment, so no email "
+            "was sent. The digest above is on disk. (Scheduled runs do not "
+            "read ~/.zshrc - see the README on launchd and passwords.)",
+            email_settings["password_env"],
+        )
     elif not new_papers and not email_settings.get("send_when_empty", False):
         log.info("No new papers, so no email sent (email.send_when_empty is false).")
     else:
@@ -390,7 +397,17 @@ def command_check(args):
         if entry["enabled"]:
             print("    %s: %s" % (entry["name"], " OR ".join(entry["terms"])))
     print("  every %d days, looking back %d days" % (cfg["interval_days"], cfg["lookback_days"]))
-    print("  email: %s" % ("enabled" if cfg["email"]["enabled"] else "disabled"))
+    if cfg["email"]["enabled"]:
+        if cfg["email"].get("password_available"):
+            print("  email: enabled, password found in $%s" % cfg["email"]["password_env"])
+        else:
+            print(
+                "  email: enabled, but $%s is NOT set here - digests will still\n"
+                "         be written, they just will not be sent."
+                % cfg["email"]["password_env"]
+            )
+    else:
+        print("  email: disabled")
 
     has_key = bool(ai.read_key(cfg["base_dir"]))
     print(
@@ -510,7 +527,10 @@ def command_serve(args):
         return 2
 
     try:
-        httpd = server.serve(digest_path, cfg["library_path"], args.port)
+        httpd = server.serve(
+            digest_path, cfg["library_path"], args.port,
+            config_path=cfg["config_path"],
+        )
     except OSError as error:
         sys.stderr.write("Could not start the local server: %s\n" % error)
         return 1

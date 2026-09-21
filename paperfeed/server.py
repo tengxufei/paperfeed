@@ -16,6 +16,7 @@ import html
 import json
 import os
 import re
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import digest as digest_module
@@ -31,6 +32,9 @@ INJECTED_CSS = """
   padding: 10px 16px; background: #11467f; color: #fff; font-size: 13px;
 }
 .pf-bar a { color: #cfe0f5; }
+.pf-bar + .pf-bar { margin-top: -20px; background: #33507a; font-size: 12px; }
+.pf-bar.pf-stale { background: #8a4b1f; }
+.pf-bar code { background: rgba(255,255,255,.18); padding: 1px 5px; border-radius: 3px; }
 .pf-save {
   margin-top: 10px; font: inherit; font-size: 13px; cursor: pointer;
   padding: 5px 12px; border-radius: 6px; border: 1px solid #c3c8cf;
@@ -113,7 +117,41 @@ def _payloads(page):
     return found
 
 
-def build_page(page, db_path):
+def _age_note(digest_path, config_path):
+    """Warn when the digest on disk predates the config that produced it.
+
+    `serve` shows the file that was last written, not a live search. Without
+    this, editing your keywords and then opening the page looks like the new
+    keywords found nothing at all.
+    """
+    try:
+        written = os.path.getmtime(digest_path)
+    except OSError:
+        return ""
+
+    when = datetime.fromtimestamp(written)
+    age_hours = (datetime.now() - when).total_seconds() / 3600.0
+    if age_hours < 1:
+        age = "just now"
+    elif age_hours < 24:
+        age = "%d hour%s ago" % (int(age_hours), "" if int(age_hours) == 1 else "s")
+    else:
+        age = "%d day%s ago" % (int(age_hours / 24), "" if int(age_hours / 24) == 1 else "s")
+
+    note = "Digest written %s." % age
+    try:
+        if config_path and os.path.getmtime(config_path) > written:
+            note += (
+                " <b>Your config.json has changed since then</b>, so this page "
+                "does not reflect your current keywords &mdash; run "
+                "<code>python3 paperfeed.py run --force</code> and reload."
+            )
+    except OSError:
+        pass
+    return note
+
+
+def build_page(page, db_path, config_path=""):
     """Inject the save UI into a digest that is already on disk."""
     payloads = _payloads(page)
     known = library.saved_keys(db_path)
@@ -135,6 +173,10 @@ def build_page(page, db_path):
         '<span id="pf-count">%d</span> on this page are in your library. '
         '<a href="/library">View library</a></div>' % saved_now
     )
+    note = _age_note(Handler.digest_path, config_path)
+    if note:
+        stale = "config.json has changed" in note
+        bar += '<div class="pf-bar%s">%s</div>' % (" pf-stale" if stale else "", note)
 
     injection = "".join(
         [
@@ -196,6 +238,7 @@ def library_page(db_path):
 class Handler(BaseHTTPRequestHandler):
     digest_path = ""
     db_path = ""
+    config_path = ""
     server_version = "PaperFeed"
 
     def log_message(self, fmt, *args):      # quieter than the default
@@ -227,7 +270,7 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
         with open(self.digest_path, "r", encoding="utf-8") as handle:
-            self._send(build_page(handle.read(), self.db_path))
+            self._send(build_page(handle.read(), self.db_path, self.config_path))
 
     def do_POST(self):
         length = int(self.headers.get("Content-Length") or 0)
@@ -253,7 +296,8 @@ class Handler(BaseHTTPRequestHandler):
 PORT_IN_USE = (48, 98)    # macOS, Linux
 
 
-def serve(digest_path, db_path, port=8931, host="127.0.0.1", attempts=12):
+def serve(digest_path, db_path, port=8931, host="127.0.0.1", attempts=12,
+          config_path=""):
     """Start the server, stepping past ports another program already holds.
 
     Other tools squat on tidy round ports (8765 was taken on the machine this
@@ -261,6 +305,7 @@ def serve(digest_path, db_path, port=8931, host="127.0.0.1", attempts=12):
     """
     Handler.digest_path = digest_path
     Handler.db_path = db_path
+    Handler.config_path = config_path
     for candidate in range(port, port + attempts):
         try:
             return ThreadingHTTPServer((host, candidate), Handler)
