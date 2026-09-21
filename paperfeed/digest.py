@@ -592,7 +592,9 @@ def _shorten(text, limit):
 
 
 def _escape(value):
-    return html.escape(str(value or ""))
+    # Not `value or ""`: that silently turns a real 0 into a blank, which is
+    # how a dashboard tile ended up with a caption and no number.
+    return html.escape("" if value is None else str(value))
 
 
 def _slug(name):

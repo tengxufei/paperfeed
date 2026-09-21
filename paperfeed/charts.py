@@ -23,10 +23,20 @@ def _esc(text):
 
 
 def _open(width, height, label=""):
+    """Open an SVG that shrinks with the page but never inflates past its
+    own design width.
+
+    width="100%" with a viewBox scales BOTH ways, keeping the aspect ratio.
+    That is what you want on a phone and badly wrong in a wide panel: a
+    190x190 donut in an 822px panel rendered as an 822px circle, making the
+    reading-status panel 940px tall for three numbers. The max-width caps it
+    while leaving the shrink-to-fit behaviour intact.
+    """
     return (
         '<svg class="chart" viewBox="0 0 %d %d" width="100%%" height="%d" '
+        'style="max-width:%dpx" '
         'role="img" aria-label="%s" xmlns="http://www.w3.org/2000/svg">'
-        % (width, height, height, _esc(label))
+        % (width, height, height, width, _esc(label))
     )
 
 

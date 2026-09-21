@@ -48,6 +48,7 @@ scheduler** — change `interval_days` and you never touch launchd again.
 | `sources.py` | talks to PubMed and Europe PMC; one function per source |
 | `relevance.py` | filtering and the explainable 0–10 score |
 | `metrics.py` | citation and journal figures from OpenAlex |
+| `collection.py` | what has accumulated: the library, the cache, the history |
 | `store.py` | what has been shown before, so nothing repeats |
 | `digest.py` | renders the digest, the email, the trend report |
 | `library.py` | the papers you keep (SQLite) |
@@ -355,13 +356,41 @@ every chart is SVG drawn by Python. One dashboard per keyword set plus an
 overall, switchable at the top, because a topic heating up is invisible in a
 combined count.
 
-Each shows: tiles, source split, **score distribution** (this is how you pick
-`min_score` from evidence), **volume over time**, **trend alerts** — subjects
-behaving differently from their own past, flagged *new*, *rising*, *fading* —
-a **subject graph** linking terms that share papers, the commonest subjects,
-and your library's status.
+It is built from three things that **accumulate** — your library, the metric
+cache beside it, and the run history — not from the last run alone. That
+distinction is the whole point: on a short interval most runs find nothing
+new, and a dashboard computed from one run reads zero all day while there are
+hundreds of papers on disk.
 
-Trend alerts need a few runs of history before they mean anything.
+It opens with a sentence, not a number:
+
+> *23 papers joined your library in the last 30 days, 17 of them collected
+> without you; 20 are still unread; the typical one was published 4 days
+> before you saw it.*
+
+Then the panels, each of which asks a question and answers it underneath:
+
+| Panel | What it tells you |
+|---|---|
+| **Is the alert working?** | Papers found per run, quiet runs included. A feed that only showed its good days would be telling you nothing. |
+| **Is the collection growing?** | The running total, split by who added each paper. This is the only place the collector's claim is actually checked. |
+| **How quickly news reaches you** | Each paper's age when it landed. The number that says whether you are keeping up or catching up. |
+| **Waiting for you** | The unread papers that have sat longest, linked. |
+| **The most-cited papers you have kept** | Citations and field-weighted impact. Says so plainly when everything is too new to have any, rather than showing zeros. |
+| **Where your collection comes from** | Your journals, with OpenAlex citedness and the works count that qualifies it. |
+| **What is moving in your field** | Subjects flagged *new*, *rising*, *fading*, each with a strip showing it across recent runs. |
+| **How your subjects connect** | Terms that share papers, linked. |
+| **What your searches actually pulled in** | The commonest subjects — a surprise near the top means a wider query than you intended. |
+| **Have you read any of it?** | Reading status, and which topic your collection is made of. |
+
+Two more panels appear only when a run actually found something: where those
+papers scored (this is how you pick `min_score` from evidence) and which
+topic brought them in.
+
+The subject panels are built from **everything your queries matched in the
+lookback window**, not just what was new to you — what a field is about does
+not change according to whether you happen to have seen a paper already.
+Trend alerts still need a few runs of history before they mean anything.
 
 ---
 

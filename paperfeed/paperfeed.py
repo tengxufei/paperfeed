@@ -23,6 +23,7 @@ from collections import Counter
 from datetime import date, datetime, timedelta
 
 import ai
+import collection
 import config as config_module
 import dashboard as dashboard_module
 import digest as digest_module
@@ -142,42 +143,64 @@ def collect_papers(cfg, papers):
     return added
 
 
-def build_dashboard(cfg, papers, keyword_sets, hidden_count, meta):
+def build_dashboard(cfg, papers, window_papers, keyword_sets, hidden_count, meta):
     """Rebuild the dashboards: one overall, one per keyword set.
 
     A researcher following several fields needs each one on its own terms -
     a topic heating up is invisible in a combined count.
+
+    Two different sets of papers go in. `papers` is what is NEW to you, which
+    is what "new this run" and the score spread are about. `window_papers` is
+    everything the queries matched in the lookback window, new or not, and it
+    is what the subject panels and the trend history are built from - what a
+    field is about does not change according to whether you happened to have
+    seen a paper already, and on a short interval almost everything has been
+    seen, which is why those panels used to go blank.
     """
     try:
         names = [entry["name"] for entry in keyword_sets]
         by_set = {name: [p for p in papers if p.set_name == name] for name in names}
+        window_papers = window_papers or papers
+        by_set_window = {name: [p for p in window_papers if p.set_name == name]
+                         for name in names}
 
         overall = stats_module.run_stats(papers, keyword_sets)
         per_set = {name: stats_module.run_stats(by_set[name], keyword_sets)
                    for name in names}
+        land = stats_module.run_stats(window_papers, keyword_sets)
+        land_per_set = {name: stats_module.run_stats(by_set_window[name], keyword_sets)
+                        for name in names}
 
         history = stats_module.record(
             os.path.join(cfg["base_dir"], "state", "topics.json"),
             dict(
-                [(stats_module.ALL, overall["subjects"])]
-                + [(name, per_set[name]["subjects"]) for name in names]
+                [(stats_module.ALL, land["subjects"])]
+                + [(name, land_per_set[name]["subjects"]) for name in names]
             ),
             dict(
-                [(stats_module.ALL, overall["total"])]
-                + [(name, per_set[name]["total"]) for name in names]
+                [(stats_module.ALL, land["total"])]
+                + [(name, land_per_set[name]["total"]) for name in names]
             ),
+        )
+        subject_cache = os.path.join(cfg["base_dir"], "state", "subjects.json")
+        collection.remember(
+            subject_cache,
+            dict([(stats_module.ALL, land)]
+                 + [(name, land_per_set[name]) for name in names]),
         )
         index_rows = dashboard_module._history(cfg["digest_dir"])
         summary = library.summary(cfg["library_path"])
+        metrics_path = cfg.get("metrics", {}).get("path", "")
 
-        pages = [(None, overall, "dashboard.html")]
+        pages = [(None, overall, land, "dashboard.html")]
         for name in names:
-            pages.append((name, per_set[name], dashboard_module.slug(name)))
+            pages.append((name, per_set[name], land_per_set[name],
+                          dashboard_module.slug(name)))
 
         written = 0
-        for scope, run, filename in pages:
+        for scope, run, landscape, filename in pages:
             alerts = stats_module.alerts(
-                history, run["subjects"],
+                history, landscape["subjects"],
                 bucket=scope if scope else stats_module.ALL,
             )
             page = dashboard_module.render(
@@ -190,7 +213,14 @@ def build_dashboard(cfg, papers, keyword_sets, hidden_count, meta):
                     "hidden": hidden_count if scope is None else 0,
                     "scope": scope,
                     "sets_order": names,
+                    "lookback_days": cfg["lookback_days"],
                 },
+                coll=collection.snapshot(
+                    cfg["library_path"], metrics_path, scope=scope
+                ),
+                history=history,
+                subject_cache=subject_cache,
+                landscape=landscape,
             )
             with open(os.path.join(cfg["digest_dir"], filename), "w",
                       encoding="utf-8") as handle:
@@ -559,7 +589,7 @@ def command_run(args):
     store.save(record_run=True)
 
     collect_papers(cfg, new_papers)
-    build_dashboard(cfg, new_papers, keyword_sets, len(hidden), meta)
+    build_dashboard(cfg, new_papers, unique, keyword_sets, len(hidden), meta)
 
     update_index(
         cfg,
