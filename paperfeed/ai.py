@@ -410,15 +410,30 @@ def _paper_block(index, paper, abstract_chars=900):
     )
 
 
-def score_papers(papers, ai_cfg, settings, log=None):
+def interests_for(keyword_sets, ai_cfg):
+    """What each topic should be judged against.
+
+    A set's own 'interests' wins; ai.interests is the fallback. Following
+    several unrelated fields, one description for all of them judges every
+    paper against mostly the wrong sentence.
+    """
+    fallback = (ai_cfg.get("interests") or "").strip()
+    return {
+        entry["name"]: (entry.get("interests") or "").strip() or fallback
+        for entry in (keyword_sets or [])
+    }
+
+
+def score_papers(papers, ai_cfg, settings, keyword_sets=None, log=None):
     """Attach paper.ai_score and paper.ai_reason where possible.
 
     Returns (how_many_scored, total_usage, error_message_or_None). Never
     raises: a failure here must not cost you the digest.
     """
-    interests = (ai_cfg.get("interests") or "").strip()
-    if not interests:
-        return 0, {}, "ai.interests is empty, so there is nothing to score against"
+    fallback = (ai_cfg.get("interests") or "").strip()
+    by_set = interests_for(keyword_sets, ai_cfg)
+    if not fallback and not any(by_set.values()):
+        return 0, {}, "nothing to score papers against - set ai.interests"
 
     model = settings.get("model") or DEFAULT_SCORING_MODEL
     limit = int(ai_cfg.get("max_papers_per_run") or 40)
@@ -427,12 +442,24 @@ def score_papers(papers, ai_cfg, settings, log=None):
     if not candidates:
         return 0, {}, None
 
+    # Batch within a topic, so every paper in a request is judged against the
+    # description written for it.
+    grouped = {}
+    for paper in candidates:
+        grouped.setdefault(paper.set_name, []).append(paper)
+    batches = []
+    for name, group in grouped.items():
+        wanted = by_set.get(name) or fallback
+        if not wanted:
+            continue
+        for start in range(0, len(group), batch_size):
+            batches.append((wanted, group[start : start + batch_size]))
+
     totals = {"input_tokens": 0, "output_tokens": 0, "model": model, "calls": 0}
     scored = 0
     problems = []
 
-    for start in range(0, len(candidates), batch_size):
-        batch = candidates[start : start + batch_size]
+    for interests, batch in batches:
         listing = "\n\n".join(
             _paper_block(number, paper) for number, paper in enumerate(batch, 1)
         )

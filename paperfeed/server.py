@@ -86,11 +86,14 @@ INJECTED_JS = r"""
   var jump = document.querySelector('nav.jump');
   if (jump && !jump.querySelector('.pf-lib')) {
     var link = document.createElement('a');
-    link.className = 'pf-lib';
+    link.className = 'pf-lib pf-page';
     link.href = '/library';
     link.textContent = 'library';
-    var spacer = jump.querySelector('.spacer');
-    jump.insertBefore(link, spacer || null);
+    // after the spacer, with the other page links - these leave the page,
+    // the topic chips only jump within it
+    var dash = jump.querySelector('a[href="dashboard.html"]');
+    if (dash) { jump.insertBefore(link, dash); }
+    else { jump.appendChild(link); }
   }
 
   cards.forEach(function (card, index) {
@@ -632,8 +635,16 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- the AI endpoints. Each fails soft: an error becomes a message on the
     # -- page, never a broken library.
-    def _interests(self):
-        return ((self.cfg or {}).get("ai") or {}).get("interests", "")
+    def _interests(self, set_name=None):
+        """The description to judge against: the topic's own, else the general
+        one. A paper is explained in the context it was found in."""
+        cfg = self.cfg or {}
+        ai_cfg = cfg.get("ai") or {}
+        if set_name:
+            per_set = ai.interests_for(cfg.get("keyword_sets") or [], ai_cfg)
+            if per_set.get(set_name):
+                return per_set[set_name]
+        return ai_cfg.get("interests", "")
 
     def _explain(self, body):
         record = library.get(self.db_path, body.get("key", ""))
@@ -644,7 +655,9 @@ class Handler(BaseHTTPRequestHandler):
         if not settings["api_key"]:
             self._json({"ok": False, "error": "no API key in $%s" % settings["api_key_env"]})
             return
-        summary, usage, error = ai.explain_paper(record, self._interests(), settings)
+        summary, usage, error = ai.explain_paper(
+            record, self._interests(record.get("set_name")), settings
+        )
         if error:
             self._json({"ok": False, "error": error})
             return

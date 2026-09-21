@@ -425,7 +425,7 @@ def command_run(args):
         else:
             try:
                 scored, usage, problem = ai.score_papers(
-                    new_papers, cfg["ai"], settings, log
+                    new_papers, cfg["ai"], settings, keyword_sets, log
                 )
                 used_ai = scored > 0
                 if scored:

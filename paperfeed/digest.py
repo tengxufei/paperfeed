@@ -46,6 +46,12 @@ body {
 .jump a:hover { background: #dfe5ee; }
 .jump a b { color: #6a727c; font-weight: 600; }
 .jump .spacer { margin-left: auto; }
+.jump a.pf-page {
+  background: none; color: #6a727c; text-decoration: underline;
+  text-underline-offset: 3px; padding: 3px 4px; font-weight: 500;
+}
+.jump a.pf-page:hover { background: none; color: #11467f; }
+.jump .sep { color: #c3c8cf; }
 .jump label { cursor: pointer; user-select: none; color: #55606d; }
 
 /* compact mode (A1) - pure CSS, driven by a checkbox, so the file still
@@ -389,7 +395,9 @@ def render_html(groups, meta):
         parts.append(
             '<nav class="jump">%s<span class="spacer"></span>'
             '<label for="compact">compact list</label>'
-            '<a href="dashboard.html">dashboard</a></nav>' % "".join(jump)
+            '<span class="sep">|</span>'
+            '<a class="pf-page" href="dashboard.html">dashboard</a></nav>'
+            % "".join(jump)
         )
 
     if meta.get("errors"):

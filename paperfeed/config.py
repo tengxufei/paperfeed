@@ -138,6 +138,13 @@ def _validate_keyword_sets(raw):
                 cleaned_items.append(item.strip())
             return cleaned_items
 
+        set_interests = entry.get("interests", "")
+        if not isinstance(set_interests, str):
+            raise ConfigError(
+                "Keyword set %r: 'interests' must be text describing what you "
+                "want from this topic, or left out." % name
+            )
+
         clean_terms = string_list("terms")
         all_of = string_list("all_of")
         authors = string_list("authors")
@@ -216,6 +223,7 @@ def _validate_keyword_sets(raw):
         cleaned.append(
             {
                 "name": name,
+                "interests": set_interests.strip(),
                 "terms": clean_terms,
                 "all_of": all_of,
                 "authors": authors,
@@ -499,12 +507,19 @@ def load(config_path):
         )
     cfg["collect"] = _validate_block(raw.get("collect"), DEFAULTS["collect"], "collect")
     cfg["trends"] = _validate_block(raw.get("trends"), DEFAULTS["trends"], "trends")
-    if cfg["ai"]["enabled"] and not (cfg["ai"].get("interests") or "").strip():
-        raise ConfigError(
-            "ai.enabled is true but ai.interests is empty.\n"
-            "Describe what you care about in a sentence or two - that is what "
-            "each paper gets scored against."
-        )
+    if cfg["ai"]["enabled"]:
+        # Either one description covering everything, or one per topic. A
+        # single blob across unrelated fields scores a glioblastoma paper
+        # against a sentence mostly about protein design.
+        enabled_sets = [s for s in cfg["keyword_sets"] if s["enabled"]]
+        without = [s["name"] for s in enabled_sets if not s["interests"]]
+        if not (cfg["ai"].get("interests") or "").strip() and without:
+            raise ConfigError(
+                "ai.enabled is true, but there is nothing to score papers "
+                "against for: %s.\n"
+                "Either give each keyword set its own 'interests' line, or set "
+                "a general ai.interests as the fallback." % ", ".join(without)
+            )
     cfg["ranking"] = _validate_ranking(raw.get("ranking"))
     cfg["mute"] = _validate_mute(raw.get("mute"))
     cfg["email"] = _validate_email(raw.get("email"))
