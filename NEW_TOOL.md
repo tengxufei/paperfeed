@@ -63,9 +63,11 @@ We're building a research tool. I'm a researcher, not a strong coder: explain
 choices in plain language and keep the design as simple as it can be while
 still working.
 
-**What it is.** I give it the topics I follow. It collects papers on them
-continuously, keeps them, and helps me understand what my field is doing —
-not just alerting me, but supporting real analysis on top of the collection.
+**What it is.** I give it the topics I follow, and it tells me when new work
+appears in them. That alerting is the job it exists for and everything else
+is built on top: it also keeps the papers it finds and helps me analyse what
+my field is doing. But if it never tells me about a new paper, nothing else
+it does matters.
 
 **Where I want to end up**, so you can design toward it rather than bolting
 it on later:
@@ -77,15 +79,26 @@ it on later:
 
 **Build it in this order**, and stop after each for me to look at it:
 
-1. **Collect.** Fetch papers matching my topics from PubMed and the preprint
-   servers, deduplicate by DOI, and remember what I have already seen so
-   nothing repeats. Write the results to a local HTML file. Run on a
-   schedule I can change from a config file.
-2. **Keep.** Papers accumulate into a local store that grows by itself,
+1. **Alert me.** The core job. Fetch papers matching my topics from PubMed
+   and the preprint servers, deduplicate by DOI, and remember what I have
+   already been shown so the same paper never appears twice. On a schedule I
+   set in the config, **deliver what is new to me** — email it, and also
+   write a local HTML digest I can open. Then set the schedule up so it runs
+   by itself without me starting it.
+
+   *Done when:* I change nothing, wait for one interval, and a list of
+   genuinely new papers on my topics reaches me without my asking. Not "the
+   file exists if I go and look for it" — it has to reach me. Show me this
+   working before moving on.
+
+2. **Keep.** The papers accumulate into a local store that grows by itself,
    with a way for me to mark the ones I care about.
 3. **Show.** A dashboard over the collection, rebuilt on every run.
 4. **Analyse.** Let me search any date range I choose, not only recent days,
    and compare periods.
+
+Stages 2 to 4 are worth nothing if stage 1 has stopped working, so any
+change to them has to leave the alerting intact.
 
 **Hard constraints**
 
@@ -134,4 +147,8 @@ Raise these one at a time, after you can see real output:
 
 relevance ranking with visible reasons · filters and muted terms · following
 specific authors · a local page for browsing and saving · charts and a
-knowledge graph · trend alerts · optional AI summarisation · email delivery
+knowledge graph · trend detection over time · optional AI summarisation
+
+(Delivery is deliberately not on this list. It belongs in stage 1, not as a
+later addition — a tool that collects papers but never tells you about them
+is a database, not an alert.)
