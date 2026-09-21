@@ -267,9 +267,22 @@ variable named in `email.password_env` and nothing else.
 
 **One catch with launchd**: background jobs do not read `~/.zshrc`, so the
 scheduled run will not see the variable. The plist has a commented-out block
-showing where to put it — uncomment it and paste the password there, then
-`chmod 600` the plist. If you would rather not have the password on disk at
-all, leave email off for scheduled runs and read `digests/latest.html`.
+showing where to put it — uncomment it, paste the password there, then:
+
+```bash
+chmod 600 ~/Library/LaunchAgents/com.paperfeed.daily.plist
+launchctl unload ~/Library/LaunchAgents/com.paperfeed.daily.plist
+launchctl load ~/Library/LaunchAgents/com.paperfeed.daily.plist
+```
+
+If you would rather not have the password on disk at all, leave it out: the
+scheduled run will write the digest and simply skip the email.
+
+**A missing password never costs you a digest.** If email is enabled but the
+variable is not set, PaperFeed logs a warning, skips the send, and writes the
+file as usual. (This was once a fatal config error, which meant a scheduled
+run aborted before writing anything — the exact failure the local file is
+supposed to protect you from.)
 
 By default PaperFeed only emails when there is something new. Set
 `email.send_when_empty` to `true` if you would rather hear from it every time.

@@ -45,7 +45,7 @@
   "contact_email": "tengxufei@gmail.com",
   "_email": "Set enabled to true once your digests look right. The password is NEVER stored here: set the environment variable named in password_env. For Gmail, use an app password, not your account password.",
   "email": {
-    "enabled": false,
+    "enabled": true,
     "smtp_host": "smtp.gmail.com",
     "smtp_port": 465,
     "username": "tengxufei@gmail.com",
@@ -55,7 +55,6 @@
       "tengxufei@gmail.com"
     ],
     "subject_prefix": "[PaperFeed]",
-    "_send_when_empty": "Email you even when there is nothing new. Off by default so quiet weeks stay quiet; the digest file is still written either way.",
     "send_when_empty": false
   },
   "ranking": {
