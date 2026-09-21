@@ -473,11 +473,14 @@ def load(config_path):
         )
 
     cfg["ai"] = _validate_block(raw.get("ai"), DEFAULTS["ai"], "ai")
-    if cfg["ai"]["provider"] not in ("anthropic", "openai"):
+    if cfg["ai"]["provider"] not in ("anthropic", "openai", "gemini"):
         raise ConfigError(
-            "ai.provider is %r. Use \"anthropic\", or \"openai\" for OpenAI and "
-            "anything that speaks its chat-completions API (Groq, DeepSeek, "
-            "Together, OpenRouter, Ollama - set ai.base_url for those)."
+            "ai.provider is %r. Use one of:\n"
+            "  \"anthropic\"  the Claude API\n"
+            "  \"gemini\"     Google Gemini\n"
+            "  \"openai\"     OpenAI, and anything speaking its chat-completions\n"
+            "               API - Groq, DeepSeek, Together, OpenRouter, Ollama.\n"
+            "               Point ai.base_url at the service for those."
             % cfg["ai"]["provider"]
         )
     cfg["collect"] = _validate_block(raw.get("collect"), DEFAULTS["collect"], "collect")

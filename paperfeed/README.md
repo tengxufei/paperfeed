@@ -175,17 +175,29 @@ echo "export PAPERFEED_AI_KEY='your-api-key'" >> ~/.zshrc && source ~/.zshrc
 "ai": { "provider": "openai", "base_url": "", "model": "gpt-4o-mini" }
 ```
 
-- `"provider": "anthropic"` — the Claude API.
-- `"provider": "openai"` — OpenAI, and anything else speaking its
-  chat-completions API. Point `base_url` at the service:
+Three providers are built in:
+
+| `provider` | `base_url` | example `model` |
+|---|---|---|
+| `anthropic` | leave blank | `claude-haiku-4-5` |
+| `gemini` | leave blank | `gemini-2.5-flash` |
+| `openai` | leave blank | `gpt-4o-mini` |
+
+`openai` also covers anything that speaks the same chat-completions API —
+point `base_url` at it:
 
 | Service | `base_url` |
 |---|---|
-| OpenAI | leave blank |
 | Groq | `https://api.groq.com/openai/v1` |
 | DeepSeek | `https://api.deepseek.com/v1` |
 | OpenRouter | `https://openrouter.ai/api/v1` |
+| Gemini (alternative route) | `https://generativelanguage.googleapis.com/v1beta/openai` |
 | Ollama (local, free) | `http://localhost:11434/v1` |
+
+A note on Gemini: Google answers a bad key with HTTP 400 rather than the 401
+everyone else uses, so PaperFeed reads the error message as well as the
+status code. A wrong Gemini key is reported as a wrong key, not as a
+malformed request.
 
 Cost estimates only exist for models with a published price in the table;
 anything else simply reports cost as unknown rather than guessing. Every DOI these

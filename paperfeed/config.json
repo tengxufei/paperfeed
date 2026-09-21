@@ -72,23 +72,24 @@
   },
   "ai": {
     "_provider": "'anthropic' for the Claude API, or 'openai' for OpenAI and anything speaking its chat-completions API (Groq, DeepSeek, Together, OpenRouter, LM Studio, Ollama).",
-    "provider": "anthropic",
+    "provider": "gemini",
     "_base_url": "Leave blank for the provider's own endpoint. Set it to point elsewhere, e.g. https://api.groq.com/openai/v1 , https://api.deepseek.com/v1 , or http://localhost:11434/v1 for a local Ollama model.",
     "base_url": "",
     "_api_key_env": "The environment variable holding your key. PaperFeed never stores the key itself. export PAPERFEED_AI_KEY='...' in ~/.zshrc",
     "api_key_env": "PAPERFEED_AI_KEY",
     "enabled": false,
-    "model": "claude-haiku-4-5",
+    "model": "gemini-2.5-flash",
     "_interests": "Free text describing what you care about; each paper is scored against it.",
     "interests": "",
     "max_papers_per_run": 40,
-    "batch_size": 10
+    "batch_size": 10,
+    "_model": "Gemini model for per-paper work. gemini-2.5-flash is the cheap fast one; gemini-2.5-pro reasons better and costs more."
   },
   "trends": {
     "enabled": false,
     "months": 3,
     "max_papers": 300,
-    "model": "claude-sonnet-5",
+    "model": "gemini-2.5-pro",
     "interval_days": 30,
     "email": false
   },

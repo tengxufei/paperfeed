@@ -60,7 +60,17 @@ PROVIDERS = {
         "label": "OpenAI-compatible",
         "example_models": ["gpt-4o-mini", "llama-3.3-70b-versatile"],
     },
+    "gemini": {
+        "base_url": "https://generativelanguage.googleapis.com/v1beta",
+        "path": "",          # the model name is part of the path; built below
+        "label": "Google Gemini",
+        "example_models": ["gemini-2.5-flash", "gemini-2.5-pro"],
+    },
 }
+
+# Google answers a bad key with 400, not 401, so the status code alone cannot
+# tell a rejected key from a malformed request.
+BAD_KEY_HINTS = ("api key not valid", "pass a valid api key", "api_key_invalid")
 
 ANTHROPIC_VERSION = "2023-06-01"
 
@@ -136,6 +146,9 @@ def _endpoint(settings):
             % (provider, " or ".join(sorted(PROVIDERS)))
         )
     base = (settings.get("base_url") or spec["base_url"]).rstrip("/")
+    if provider == "gemini":
+        model = settings.get("model") or "gemini-2.5-flash"
+        return provider, "%s/models/%s:generateContent" % (base, model)
     return provider, base + spec["path"]
 
 
@@ -161,6 +174,13 @@ def call(settings, system, user_text, max_tokens=2000, effort=None, timeout=120)
         }
         if effort:
             body["output_config"] = {"effort": effort}
+    elif provider == "gemini":
+        headers = {"content-type": "application/json", "x-goog-api-key": key}
+        body = {
+            "systemInstruction": {"parts": [{"text": system}]},
+            "contents": [{"role": "user", "parts": [{"text": user_text}]}],
+            "generationConfig": {"maxOutputTokens": max_tokens},
+        }
     else:
         headers = {
             "content-type": "application/json",
@@ -201,6 +221,18 @@ def call(settings, system, user_text, max_tokens=2000, effort=None, timeout=120)
                 % (PROVIDERS[provider]["label"], url, model)
             )
         if response.status_code == 400:
+            # Google reports an invalid key as 400, so look at the message
+            # before blaming the request.
+            lowered = response.text.lower()
+            if any(hint in lowered for hint in BAD_KEY_HINTS):
+                raise KeyRejected(
+                    "%s rejected the key in $%s. Check the key, and that it "
+                    "belongs to the service named in ai.provider."
+                    % (
+                        PROVIDERS[provider]["label"],
+                        settings.get("api_key_env", DEFAULT_KEY_ENV),
+                    )
+                )
             raise AIError(
                 "the service rejected the request (400): %s" % response.text[:200]
             )
@@ -215,6 +247,16 @@ def call(settings, system, user_text, max_tokens=2000, effort=None, timeout=120)
             )
 
         payload = response.json()
+        if provider == "gemini":
+            candidates = payload.get("candidates") or [{}]
+            parts = ((candidates[0].get("content") or {}).get("parts")) or []
+            text = "".join(part.get("text", "") for part in parts)
+            usage = payload.get("usageMetadata", {}) or {}
+            return text, {
+                "input_tokens": usage.get("promptTokenCount", 0),
+                "output_tokens": usage.get("candidatesTokenCount", 0),
+                "model": model,
+            }
         if provider == "anthropic":
             text = "".join(
                 block.get("text", "")
