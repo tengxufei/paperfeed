@@ -17,3 +17,4 @@ cache/
 
 # Your own settings. Start from paperfeed/config.example.json.
 paperfeed/config.json
+paperfeed/config.json.bak

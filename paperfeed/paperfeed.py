@@ -29,6 +29,7 @@ import digest as digest_module
 import library
 import mailer
 import phrasing
+import query as query_module
 import relevance
 import retro
 import sources
@@ -622,6 +623,174 @@ def command_status(args):
     return 0
 
 
+def describe_set(entry):
+    """One line saying what a keyword set actually searches for."""
+    if entry.get("query"):
+        return entry["query"]
+    parts = [" OR ".join(entry["terms"])] if entry["terms"] else []
+    parts.extend(entry.get("all_of") or [])
+    if entry.get("authors"):
+        parts.append("by " + " or ".join(entry["authors"]))
+    return " AND ".join(part for part in parts if part) or "(nothing)"
+
+
+def explain_set(entry, cfg, count=True):
+    """Print how one keyword set reaches each search engine.
+
+    The point of this is that the two engines are not equivalent, and where
+    they differ the difference should be on the screen rather than buried.
+    """
+    print("\n  %s" % entry["name"])
+    print("    you wrote : %s" % describe_set(entry))
+
+    tree = sources.parsed_query(entry)
+    if tree is None:
+        print("    (still using the old terms / all_of lists - run "
+              "'migrate-queries' to convert it)")
+
+    notes = []
+    pubmed_term = sources._pubmed_query(entry, notes)
+    print("    PubMed    : %s" % pubmed_term)
+
+    preprint_notes = []
+    from datetime import date as _date, timedelta as _timedelta
+    end = _date.today()
+    start = end - _timedelta(days=cfg["lookback_days"])
+    preprint_term = sources._preprint_query(entry, start, end, preprint_notes)
+    if preprint_term is None:
+        print("    preprints : nothing can match - see the note below")
+    else:
+        print("    preprints : %s" % preprint_term)
+
+    if tree is not None:
+        groups = query_module.concept_groups(tree)
+        print("    concepts  : %d (%s)"
+              % (len(groups),
+                 "; ".join(query_module.unparse(group) for group in groups)))
+
+    if count:
+        contact = cfg.get("contact_email", "")
+        try:
+            total, _, more = sources.count_pubmed(
+                entry, cfg["lookback_days"], contact)
+            notes.extend(more)
+            print("    last %d days: %s on PubMed"
+                  % (cfg["lookback_days"], phrasing.count(total, "paper")))
+        except Exception as error:
+            print("    last %d days: PubMed could not be reached (%s)"
+                  % (cfg["lookback_days"], error))
+        try:
+            total, _, more = sources.count_preprints(
+                entry, cfg["lookback_days"], contact)
+            preprint_notes.extend(more)
+            if total is not None:
+                print("                 %s as preprints"
+                      % phrasing.count(total, "paper"))
+        except Exception as error:
+            print("                 Europe PMC could not be reached (%s)" % error)
+
+    for note in notes + preprint_notes:
+        print("    note      : %s" % note)
+
+
+def command_query(args):
+    """Try a query out before putting it in config.json."""
+    if args.cheatsheet or not args.text:
+        print(query_module.CHEATSHEET)
+        if not args.text:
+            return 0
+
+    try:
+        tree = query_module.parse(args.text)
+    except query_module.QueryError as error:
+        print("That query cannot be read:\n\n      %s" % error)
+        return 1
+
+    entry = {"name": "your query", "query": args.text, "terms": [],
+             "all_of": [], "authors": [], "fields": "title_abstract"}
+    cfg = {"lookback_days": args.days, "contact_email": ""}
+    try:
+        cfg = load_config_or_exit(args.config)
+        cfg = dict(cfg)
+        cfg["lookback_days"] = args.days
+    except SystemExit:
+        pass
+
+    print("\nReading it back:\n")
+    for line in query_module.describe(tree).splitlines():
+        print("    %s" % line)
+    explain_set(entry, cfg, count=not args.no_count)
+    return 0
+
+
+def command_migrate_queries(args):
+    """Rewrite terms / all_of / authors as a written query, showing the
+    before and after counts so that nothing changes silently."""
+    cfg = load_config_or_exit(args.config)
+    path = cfg["config_path"]
+    raw = json.load(open(path, encoding="utf-8"))
+
+    contact = cfg.get("contact_email", "")
+    lookback = cfg["lookback_days"]
+    changes = []
+
+    for entry in raw.get("keyword_sets", []):
+        name = entry.get("name", "?")
+        if entry.get("query"):
+            print("\n  %s: already has a query, left alone." % name)
+            continue
+        try:
+            written = query_module.from_legacy(entry)
+        except query_module.NotMigratable as why:
+            print("\n  %s: NOT converted - %s" % (name, why))
+            continue
+
+        print("\n  %s" % name)
+        print("    before: %s" % describe_set(
+            {"terms": entry.get("terms") or [], "all_of": entry.get("all_of") or [],
+             "authors": entry.get("authors") or [], "query": ""}))
+        print("    after : %s" % written)
+
+        if not args.no_count:
+            after = dict(entry)
+            after["query"] = written
+            for label, counter in (("PubMed", sources.count_pubmed),
+                                   ("preprints", sources.count_preprints)):
+                try:
+                    before_n = counter(entry, lookback, contact)[0]
+                    after_n = counter(after, lookback, contact)[0]
+                    print("    %-9s %s -> %s in the last %d days"
+                          % (label + ":",
+                             "n/a" if before_n is None else before_n,
+                             "n/a" if after_n is None else after_n, lookback))
+                except Exception as error:
+                    print("    %-9s could not be counted (%s)" % (label + ":", error))
+
+        entry["query"] = written
+        changes.append(name)
+
+    if not changes:
+        print("\nNothing to convert.")
+        return 0
+
+    if not args.write:
+        print("\nThat was a dry run. Nothing has been changed.")
+        print("Run it again with --write to save these queries into %s." % path)
+        return 0
+
+    backup = path + ".bak"
+    with open(backup, "w", encoding="utf-8") as handle:
+        json.dump(json.load(open(path, encoding="utf-8")), handle, indent=2)
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(raw, handle, indent=2)
+        handle.write("\n")
+    print("\nConverted %s. Your old config is saved as %s."
+          % (phrasing.count(len(changes), "keyword set"), backup))
+    print("The old terms / all_of lists were left in place and are now "
+          "ignored; delete them when you are happy.")
+    return 0
+
+
 def command_check(args):
     cfg = load_config_or_exit(args.config)
     print("config.json looks good.")
@@ -634,7 +803,7 @@ def command_check(args):
     )
     for entry in cfg["keyword_sets"]:
         if entry["enabled"]:
-            print("    %s: %s" % (entry["name"], " OR ".join(entry["terms"])))
+            print("    %s: %s" % (entry["name"], describe_set(entry)))
     print(
         "  %s, looking back %d days"
         % (
@@ -676,6 +845,12 @@ def command_check(args):
             else "off - the library only grows when you click Save"
         )
     )
+
+    if getattr(args, "explain", False):
+        print("\n  How each keyword set reaches the two search engines:")
+        for entry in cfg["keyword_sets"]:
+            if entry["enabled"]:
+                explain_set(entry, cfg, count=not args.no_count)
 
     missing = config_module.settings_not_in_file(cfg["config_path"])
     if missing:
@@ -1052,7 +1227,46 @@ def main(argv=None):
     status_parser = subparsers.add_parser("status", help="show current state")
     status_parser.set_defaults(handler=command_status)
 
+    query_parser = subparsers.add_parser(
+        "query", help="try a search query out, or print the syntax cheatsheet"
+    )
+    query_parser.add_argument(
+        "text", nargs="?", default="",
+        help='the query, e.g. \'(IDH1 OR "isocitrate dehydrogenase 1") AND glioma\''
+    )
+    query_parser.add_argument(
+        "--cheatsheet", action="store_true", help="print the syntax guide"
+    )
+    query_parser.add_argument(
+        "--days", type=int, default=14, help="window to count over (default 14)"
+    )
+    query_parser.add_argument(
+        "--no-count", action="store_true", help="do not contact the search engines"
+    )
+    query_parser.set_defaults(handler=command_query)
+
+    migrate_parser = subparsers.add_parser(
+        "migrate-queries",
+        help="convert old terms/all_of lists into written queries",
+    )
+    migrate_parser.add_argument(
+        "--write", action="store_true",
+        help="actually save the changes (otherwise it is a dry run)"
+    )
+    migrate_parser.add_argument(
+        "--no-count", action="store_true", help="skip the before/after counts"
+    )
+    migrate_parser.set_defaults(handler=command_migrate_queries)
+
     check_parser = subparsers.add_parser("check", help="validate config.json")
+    check_parser.add_argument(
+        "--explain", action="store_true",
+        help="show how each keyword set reaches PubMed and Europe PMC"
+    )
+    check_parser.add_argument(
+        "--no-count", action="store_true",
+        help="with --explain, do not contact the search engines"
+    )
     check_parser.add_argument(
         "--costs",
         action="store_true",

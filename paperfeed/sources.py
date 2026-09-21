@@ -18,6 +18,7 @@ from typing import List, Optional
 import requests
 
 import phrasing
+import query
 
 EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 EUROPEPMC = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
@@ -85,8 +86,16 @@ def _describe(error):
     return str(error).split("\n")[0][:160]
 
 
-def _get(url, params, contact_email, expect="json"):
-    """One HTTP GET with retries and a polite pause. Returns parsed JSON or text."""
+def _get(url, params, contact_email, expect="json", require=None):
+    """One HTTP GET with retries and a polite pause. Returns parsed JSON or text.
+
+    `require` names a key the reply must contain. Europe PMC answers roughly
+    one call in twelve with the body {"version": "6.9"} and nothing else -
+    HTTP 200, no results, no error. Without this check that reply is
+    indistinguishable from a quiet week, and a whole source silently
+    disappears from a run. Measured: 12 identical requests, 11 returned 15
+    preprints, one returned nothing at all.
+    """
     agent = "PaperFeed/1.0 (literature alerts"
     agent += "; %s)" % contact_email if contact_email else ")"
     headers = {"User-Agent": agent}
@@ -99,7 +108,15 @@ def _get(url, params, contact_email, expect="json"):
                 url, params=params, headers=headers, timeout=TIMEOUT_SECONDS
             )
             response.raise_for_status()
-            return response.json() if expect == "json" else response.text
+            if expect != "json":
+                return response.text
+            payload = response.json()
+            if require and require not in payload:
+                raise ValueError(
+                    "the reply was missing %r - it carried only %s"
+                    % (require, ", ".join(sorted(payload)) or "nothing")
+                )
+            return payload
         except Exception as error:  # network, HTTP status, or bad JSON
             last_error = error
             if attempt < MAX_ATTEMPTS:
@@ -173,7 +190,25 @@ def _bare(term):
     return term.replace('"', "")
 
 
-def _pubmed_query(keyword_set):
+def default_field(keyword_set):
+    """Where an unscoped term in this set's query is looked for."""
+    return "all" if keyword_set.get("fields") == "all" else "ti_ab"
+
+
+def parsed_query(keyword_set):
+    """The set's written query as a tree, or None if it uses the old fields.
+
+    A set can say what it wants either as a boolean expression in 'query' or
+    with the older terms / all_of / authors lists. When both are present the
+    written query wins, because it is the more precise statement.
+    """
+    text = (keyword_set.get("query") or "").strip()
+    if not text:
+        return None
+    return query.parse(text, default_field(keyword_set))
+
+
+def _pubmed_query(keyword_set, notes=None):
     """Build one PubMed query from a keyword set.
 
         terms    OR'ed together  -> ("a" OR "b")
@@ -185,6 +220,10 @@ def _pubmed_query(keyword_set):
     quoted phrases in the title and abstract, which keeps the noise down;
     set "fields": "all" on the keyword set to search everywhere instead.
     """
+    tree = parsed_query(keyword_set)
+    if tree is not None:
+        return query.to_pubmed(tree, notes)
+
     tag = "" if keyword_set.get("fields") == "all" else "[Title/Abstract]"
 
     def phrase(term):
@@ -377,16 +416,58 @@ def _parse_pubmed_xml(xml_text, set_name):
     return papers
 
 
+def _pubmed_complaints(result):
+    """What PubMed quietly tells you it did not like.
+
+    PubMed never fails a query. It answers HTTP 200 and searches for
+    something else, recording what it ignored in warninglist / errorlist
+    where nothing ever reads it. One live example from this very config:
+    "glioblastoma multi-omics" has never matched a single paper, and every
+    run said so in a field PaperFeed threw away.
+    """
+    found = []
+    warnings = result.get("warninglist") or {}
+    errors = result.get("errorlist") or {}
+
+    for phrase in warnings.get("quotedphrasesnotfound") or []:
+        found.append(
+            "PubMed has no record of the phrase %s anywhere in its index, so "
+            "that part of the query matched nothing. Check the spelling, or "
+            "search for the words separately." % phrase
+        )
+    for word in warnings.get("phrasesignored") or []:
+        found.append("PubMed ignored %r in the query." % word)
+    for message in warnings.get("outputmessages") or []:
+        # "No items found." is an ordinary empty result, not a complaint.
+        # These messages can be about any part of the request, not only the
+        # query, so they are passed through rather than interpreted.
+        if message.strip().rstrip(".").lower() != "no items found":
+            found.append("PubMed said: %s" % message)
+    for key in ("phrasesnotfound", "fieldsnotfound"):
+        for item in errors.get(key) or []:
+            found.append("PubMed did not recognise %r in the query." % item)
+    return found
+
+
 def fetch_pubmed(keyword_set, lookback_days, max_results, contact_email="", stats=None):
     start, end = _window(lookback_days)
+    notes = []
+    term = _pubmed_query(keyword_set, notes)
+    if stats is not None:
+        stats["query"] = term
     search = _get(
         EUTILS + "/esearch.fcgi",
         {
             "db": "pubmed",
-            "term": _pubmed_query(keyword_set),
+            "term": term,
             "retmax": max_results,
             "retmode": "json",
-            "sort": "date",
+            # No "sort": PubMed rejects "date" as a sort schema and says so in
+            # a warning nobody was reading. Its default order is PMID
+            # descending, and a PMID is assigned when a record enters PubMed -
+            # which, with datetype=edat, is exactly the newest-first order the
+            # feed wants. Asking for sort=pub_date would order by journal
+            # publication date instead, which is a different question.
             "datetype": "edat",  # date added to PubMed
             "mindate": start.strftime("%Y/%m/%d"),
             "maxdate": end.strftime("%Y/%m/%d"),
@@ -396,12 +477,14 @@ def fetch_pubmed(keyword_set, lookback_days, max_results, contact_email="", stat
 
     result = search.get("esearchresult", {}) or {}
     ids = result.get("idlist", [])
+    notes.extend(_pubmed_complaints(result))
     if stats is not None:
         try:
             stats["available"] = int(result.get("count", 0))
         except (TypeError, ValueError):
             pass
         stats["fetched"] = len(ids)
+        stats["notes"] = notes
     if not ids:
         return []
 
@@ -418,8 +501,13 @@ def fetch_pubmed(keyword_set, lookback_days, max_results, contact_email="", stat
 # Preprints, via Europe PMC
 # --------------------------------------------------------------------------
 
-def _europepmc_terms(keyword_set):
+def _europepmc_terms(keyword_set, notes=None, tree=None):
     """The same terms / all_of / authors logic, in Europe PMC's syntax."""
+    if tree is None:
+        tree = parsed_query(keyword_set)
+    if tree is not None:
+        return query.to_europepmc(tree, notes)
+
     everywhere = keyword_set.get("fields") == "all"
 
     def phrase(term):
@@ -450,13 +538,25 @@ def _europepmc_terms(keyword_set):
     return " AND ".join(clauses)
 
 
-def _preprint_query(keyword_set, start, end):
+def _preprint_query(keyword_set, start, end, notes=None):
     """SRC:PPR restricts results to preprints: bioRxiv, medRxiv, arXiv,
-    Research Square and others, all searchable through one endpoint."""
-    return "(%s) AND (SRC:PPR) AND (FIRST_PDATE:[%s TO %s])" % (
-        _europepmc_terms(keyword_set),
-        start.isoformat(),
-        end.isoformat(),
+    Research Square and others, all searchable through one endpoint.
+
+    Returns None when the query cannot match a preprint at all - which
+    happens when it requires a MeSH heading, since preprints are never
+    MeSH-indexed. Saying so beats running a search that must return nothing.
+    """
+    tree = parsed_query(keyword_set)
+    if tree is not None:
+        tree = query.for_preprints(tree, notes)
+        if tree is None:
+            return None
+
+    terms = _europepmc_terms(keyword_set, notes, tree)
+    if not terms.startswith("("):
+        terms = "(%s)" % terms
+    return "%s AND (SRC:PPR) AND (FIRST_PDATE:[%s TO %s])" % (
+        terms, start.isoformat(), end.isoformat()
     )
 
 
@@ -564,24 +664,43 @@ def _parse_europepmc(items, set_name):
 
 def fetch_preprints(keyword_set, lookback_days, max_results, contact_email="", stats=None):
     start, end = _window(lookback_days)
+    notes = []
+    term = _preprint_query(keyword_set, start, end, notes)
+    if stats is not None:
+        stats["notes"] = notes
+        stats["query"] = term or ""
+    if term is None:
+        # Not an error and not an empty week: this query can never match a
+        # preprint, and the note already explains why.
+        return []
     payload = _get(
         EUROPEPMC,
         {
-            "query": _preprint_query(keyword_set, start, end),
+            "query": term,
             "format": "json",
             "resultType": "core",
             "pageSize": min(max_results, 100),   # API maximum per page
             "sort": "P_PDATE_D desc",
         },
         contact_email,
+        require="resultList",
     )
 
     items = payload.get("resultList", {}).get("result", [])[:max_results]
     if stats is not None:
-        try:
-            stats["available"] = int(payload.get("hitCount", 0))
-        except (TypeError, ValueError):
-            pass
+        if "hitCount" not in payload:
+            # Europe PMC leaves the total out of some replies. Reading a
+            # missing total as zero would quietly hide the "only the newest N
+            # were fetched" warning, so say that the total is unknown.
+            notes.append(
+                "Europe PMC did not report how many papers matched, so the "
+                "total below counts only what was fetched."
+            )
+        else:
+            try:
+                stats["available"] = int(payload.get("hitCount", 0))
+            except (TypeError, ValueError):
+                pass
         stats["fetched"] = len(items)
 
     return _parse_europepmc(items, keyword_set["name"])
@@ -591,6 +710,63 @@ SOURCES = {
     "pubmed": ("PubMed", fetch_pubmed),
     "preprints": ("Preprints", fetch_preprints),
 }
+
+
+# --------------------------------------------------------------------------
+# Counting without fetching
+# --------------------------------------------------------------------------
+#
+# Asking "how many would this match?" is the cheapest way to see whether a
+# query says what you meant. Both of these fetch no papers at all.
+
+def count_pubmed(keyword_set, lookback_days, contact_email=""):
+    """Returns (how_many, sent_query, complaints)."""
+    start, end = _window(lookback_days)
+    notes = []
+    term = _pubmed_query(keyword_set, notes)
+    payload = _get(
+        EUTILS + "/esearch.fcgi",
+        {
+            "db": "pubmed",
+            "term": term,
+            "retmax": 0,
+            "retmode": "json",
+            "datetype": "edat",
+            "mindate": start.strftime("%Y/%m/%d"),
+            "maxdate": end.strftime("%Y/%m/%d"),
+        },
+        contact_email,
+    )
+    result = payload.get("esearchresult", {}) or {}
+    notes.extend(_pubmed_complaints(result))
+    try:
+        total = int(result.get("count", 0))
+    except (TypeError, ValueError):
+        total = 0
+    return total, term, notes
+
+
+def count_preprints(keyword_set, lookback_days, contact_email=""):
+    """Returns (how_many, sent_query, complaints). how_many is None when the
+    query cannot match a preprint at all."""
+    start, end = _window(lookback_days)
+    notes = []
+    term = _preprint_query(keyword_set, start, end, notes)
+    if term is None:
+        return None, "", notes
+    payload = _get(
+        EUROPEPMC,
+        {"query": term, "format": "json", "pageSize": 1},
+        contact_email,
+        require="resultList",
+    )
+    if "hitCount" not in payload:
+        notes.append("Europe PMC did not report a total for this query.")
+        return 0, term, notes
+    try:
+        return int(payload.get("hitCount", 0)), term, notes
+    except (TypeError, ValueError):
+        return 0, term, notes
 
 
 def fetch_all(keyword_set, cfg):
@@ -625,6 +801,9 @@ def fetch_all(keyword_set, cfg):
         except Exception as error:
             errors.append("%s / %s: %s" % (label, keyword_set["name"], error))
             continue
+
+        for note in stats.get("notes") or []:
+            notices.append("%s / %s: %s" % (label, keyword_set["name"], note))
 
         # Say so when a cap threw papers away. Silently keeping the newest N
         # of a much larger set is how a keyword set quietly stops working.
@@ -661,7 +840,7 @@ EUROPEPMC_PAGE = 100        # the API maximum
 def fetch_pubmed_range(keyword_set, start, end, contact_email="",
                        datetype="pdat", progress=None):
     """Every PubMed paper published in [start, end]. Returns (papers, total)."""
-    query = _pubmed_query(keyword_set)
+    search = _pubmed_query(keyword_set)
     ids = []
     total = 0
     offset = 0
@@ -671,7 +850,7 @@ def fetch_pubmed_range(keyword_set, start, end, contact_email="",
             EUTILS + "/esearch.fcgi",
             {
                 "db": "pubmed",
-                "term": query,
+                "term": search,
                 "retmode": "json",
                 "datetype": datetype,
                 "mindate": start.strftime("%Y/%m/%d"),
@@ -711,7 +890,10 @@ def fetch_pubmed_range(keyword_set, start, end, contact_email="",
 def fetch_preprints_range(keyword_set, start, end, contact_email="",
                           progress=None):
     """Every preprint first published in [start, end]. Returns (papers, total)."""
-    query = _preprint_query(keyword_set, start, end)
+    search = _preprint_query(keyword_set, start, end)
+    if search is None:
+        # The query needs a MeSH heading, so no preprint can match it.
+        return [], 0
     papers = []
     cursor = "*"
     total = 0
@@ -720,7 +902,7 @@ def fetch_preprints_range(keyword_set, start, end, contact_email="",
         payload = _get(
             EUROPEPMC,
             {
-                "query": query,
+                "query": search,
                 "format": "json",
                 "resultType": "core",
                 "pageSize": EUROPEPMC_PAGE,
@@ -728,6 +910,7 @@ def fetch_preprints_range(keyword_set, start, end, contact_email="",
                 "sort": "P_PDATE_D desc",
             },
             contact_email,
+            require="resultList",
         )
         try:
             total = int(payload.get("hitCount", 0))

@@ -10,6 +10,8 @@ Keys beginning with "_" are treated as comments and ignored.
 import json
 import os
 
+import query
+
 DEFAULTS = {
     "interval_days": 3,
     # Overrides interval_days when above zero. Useful for testing, and for
@@ -150,12 +152,20 @@ def _validate_keyword_sets(raw):
         authors = string_list("authors")
         exclude = string_list("exclude")
 
-        # A set is valid if it can search for *something*: keywords, a
-        # required phrase, or an author to follow.
-        if not (clean_terms or all_of or authors):
+        written_query = entry.get("query")
+        if written_query is not None and not isinstance(written_query, str):
             raise ConfigError(
-                "Keyword set %r has nothing to search for. Give it 'terms', "
-                "'all_of', or 'authors'." % name
+                "Keyword set %r: 'query' must be text, like "
+                "(IDH1 OR \"isocitrate dehydrogenase 1\") AND glioma" % name
+            )
+        written_query = (written_query or "").strip()
+
+        # A set is valid if it can search for *something*: a written query,
+        # keywords, a required phrase, or an author to follow.
+        if not (written_query or clean_terms or all_of or authors):
+            raise ConfigError(
+                "Keyword set %r has nothing to search for. Give it a 'query', "
+                "or 'terms', 'all_of', or 'authors'." % name
             )
 
         fields = entry.get("fields", "title_abstract")
@@ -163,6 +173,33 @@ def _validate_keyword_sets(raw):
             raise ConfigError(
                 "Keyword set %r has 'fields': %r - it must be \"title_abstract\" "
                 "or \"all\"." % (name, fields)
+            )
+
+        # Parse the query now rather than at search time. Neither search
+        # engine rejects a broken query - both answer HTTP 200 with the wrong
+        # papers - so this is the only place a mistake can still be caught.
+        if written_query:
+            default_field = "all" if fields == "all" else "ti_ab"
+            try:
+                query.parse(written_query, default_field)
+            except query.QueryError as error:
+                raise ConfigError(
+                    "Keyword set %r has a query that cannot be read:\n\n      %s"
+                    % (name, error)
+                )
+
+        require_title_groups = entry.get("require_title_groups", 0)
+        if isinstance(require_title_groups, bool) or not isinstance(
+            require_title_groups, int
+        ):
+            raise ConfigError(
+                "Keyword set %r: 'require_title_groups' must be a whole number "
+                "- how many of your bracketed concepts must appear in the "
+                "title. Found %r." % (name, require_title_groups)
+            )
+        if require_title_groups < 0:
+            raise ConfigError(
+                "Keyword set %r: 'require_title_groups' cannot be negative." % name
             )
 
         journals = entry.get("journals") or {}
@@ -224,6 +261,8 @@ def _validate_keyword_sets(raw):
             {
                 "name": name,
                 "interests": set_interests.strip(),
+                "query": written_query,
+                "require_title_groups": require_title_groups,
                 "terms": clean_terms,
                 "all_of": all_of,
                 "authors": authors,

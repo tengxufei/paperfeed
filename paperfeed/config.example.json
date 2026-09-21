@@ -1,15 +1,13 @@
 {
   "_about": "PaperFeed config. Keys starting with _ are comments and are ignored.",
-  "_keyword_sets": "One block per topic you follow. Every field except 'name' is optional, but a set needs at least one of terms / all_of / authors.",
+  "_keyword_sets": "One block per topic you follow. Every field except 'name' is optional, but a set needs a 'query' (preferred) or at least one of terms / all_of / authors.",
+  "_query": "What this topic is, written as a boolean expression: AND / OR / NOT in capitals, \"quoted phrases\", brackets to group, and title: abstract: author: journal: mesh: to say where to look. Run 'python3 paperfeed.py query --cheatsheet' for the syntax, and 'python3 paperfeed.py query \"...\"' to try one out before saving it. The shape that works is: group your synonyms, then AND the groups together - each bracketed group counts as one concept when ranking.",
   "keyword_sets": [
     {
-      "_terms": "OR'ed together: a paper matching ANY of these is a hit. Searched as exact phrases in title+abstract. A term containing [ ] is passed to PubMed as raw search syntax.",
       "name": "de novo protein design",
-      "terms": [
-        "de novo protein design",
-        "RFdiffusion",
-        "ProteinMPNN"
-      ],
+      "query": "(\"de novo protein design\" OR RFdiffusion OR ProteinMPNN) AND (binder OR \"binding affinity\" OR experimental)",
+      "_terms": "The older style, still supported. OR'ed together: a paper matching ANY of these is a hit, searched as exact phrases in title+abstract. If a set has both, 'query' wins. Run 'python3 paperfeed.py migrate-queries' to convert these into a query.",
+      "terms": [],
       "_all_of": "Every term here must ALSO appear. Use it to narrow a noisy set, e.g. terms=[binder] + all_of=[protein].",
       "all_of": [],
       "_authors": "Follow specific people. Written as PubMed writes them: surname then initials. Papers by them get a scoring bonus. Note the search APIs are loose - 'Baker D' will also return papers by 'Baker DA' - but only an exact initial match earns the bonus.",
@@ -25,19 +23,19 @@
       },
       "_sources": "Override the global sources for this set only, e.g. {\"pubmed\": false} to make it preprints-only.",
       "_min_score": "Override the global ranking.min_score for this set. Useful for a broad term: a title match is worth 4, so min_score 4 means the paper must be ABOUT this, not merely mention it. Hidden papers are reported and not marked as seen.",
+      "_require_title_groups": "A blunter noise filter than min_score: how many of your bracketed concepts must appear in the TITLE, not just the abstract. 0 (the default) means no such requirement; 1 means the paper must be at least partly about your topic; 2 on a two-concept query means it must be about both.",
+      "require_title_groups": 0,
       "enabled": true
     },
     {
-      "name": "protein language models",
-      "terms": [
-        "protein language model",
-        "ESM-2",
-        "protein structure prediction"
-      ],
+      "_comment": "A tighter example. mesh: is a precision layer for PubMed, but MeSH headings are only assigned once a paper has been indexed - 73% of the newest papers have none, and preprints never do. So put it in an OR alongside plain words, never on its own.",
+      "name": "IDH1 in glioma",
+      "query": "(IDH1 OR \"isocitrate dehydrogenase 1\" OR \"IDH-mutant\" OR mesh:\"Isocitrate Dehydrogenase\") AND (glioma OR glioblastoma OR astrocytoma)",
+      "require_title_groups": 1,
       "enabled": true
     }
   ],
-  "_ranking": "How papers are ordered. A title match is weighted above two abstract mentions on purpose - the title is what a paper is ABOUT. recency_bonus is deliberately small: inside a 14-day window almost everything is recent, so it is a tiebreaker, not a driver. Set enabled=false to go back to plain date order. min_score hides weak matches (try 2 or 3).",
+  "_ranking": "How papers are ordered. Scoring works per CONCEPT - each bracketed group in your query - not per word, so writing one idea three ways (glioma OR glioblastoma OR astrocytoma) does not score three times. A title match is weighted above two abstract mentions on purpose: the title is what a paper is ABOUT. recency_bonus is deliberately small: inside a 14-day window almost everything is recent, so it is a tiebreaker, not a driver. Set enabled=false to go back to plain date order. min_score hides weak matches (try 2 or 3). Citation counts never affect this score.",
   "ranking": {
     "enabled": true,
     "title_weight": 4.0,
