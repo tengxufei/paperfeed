@@ -13,6 +13,7 @@ without PaperFeed having to store papers you never asked it to keep.
 
 import html
 import json
+import re
 
 import phrasing
 from datetime import datetime
@@ -30,7 +31,40 @@ body {
   line-height: 1.55; margin: 0; padding: 24px 16px 64px;
   background: #f6f7f9; color: #1a1a1a;
 }
-.wrap { max-width: 780px; margin: 0 auto; }
+.wrap { max-width: 820px; margin: 0 auto; }
+
+/* jump-nav (A3) */
+.jump {
+  position: sticky; top: 0; z-index: 20; margin: 0 -16px 18px;
+  padding: 9px 16px; background: rgba(246,247,249,.94);
+  backdrop-filter: blur(6px); border-bottom: 1px solid #e0e3e8;
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  font-size: 12.5px;
+}
+.jump a { color: #33507a; text-decoration: none; padding: 3px 9px;
+          border-radius: 11px; background: #eceff3; }
+.jump a:hover { background: #dfe5ee; }
+.jump a b { color: #6a727c; font-weight: 600; }
+.jump .spacer { margin-left: auto; }
+.jump label { cursor: pointer; user-select: none; color: #55606d; }
+
+/* compact mode (A1) - pure CSS, driven by a checkbox, so the file still
+   needs no JavaScript to work */
+#compact { position: absolute; opacity: 0; pointer-events: none; }
+#compact:checked ~ .wrap .paper {
+  padding: 6px 12px; margin-bottom: 5px; border-radius: 5px;
+}
+#compact:checked ~ .wrap .paper .byline,
+#compact:checked ~ .wrap .paper .why,
+#compact:checked ~ .wrap .paper .chips,
+#compact:checked ~ .wrap .paper details,
+#compact:checked ~ .wrap .paper .ai-why { display: none; }
+#compact:checked ~ .wrap .paper .head { align-items: center; }
+#compact:checked ~ .wrap .paper a.title { font-size: 14px; font-weight: 500; }
+#compact:checked ~ .wrap .paper .tags {
+  margin: 2px 0 0 48px; font-size: 11px; opacity: .8;
+}
+#compact:checked ~ .wrap .showing { margin-bottom: 6px; }
 h1 { font-size: 22px; margin: 0 0 4px; }
 .meta { color: #666; font-size: 13px; margin-bottom: 6px; }
 .counts { color: #666; font-size: 13px; margin: 0 0 24px; }
@@ -80,15 +114,26 @@ details.rest { margin-top: 4px; }
 .score.strong { background: #d9ead3; color: #2c5d1e; }
 .score.ai { background: #ece3f5; color: #573a78; }
 .score.medium { background: #e8edf4; color: #33507a; }
-.paper a.title { font-size: 16px; font-weight: 600; color: #11467f; text-decoration: none; }
+.paper a.title { font-size: 16.5px; font-weight: 600; color: #11467f;
+                 text-decoration: none; line-height: 1.35; }
 .paper a.title:hover { text-decoration: underline; }
-.byline { font-size: 13px; color: #555; margin: 6px 0 0; }
+.byline { font-size: 13px; color: #555; margin: 5px 0 0; line-height: 1.45; }
 .affil { color: #777; font-style: italic; }
 .why { font-size: 12px; color: #6b7a52; margin: 5px 0 0; }
 .ai-why { font-size: 13px; color: #573a78; margin: 6px 0 0; }
 .theme { background: #fff; border: 1px solid #e2e4e8; border-radius: 8px;
-         padding: 16px 18px; margin-bottom: 14px; }
-.theme h3 { margin: 0 0 8px; font-size: 17px; color: #11467f; }
+         padding: 18px 20px; margin-bottom: 16px; border-left: 4px solid #6f86a8; }
+.theme h3 { margin: 0 0 10px; font-size: 18px; color: #11467f;
+            line-height: 1.3; letter-spacing: -.01em; }
+.theme .num { display: inline-block; width: 26px; height: 26px; margin-right: 9px;
+              border-radius: 50%; background: #e8edf4; color: #33507a;
+              font-size: 13px; line-height: 26px; text-align: center;
+              font-weight: 700; vertical-align: 2px; }
+.theme p { line-height: 1.6; }
+.theme ol { margin: 0; padding-left: 20px; font-size: 13px; }
+.theme ol li { margin-bottom: 5px; }
+.theme .reflabel { font-size: 11.5px; text-transform: uppercase;
+                   letter-spacing: .05em; color: #77818d; margin: 12px 0 5px; }
 .theme p { margin: 0 0 10px; font-size: 14px; }
 .theme ol { margin: 0; padding-left: 20px; font-size: 13px; }
 .theme li { margin-bottom: 4px; }
@@ -126,8 +171,22 @@ details p { font-size: 13.5px; color: #333; margin: 8px 0 0; }
   .paper a.title { font-size: 17px; }
   summary { padding: 6px 0; }
 }
+@media print {
+  body { background: #fff; color: #000; padding: 0; }
+  .jump, .pf-bar, .pf-save { display: none !important; }
+  .paper { break-inside: avoid; border-color: #ccc; box-shadow: none; }
+  details { display: block; }
+  details > summary { display: none; }
+  a { color: #000; text-decoration: none; }
+  .paper a.title::after { content: " (" attr(href) ")"; font-size: 10px;
+                          font-weight: 400; color: #555; word-break: break-all; }
+}
 @media (prefers-color-scheme: dark) {
   body { background: #16181c; color: #e6e6e6; }
+  .jump { background: rgba(22,24,28,.94); border-bottom-color: #2e333a; }
+  .jump a { background: #282c33; color: #9dbbe4; }
+  .jump a:hover { background: #333941; }
+  .jump label { color: #98a0a8; }
   h2 { color: #b9bec6; border-bottom-color: #33373d; }
   .highlights { color: #d8ab63; border-bottom-color: #7a5a1e; }
   .paper, .empty, .errors, .hidden-note { background: #1f2228; border-color: #33373d; }
@@ -166,6 +225,10 @@ def _shorten(text, limit):
 
 def _escape(value):
     return html.escape(str(value or ""))
+
+
+def _slug(name):
+    return "s-" + re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:40]
 
 
 def _score_class(score):
@@ -238,9 +301,10 @@ def _paper_html(paper, show_scores):
         )
     if show_scores:
         head.append(
-            '<span class="%s" title="%s">%.1f</span>'
+            '<span class="%s" style="--fill:%d%%" title="%s">%.1f</span>'
             % (
                 _score_class(paper.score),
+                int(min(100, paper.score * 10)),
                 _escape("; ".join(paper.score_reasons) or "no matching terms"),
                 paper.score,
             )
@@ -302,7 +366,9 @@ def render_html(groups, meta):
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
         "<title>PaperFeed &mdash; %s</title>" % _escape(meta.get("date_label", "")),
-        "<style>%s</style></head><body><div class=\"wrap\">" % STYLE,
+        "<style>%s</style></head><body>" % STYLE,
+        '<input type="checkbox" id="compact">',
+        '<div class="wrap">',
         "<h1>PaperFeed</h1>",
         '<p class="meta">%s &middot; %d new paper%s &middot; searched the last %d days</p>'
         % (
@@ -313,6 +379,18 @@ def render_html(groups, meta):
         ),
         _counts_line(meta),
     ]
+
+    jump = [
+        '<a href="#%s">%s <b>%d</b></a>' % (_slug(name), _escape(name), len(papers))
+        for name, papers in groups
+        if papers
+    ]
+    if jump:
+        parts.append(
+            '<nav class="jump">%s<span class="spacer"></span>'
+            '<label for="compact">compact list</label>'
+            '<a href="dashboard.html">dashboard</a></nav>' % "".join(jump)
+        )
 
     if meta.get("errors"):
         parts.append('<div class="errors"><strong>Some sources did not respond.</strong><ul>')
@@ -344,7 +422,10 @@ def render_html(groups, meta):
             if not papers:
                 continue
             best, rest = papers[:cut], papers[cut:]
-            parts.append('<details class="set" open><summary><div class="setbar">')
+            parts.append(
+                '<details class="set" id="%s" open><summary><div class="setbar">'
+                % _slug(name)
+            )
             parts.append("<span>%s</span>" % _escape(name))
             parts.append(
                 '<span class="setcount">%d new</span></div></summary>'
@@ -585,12 +666,16 @@ def render_trends(themes, meta):
             "The papers were fetched, but the summary step did not complete.</div>"
         )
 
-    for theme in themes:
+    for number, theme in enumerate(themes, 1):
         block = ['<div class="theme">']
-        block.append("<h3>%s</h3>" % _escape(theme.get("theme", "")))
+        block.append(
+            '<h3><span class="num">%d</span>%s</h3>'
+            % (number, _escape(theme.get("theme", "")))
+        )
         if theme.get("summary"):
             block.append("<p>%s</p>" % _escape(theme["summary"]))
         if theme.get("papers"):
+            block.append('<div class="reflabel">Representative papers</div>')
             block.append("<ol>")
             for paper in theme["papers"]:
                 block.append(

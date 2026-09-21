@@ -47,6 +47,48 @@ routinely strip stylesheets and ignore media queries, so the email version
 writes its styling directly onto each element and skips the collapsible
 abstracts. It is built for a phone screen. The full version stays on your Mac.
 
+## The dashboard
+
+Rebuilt by every run, at `digests/dashboard.html` (or **Dashboard** in the
+top bar while `serve` is running):
+
+- **Tiles** — new this run, topics with hits, share with free full text,
+  how many your filters hid, how many you have saved.
+- **Where this run came from** — papers by keyword set and by source.
+- **How relevant, really** — the score distribution. This is how you pick a
+  `min_score` from evidence instead of guessing.
+- **Volume over time** — new papers per run. A line flattening toward zero
+  means a keyword set has stopped earning its place.
+- **Trend alerts** — subjects behaving differently from their own history,
+  flagged *new*, *rising* or *fading*. Needs a few runs before it means
+  anything.
+- **How your subjects connect** — subjects that share a paper are linked;
+  bigger nodes appear on more papers, thicker lines co-occur more often.
+- **Most common subjects** — what your keyword sets actually pulled in,
+  which is not always what you thought you asked for.
+- **Your library** — reading status and what you save by topic.
+
+Every chart is SVG drawn into the page by Python. No chart library and no
+CDN, so the file works with no internet and prints cleanly.
+
+Trend alerts need a little history, kept in `state/topics.json`: per-run
+subject *counts*, a few hundred bytes a run. No papers are stored there.
+
+## Reading a long digest
+
+Three things help when a run is 200 papers:
+
+- **Jump bar** at the top — your keyword sets with counts; click to jump.
+  It stays visible as you scroll.
+- **compact list** — a toggle that collapses every card to one line: score,
+  title, source, date. Pure CSS, so it works in a saved file with no
+  JavaScript.
+- **Score meters** — the score chip fills in proportion to the score, so
+  rank registers without reading each number.
+
+Printing a digest gives a clean page: navigation and buttons drop out,
+abstracts expand, and each link's URL is printed after its title.
+
 ## Keeping papers
 
 PaperFeed does not hoard. A run writes its digest and forgets every paper in

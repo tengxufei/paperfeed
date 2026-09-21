@@ -22,6 +22,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import ai
 import digest as digest_module
 import library
+import phrasing
 
 BLOB = re.compile(
     r'<script type="application/json" class="pf-paper">(.*?)</script>', re.S
@@ -42,6 +43,10 @@ INJECTED_CSS = r"""
   background: #f4f5f7; color: #33507a;
 }
 .pf-save:hover { background: #e8edf4; }
+/* keep the save button from re-inflating a row in the digest's compact mode */
+#compact:checked ~ .wrap .paper .pf-save {
+  margin-top: 4px; padding: 2px 9px; font-size: 11px;
+}
 .pf-save.on { background: #d9ead3; border-color: #a9cb99; color: #2c5d1e; }
 .pf-save[disabled] { opacity: .5; cursor: default; }
 @media (prefers-color-scheme: dark) {
@@ -172,7 +177,8 @@ def build_page(page, db_path, config_path=""):
     bar = (
         '<div class="pf-bar">PaperFeed &mdash; click <b>+ Save</b> to keep a paper. '
         '<span id="pf-count">%d</span> on this page are in your library. '
-        '<a href="/library">View library</a></div>' % saved_now
+        '<a href="/library">View library</a> &middot; '
+        '<a href="/dashboard">Dashboard</a></div>' % saved_now
     )
     note = _age_note(Handler.digest_path, config_path)
     if note:
@@ -504,8 +510,9 @@ def library_page(db_path, has_key, ai_on):
             "<style>%s%s</style></head><body><div class=\"wrap\">"
             % (digest_module.STYLE, LIBRARY_CSS),
             "<h1>Your library</h1>",
-            '<p class="meta">%d saved paper%s &middot; '
-            '<a href="/">back to the digest</a></p>' % (total, "" if total == 1 else "s"),
+            '<p class="meta">%s &middot; <a href="/">back to the digest</a> '
+            '&middot; <a href="/dashboard">dashboard</a></p>'
+            % phrasing.count(total, "saved paper"),
             tools,
             '<div class="pills">%s</div>' % pills,
             body,
@@ -536,11 +543,38 @@ class Handler(BaseHTTPRequestHandler):
     def _json(self, payload, status=200):
         self._send(json.dumps(payload), status, "application/json")
 
+    def _send_digest_file(self, name):
+        """Serve a file from the digests folder, and only from there."""
+        folder = os.path.abspath(os.path.dirname(self.digest_path))
+        target = os.path.abspath(os.path.join(folder, name))
+        # Reject anything that escapes the folder (../, absolute paths).
+        if os.path.commonpath([folder, target]) != folder or not target.endswith(".html"):
+            self._send("<h1>Not found</h1>", 404)
+            return
+        if not os.path.exists(target):
+            self._send(
+                "<h1>Not here</h1><p>%s does not exist yet.</p>" % html.escape(name), 404
+            )
+            return
+        with open(target, "r", encoding="utf-8") as handle:
+            self._send(handle.read())
+
     def _ai_key(self):
         cfg = self.cfg or {}
         return ai.read_key(cfg.get("base_dir", ""))
 
     def do_GET(self):
+        if self.path.startswith("/dashboard"):
+            self._send_digest_file("dashboard.html")
+            return
+        # index.html links to dated digests and trend reports, so serve any
+        # page that actually sits in the digests folder.
+        if self.path.endswith(".html") and self.path != "/index.html":
+            self._send_digest_file(self.path.lstrip("/"))
+            return
+        if self.path == "/index.html":
+            self._send_digest_file("index.html")
+            return
         if self.path.startswith("/library"):
             self._send(
                 library_page(

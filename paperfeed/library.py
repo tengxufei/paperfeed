@@ -190,6 +190,28 @@ def count(path):
         return connection.execute("SELECT COUNT(*) AS n FROM saved").fetchone()["n"]
 
 
+def summary(path):
+    """Counts for the dashboard: how many, what state, from which topic."""
+    if not os.path.exists(path):
+        return {"total": 0, "status": {}, "by_set": []}
+    with connect(path) as connection:
+        total = connection.execute("SELECT COUNT(*) AS n FROM saved").fetchone()["n"]
+        status = {
+            row["status"] or "unread": row["n"]
+            for row in connection.execute(
+                "SELECT status, COUNT(*) AS n FROM saved GROUP BY status"
+            )
+        }
+        by_set = [
+            (row["set_name"] or "(unknown)", row["n"])
+            for row in connection.execute(
+                "SELECT set_name, COUNT(*) AS n FROM saved "
+                "GROUP BY set_name ORDER BY n DESC"
+            )
+        ]
+    return {"total": total, "status": status, "by_set": by_set}
+
+
 def _as_dict(row):
     record = dict(row)
     try:

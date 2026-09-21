@@ -24,12 +24,14 @@ from datetime import date, datetime, timedelta
 
 import ai
 import config as config_module
+import dashboard as dashboard_module
 import digest as digest_module
 import library
 import mailer
 import phrasing
 import relevance
 import sources
+import stats as stats_module
 import store as store_module
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -97,6 +99,49 @@ def update_index(cfg, record):
         json.dump(records, handle, indent=2)
     with open(os.path.join(cfg["digest_dir"], "index.html"), "w", encoding="utf-8") as handle:
         handle.write(digest_module.render_index(records))
+
+
+def build_dashboard(cfg, papers, keyword_sets, hidden_count, meta):
+    """Rebuild digests/dashboard.html from this run. Never fatal."""
+    try:
+        run = stats_module.run_stats(papers, keyword_sets)
+        history = stats_module.record(
+            os.path.join(cfg["base_dir"], "state", "topics.json"),
+            run["subjects"],
+            run["total"],
+        )
+        alerts = stats_module.alerts(history, run["subjects"])
+        page = dashboard_module.render(
+            run,
+            dashboard_module._history(cfg["digest_dir"]),
+            alerts,
+            library.summary(cfg["library_path"]),
+            {"date_label": meta["date_label"], "hidden": hidden_count},
+        )
+        path = os.path.join(cfg["digest_dir"], "dashboard.html")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(page)
+        log.info("Dashboard written: %s", path)
+        if alerts:
+            for name, now, verdict, _ in alerts[:4]:
+                log.info("  %-7s %s (%d this run)", verdict, name, now)
+        return path
+    except Exception as error:          # a chart must never cost you a digest
+        log.error("Dashboard could not be built: %s", error)
+        return None
+
+
+def command_dashboard(args):
+    cfg = load_config_or_exit(args.config)
+    setup_logging(cfg["log_path"], verbose=False)
+    path = os.path.join(cfg["digest_dir"], "dashboard.html")
+    if not os.path.exists(path):
+        sys.stderr.write(
+            "No dashboard yet. Run 'python3 paperfeed.py run' first.\n"
+        )
+        return 2
+    print(path)
+    return 0
 
 
 def command_run(args):
@@ -305,6 +350,8 @@ def command_run(args):
     )
     store.save(record_run=True)
 
+    build_dashboard(cfg, new_papers, keyword_sets, len(hidden), meta)
+
     update_index(
         cfg,
         {
@@ -312,6 +359,7 @@ def command_run(args):
             "date_label": meta["date_label"],
             "total": len(new_papers),
             "sources": source_counts,
+            "sets": {name: len(papers) for name, papers in groups},
             "hidden": len(hidden),
         },
     )
@@ -945,6 +993,11 @@ def main(argv=None):
     )
     serve_parser.add_argument("--port", type=int, default=8931)
     serve_parser.set_defaults(handler=command_serve)
+
+    dash_parser = subparsers.add_parser(
+        "dashboard", help="print the path to the dashboard page"
+    )
+    dash_parser.set_defaults(handler=command_dashboard)
 
     saved_parser = subparsers.add_parser("saved", help="list your saved papers")
     saved_parser.add_argument("--limit", type=int, default=100)
