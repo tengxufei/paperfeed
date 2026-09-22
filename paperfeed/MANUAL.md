@@ -48,6 +48,7 @@ scheduler** — change `interval_days` and you never touch launchd again.
 | `sources.py` | talks to PubMed and Europe PMC; one function per source |
 | `relevance.py` | filtering and the explainable 0–10 score |
 | `metrics.py` | citation and journal figures from OpenAlex |
+| `email_digest.py` | the alert email — a separate render, not the web page |
 | `collection.py` | what has accumulated: the library, the cache, the history |
 | `store.py` | what has been shown before, so nothing repeats |
 | `digest.py` | renders the digest, the email, the trend report |
@@ -440,6 +441,39 @@ flood a library meant to record your ongoing reading.
 ---
 
 ## 6. Email
+
+The alert is the only part of PaperFeed that reaches you away from the Mac,
+so it carries everything the tool knows about a paper, not just its title.
+
+**Subject** is the count plus the best paper's title — on a phone the
+subject is often all you see. **Preheader** (the grey line beside it in the
+inbox) names which topics moved and how strong the best match is.
+
+The body: a **Start here** card for the single best paper, set larger, with
+the AI's one-line reason quoted and *Read the paper* / *Free full text*
+buttons. Then a line on anything **rising in your field**. Then each topic:
+up to five full cards — labelled `AI 9` and `8.0` chips, authors and
+institution, the AI reason, badges (preprint, review, **retracted**, free
+full text, DOAJ), and the citation and journal figures — followed by the
+rest as one-line rows so nothing is invisible. A footer with your library
+count closes it.
+
+Without an API key there is no AI score or reason; the cards fall back to
+the local score and its reasons and still read properly.
+
+**Why it is a separate render from the web page.** Mail clients strip
+`<style>` blocks, ignore flex and grid, drop SVG, and refuse `<details>`. So
+`email_digest.py` writes every rule onto its element and lays out in tables,
+and no chart or dashboard ever reaches the inbox. Gmail also clips a message
+at 102,400 bytes and hides the rest behind "View entire message", cutting
+mid-tag — so the email is budgeted to 90 KB, shortens itself if it must, and
+says how many papers it left out. Eighty papers fit uncut.
+
+Dark mode is honest rather than perfect: the message declares
+`color-scheme: light dark` and puts an explicit background on every cell,
+but Gmail on Android force-inverts and nothing prevents that. The aim is
+still readable, not identical.
+
 
 ```json
 "email": {

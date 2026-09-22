@@ -27,6 +27,7 @@ import collection
 import config as config_module
 import dashboard as dashboard_module
 import digest as digest_module
+import email_digest
 import library
 import mailer
 import metrics as metrics_module
@@ -198,6 +199,7 @@ def build_dashboard(cfg, papers, window_papers, keyword_sets, hidden_count, meta
                           dashboard_module.slug(name)))
 
         written = 0
+        rising = []
         for scope, run, landscape, filename in pages:
             alerts = stats_module.alerts(
                 history, landscape["subjects"],
@@ -226,15 +228,24 @@ def build_dashboard(cfg, papers, window_papers, keyword_sets, hidden_count, meta
                       encoding="utf-8") as handle:
                 handle.write(page)
             written += 1
+            if scope is None:
+                # One short phrase per notable subject, for the alert email.
+                # Only what is picking up: "fading" is not news worth an
+                # inbox, and the dashboard covers it either way.
+                rising = [
+                    "%s is %s (%d this run, %s)" % (name_, verdict, now, detail)
+                    for name_, now, verdict, detail in alerts
+                    if verdict in ("new", "rising")
+                ][:3]
             if scope and alerts:
                 for name_, now, verdict, _ in alerts[:2]:
                     log.info("  %-7s %s in %r (%d this run)", verdict, name_, scope, now)
 
         log.info("Dashboards written: %d (one overall, one per keyword set)", written)
-        return written
+        return written, rising
     except Exception as error:          # a chart must never cost you a digest
         log.error("Dashboards could not be built: %s", error)
-        return 0
+        return 0, []
 
 
 def _parse_day(text, label):
@@ -560,8 +571,6 @@ def command_run(args):
         "library_total": library.count(cfg["library_path"]),
     }
     html_text = digest_module.render_html(groups, meta)
-    text_body = digest_module.render_text(groups, meta)
-    email_html = digest_module.render_email_html(groups, meta)
 
     if args.dry_run:
         log.info("Dry run: no digest written, nothing marked as seen, no email sent.")
@@ -589,7 +598,20 @@ def command_run(args):
     store.save(record_run=True)
 
     collect_papers(cfg, new_papers)
-    build_dashboard(cfg, new_papers, unique, keyword_sets, len(hidden), meta)
+    _, rising = build_dashboard(
+        cfg, new_papers, unique, keyword_sets, len(hidden), meta
+    )
+
+    # The email is rendered here, after the digest is safely on disk and
+    # after the dashboard has worked out what is rising, so the alert can
+    # carry both. Nothing below may cost the reader their digest.
+    meta["window_total"] = len(unique)
+    meta["rising"] = rising
+    meta["library"] = collection.snapshot(
+        cfg["library_path"], cfg.get("metrics", {}).get("path", "")
+    )
+    text_body = email_digest.render_text(groups, meta)
+    email_html = email_digest.render(groups, meta)
 
     update_index(
         cfg,
@@ -616,11 +638,9 @@ def command_run(args):
     elif not new_papers and not email_settings.get("send_when_empty", False):
         log.info("No new papers, so no email sent (email.send_when_empty is false).")
     else:
-        subject = "%s %d new paper%s - %s" % (
+        subject = email_digest.subject_line(
+            groups, meta,
             email_settings.get("subject_prefix", "[PaperFeed]"),
-            len(new_papers),
-            "" if len(new_papers) == 1 else "s",
-            moment.strftime("%d %b %Y"),
         )
         try:
             mailer.send(email_settings, subject, email_html, text_body)
@@ -1072,7 +1092,7 @@ def command_test_email(args):
             cfg["email"],
             "%s test message" % cfg["email"].get("subject_prefix", "[PaperFeed]"),
             digest_module.render_html(groups, meta),
-            digest_module.render_text(groups, meta),
+            email_digest.render_text(groups, meta),
         )
     except mailer.MailError as error:
         sys.stderr.write("\nEmail failed:\n\n%s\n\n" % error)

@@ -22,7 +22,9 @@ not by reading the code back.
 `paperfeed.py` CLI · `config.py` settings + friendly errors · `query.py`
 boolean queries → both engines · `sources.py` PubMed/Europe PMC ·
 `relevance.py` filters + score · `metrics.py` OpenAlex figures ·
-`store.py` seen-memory · `digest.py` HTML · `library.py` saved papers ·
+`store.py` seen-memory · `digest.py` web HTML + the shared page shell ·
+`email_digest.py` the alert email · `collection.py` what has accumulated ·
+`library.py` saved papers ·
 `server.py` local pages · `stats.py` numbers · `charts.py` SVG ·
 `dashboard.py` pages · `retro.py` date-range · `ai.py` optional AI ·
 `phrasing.py` plurals.
@@ -44,6 +46,10 @@ boolean queries → both engines · `sources.py` PubMed/Europe PMC ·
   API. Licensed numbers come only from a file the user points at.
 - **A query is validated before it is sent.** Neither PubMed nor Europe PMC
   rejects a broken query; both answer HTTP 200 with the wrong papers.
+- **The email is not the web page with inlined styles.** Mail clients strip
+  `<style>`, ignore flex and grid, drop SVG and refuse `<details>`, and Gmail
+  clips at 102,400 bytes. `email_digest.py` renders it in tables, with a
+  size budget that trims and says so.
 
 ## Traps
 

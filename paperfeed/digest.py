@@ -1,12 +1,17 @@
-"""Turn a list of papers into something worth reading.
+"""Turn a list of papers into something worth reading, on the web.
 
-Three renderers share one set of helpers:
+  render_html     the local digest, the thing we always write first
+  render_index    the list of past digests
+  render_trends   the periodic themed briefing
 
-  render_html        the local file, the thing we always write
-  render_email_html  the same content with styles inlined, for mail clients
-  render_text        a plain-text fallback for mail clients that refuse HTML
+This module also owns the shell (sidebar, filter, score key) that the library
+and dashboard pages sit in, and the per-paper pieces they share.
 
-The local file also embeds a small JSON blob per paper. It is invisible in the
+The email is NOT here - see email_digest.py. Mail clients strip <style>,
+ignore flex and grid, drop SVG and refuse <details>, so it is a separate
+render rather than this one with different colours.
+
+The local file embeds a small JSON blob per paper. It is invisible in the
 browser, and it is what lets `paperfeed serve` offer a Save button later
 without PaperFeed having to store papers you never asked it to keep.
 """
@@ -974,143 +979,9 @@ def render_html(groups, meta):
     return "\n".join(part for part in parts if part)
 
 
-# --------------------------------------------------------------------------
-# Email
-# --------------------------------------------------------------------------
-
-# Mail clients are not browsers: many strip <style> blocks, most ignore media
-# queries, and <details> rarely works. So the email is built separately with
-# its styles written directly onto each element.
-E_BODY = "margin:0;padding:16px;background:#f6f7f9;font-family:-apple-system,Helvetica,Arial,sans-serif;color:#1a1a1a;line-height:1.5;"
-E_CARD = "background:#ffffff;border:1px solid #e2e4e8;border-radius:8px;padding:14px;margin:0 0 12px;"
-E_TITLE = "font-size:17px;font-weight:600;color:#11467f;text-decoration:none;display:block;margin-bottom:6px;"
-E_BYLINE = "font-size:13px;color:#555;margin:0 0 6px;"
-E_TAGS = "font-size:12px;color:#777;margin:0 0 8px;"
-E_ABSTRACT = "font-size:14px;color:#333;margin:0;"
-E_H2 = "font-size:14px;text-transform:uppercase;letter-spacing:.06em;color:#444;border-bottom:2px solid #d8dadd;padding-bottom:6px;margin:28px 0 12px;"
-
-
-def _paper_email(paper, show_scores):
-    bits = ['<div style="%s">' % E_CARD]
-    prefix = ""
-    if show_scores:
-        prefix = '<span style="font-size:12px;font-weight:700;color:#2c5d1e;">%.1f</span> ' % paper.score
-    bits.append(
-        '%s<a href="%s" style="%s">%s</a>'
-        % (prefix, _escape(paper.url), E_TITLE, _escape(paper.title))
-    )
-    byline = paper.author_line(limit=5)
-    if byline:
-        bits.append('<p style="%s">%s</p>' % (E_BYLINE, _escape(byline)))
-
-    tail = [paper.source]
-    if paper.venue:
-        tail.append(paper.venue)
-    if paper.published:
-        tail.append(paper.published)
-    if paper.free_fulltext:
-        tail.append("free full text")
-    bits.append('<p style="%s">%s</p>' % (E_TAGS, _escape(" · ".join(tail))))
-
-    if paper.abstract:
-        bits.append(
-            '<p style="%s">%s</p>'
-            % (E_ABSTRACT, _escape(_shorten(paper.abstract, EMAIL_ABSTRACT_CHARS)))
-        )
-    bits.append("</div>")
-    return "".join(bits)
-
-
-def render_email_html(groups, meta):
-    total = meta.get("total_new", 0)
-    show_scores = meta.get("show_scores", True)
-    parts = [
-        '<!doctype html><html><head><meta charset="utf-8">',
-        '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        "<title>PaperFeed &mdash; %s</title>" % _escape(meta.get("date_label", "")),
-        "</head>",
-        '<body style="%s"><div style="max-width:640px;margin:0 auto;">' % E_BODY,
-        '<h1 style="font-size:20px;margin:0 0 4px;">PaperFeed</h1>',
-        '<p style="font-size:13px;color:#666;margin:0 0 20px;">%s &middot; %d new paper%s</p>'
-        % (_escape(meta.get("date_label", "")), total, "" if total == 1 else "s"),
-    ]
-
-    if meta.get("errors"):
-        parts.append(
-            '<p style="background:#fff;border-left:4px solid #c2703a;padding:12px;'
-            'font-size:13px;margin:0 0 16px;">Some sources did not respond: %s</p>'
-            % _escape("; ".join(str(error) for error in meta["errors"]))
-        )
-
-    if total == 0:
-        parts.append(
-            '<p style="background:#fff;border:1px solid #e2e4e8;padding:14px;'
-            'font-size:14px;">No new papers this time.</p>'
-        )
-    else:
-        cut = meta.get("highlight_count", HIGHLIGHT_COUNT)
-        for name, papers in groups:
-            if not papers:
-                continue
-            parts.append(
-                '<h2 style="%s">%s (%d)</h2>' % (E_H2, _escape(name), len(papers))
-            )
-            parts.extend(_paper_email(paper, show_scores) for paper in papers[:cut])
-            if len(papers) > cut:
-                parts.append(
-                    '<p style="font-size:13px;color:#777;margin:0 0 12px;">'
-                    "and %d more in this topic &mdash; see the full digest on "
-                    "your Mac.</p>" % (len(papers) - cut)
-                )
-
-    parts.append(
-        '<p style="font-size:12px;color:#888;margin-top:28px;">'
-        "The full digest, with abstracts and filters, is on your Mac in "
-        "paperfeed/digests/latest.html</p>"
-    )
-    parts.append("</div></body></html>")
-    return "".join(parts)
-
-
-def render_text(groups, meta):
-    lines = [
-        "PaperFeed - %s" % meta.get("date_label", ""),
-        "%s, searched the last %s"
-        % (
-            phrasing.count(meta.get("total_new", 0), "new paper"),
-            phrasing.count(meta.get("lookback_days", 0), "day"),
-        ),
-        "",
-    ]
-    if meta.get("errors"):
-        lines.append("SOURCES THAT DID NOT RESPOND:")
-        lines.extend("  - %s" % message for message in meta["errors"])
-        lines.append("")
-
-    if not meta.get("total_new"):
-        lines.append("No new papers this time.")
-    else:
-        for name, papers in groups:
-            if not papers:
-                continue
-            lines.append("%s (%d)" % (name.upper(), len(papers)))
-            lines.append("-" * len(name))
-            for paper in papers:
-                lines.append("[%.1f] %s" % (paper.score, paper.title))
-                if paper.author_line():
-                    lines.append("  " + paper.author_line())
-                detail = " | ".join(
-                    bit for bit in (paper.source, paper.venue, paper.published) if bit
-                )
-                lines.append("  " + detail)
-                lines.append("  " + paper.url)
-                lines.append("")
-    return "\n".join(lines)
-
-
-# --------------------------------------------------------------------------
-# The index of past digests
-# --------------------------------------------------------------------------
+# The email is rendered by email_digest.py, not here. Mail clients strip
+# <style>, ignore flex and grid, drop SVG and refuse <details>, so it is a
+# genuinely separate render rather than this one with different colours.
 
 def render_index(records):
     """records: newest-first list of {file, date_label, total, sources, hidden}."""
