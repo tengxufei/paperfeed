@@ -488,25 +488,37 @@ def _rail_link(href, icon, label, count=None, active=False, needs_server=False):
 
 
 def _score_key(meta):
-    """What the numbers in front of a title mean.
+    """What the numbers in front of a title measure.
 
-    They used to be two bare digits with a tooltip. A tooltip cannot be
-    reached on a phone, and an unexplained number is one you stop trusting -
-    the same reason the score reasons are printed on every card.
+    Two bare digits with a tooltip was not an explanation: a tooltip cannot
+    be reached on a phone, and an unexplained number is one you stop
+    trusting. The distinction that matters most is stated first - these
+    rank a paper's RELEVANCE TO YOU, and say nothing about whether it is any
+    good. The quality signals are separate, and live on each card.
     """
-    rows = []
+    rows = [
+        '<div class="row"><span></span><span>Both numbers estimate how '
+        "closely a paper matches <b>what you asked for</b>. Neither is a "
+        "judgement of the paper itself &mdash; for that, look at the "
+        "citation and journal figures on each card.</span></div>"
+    ]
     if meta.get("ai_label"):
         rows.append(
             '<div class="row"><span class="score ai"><span class="tag">AI</span>9'
-            "</span><span>How well it matches what you said you care about, "
-            "judged by %s. 0&ndash;10.</span></div>" % _escape(meta["ai_label"])
+            "</span><span><b>Relevance judged by %s</b>, 0&ndash;10, against "
+            "the <b>interests</b> you wrote for this topic. It reads the "
+            "title and abstract, so it can tell a paper that is about your "
+            "question from one that merely mentions it.</span></div>"
+            % _escape(meta["ai_label"])
         )
     rows.append(
         '<div class="row"><span class="score strong" style="--fill:80%">8.0</span>'
-        "<span>PaperFeed's own score, out of 10. A concept of your query in "
-        "the title is worth 4, a MeSH heading 2, a mention in the abstract 1, "
-        "and an author you follow 3. The bar behind it fills with the score; "
-        "the reasons are printed under each title.</span></div>"
+        "<span><b>Relevance measured by PaperFeed</b>, 0&ndash;10, by where "
+        "your query's terms appear: a concept in the <b>title</b> scores 4, "
+        "a <b>MeSH heading</b> 2, a mention in the <b>abstract</b> 1, an "
+        "<b>author you follow</b> 3. No judgement, no model &mdash; just "
+        "arithmetic you can check, and the reasons are printed under every "
+        "title.</span></div>"
     )
     if meta.get("ai_label"):
         rows.append(
@@ -561,7 +573,7 @@ def sidebar(meta, active, topics=(), extras="", stats=()):
         parts.append(extras)
 
     if meta.get("show_scores", True):
-        parts.append('<p class="rail-h">What the numbers mean</p>')
+        parts.append('<p class="rail-h">Relevance scoring</p>')
         parts.append(_score_key(meta))
 
     parts.extend([

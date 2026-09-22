@@ -657,8 +657,20 @@ def command_run(args):
     meta["library"] = collection.snapshot(
         cfg["library_path"], cfg.get("metrics", {}).get("path", "")
     )
-    text_body = email_digest.render_text(email_groups, meta)
-    email_html = email_digest.render(email_groups, meta)
+    # Rendering the email must not be able to take the run down with it.
+    # The digest is already on disk; a formatting mistake in here should cost
+    # an email, not the results.
+    try:
+        text_body = email_digest.render_text(email_groups, meta)
+        email_html = email_digest.render(email_groups, meta)
+        subject = email_digest.subject_line(
+            email_groups, meta,
+            cfg["email"].get("subject_prefix", "[PaperFeed]"),
+        )
+    except Exception as error:
+        log.error("The email could not be built (%s), so none was sent. "
+                  "The digest is on disk either way.", error)
+        text_body = email_html = subject = None
 
     update_index(
         cfg,
@@ -684,11 +696,9 @@ def command_run(args):
         )
     elif not new_papers and not email_settings.get("send_when_empty", False):
         log.info("No new papers, so no email sent (email.send_when_empty is false).")
+    elif subject is None:
+        log.info("No email was sent because it could not be built.")
     else:
-        subject = email_digest.subject_line(
-            email_groups, meta,
-            email_settings.get("subject_prefix", "[PaperFeed]"),
-        )
         try:
             mailer.send(email_settings, subject, email_html, text_body)
             log.info("Email sent to %s", ", ".join(email_settings["to_addresses"]))

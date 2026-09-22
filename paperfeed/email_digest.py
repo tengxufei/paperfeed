@@ -340,8 +340,11 @@ def subject_line(groups, meta, prefix="[PaperFeed]"):
 
     best = _best(groups)
     if best is None:
-        return "%s &middot; %s" % (head, meta.get("date_label", "")).replace(
-            "&middot;", "-")
+        # No papers, so nothing to name. `.replace` here used to bind to the
+        # tuple rather than the formatted string, which raised AttributeError
+        # on every empty run - reachable only with send_when_empty on, which
+        # is exactly the setting a user turns on to hear about quiet days.
+        return "%s - %s" % (head, meta.get("date_label", ""))
 
     title = " ".join((best.title or "").split())
     room = max(24, 96 - len(head) - 3)
@@ -397,18 +400,23 @@ def _key(groups, meta):
     """
     has_ai = any(getattr(paper, "ai_score", None) is not None
                  for _, papers in groups for paper in papers)
-    rows = []
+    rows = [
+        '<b style="color:#46505e;letter-spacing:.06em;font-size:10.5px;">'
+        "RELEVANCE SCORING</b><br>Both numbers estimate how closely a paper "
+        "matches <b>what you asked for</b>. Neither judges the paper itself "
+        "&mdash; for that, read the citation and journal figures on each card."
+    ]
     if has_ai:
         rows.append(
-            "%s how well it matches what you wrote in <b>interests</b>, "
-            "judged by %s. 0&ndash;10."
+            "%s <b>Relevance judged by %s</b>, 0&ndash;10, against the "
+            "<b>interests</b> you wrote for this topic."
             % (_chip("AI 9", CHIP_AI), _escape(meta.get("ai_label") or "the AI"))
         )
     rows.append(
-        "%s PaperFeed's own score out of 10: a concept of your query in the "
-        "<b>title</b> is worth 4, a <b>MeSH heading</b> 2, a mention in the "
-        "<b>abstract</b> 1, an <b>author you follow</b> 3."
-        % _chip("8.0", CHIP_LOCAL)
+        "%s <b>Relevance measured by PaperFeed</b>, 0&ndash;10, by where your "
+        "query's terms appear: a concept in the <b>title</b> scores 4, a "
+        "<b>MeSH heading</b> 2, a mention in the <b>abstract</b> 1, an "
+        "<b>author you follow</b> 3." % _chip("8.0", CHIP_LOCAL)
     )
     if has_ai:
         rows.append(
@@ -586,12 +594,15 @@ def render_text(groups, meta):
 
     has_ai = any(getattr(paper, "ai_score", None) is not None
                  for _, papers in groups for paper in papers)
+    out.append("RELEVANCE SCORING - both numbers estimate how closely a paper")
+    out.append("matches what you asked for, not whether the paper is any good.")
     if has_ai:
-        out.append("AI n/10  = how well it matches your 'interests', judged by %s."
+        out.append("AI n/10  = relevance judged by %s, against the"
                    % (meta.get("ai_label") or "the AI"))
-    out.append("score n  = PaperFeed's own, out of 10: a concept of your query")
-    out.append("           in the title 4, a MeSH heading 2, a mention in the")
-    out.append("           abstract 1, an author you follow 3.")
+        out.append("           'interests' you wrote for this topic.")
+    out.append("score n  = relevance measured by PaperFeed: a concept of your")
+    out.append("           query in the title scores 4, a MeSH heading 2, a")
+    out.append("           mention in the abstract 1, an author you follow 3.")
     out.append("")
 
     for name, papers in groups:
