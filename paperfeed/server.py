@@ -8,8 +8,13 @@ already embedded in the file as an invisible JSON blob, so the server just
 reads those, adds the buttons, and writes your clicks to library.db. Nothing
 leaves your machine and nothing is uploaded.
 
-Bound to 127.0.0.1 on purpose: the socket is not reachable from your network,
-so no password or login is needed for it.
+Bound to 127.0.0.1 on purpose: the socket is not reachable from your network.
+That is not on its own enough, though. A web page you are reading in another
+tab CAN reach 127.0.0.1, and because text/plain is a CORS-safelisted content
+type its POST arrives without a preflight for the browser to block. It could
+not read the reply, but it would not need to: emptying your library or
+running up a bill against your AI key are both writes. So every POST is
+checked for a same-origin marker before it is acted on.
 """
 
 import html
@@ -668,7 +673,9 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/index.html":
             self._send_digest_file("index.html")
             return
-        if self.path.startswith("/library"):
+        # Exact match, for the same reason /dashboard is: a startswith test
+        # would swallow any future sibling page beginning with /library.
+        if self.path.rstrip("/") == "/library":
             settings = self._settings()
             self._send(
                 library_page(
@@ -693,7 +700,37 @@ class Handler(BaseHTTPRequestHandler):
         with open(self.digest_path, "r", encoding="utf-8") as handle:
             self._send(build_page(handle.read(), self.db_path, self.config_path))
 
+    def _same_origin(self):
+        """Is this POST from our own page, rather than some website?
+
+        Browsers always send Origin on a cross-origin POST, and every current
+        one sends Sec-Fetch-Site. A request with neither is not from a page
+        at all - curl, a script, the user's own terminal - and is allowed,
+        because the socket is already local-only.
+        """
+        site = self.headers.get("Sec-Fetch-Site")
+        if site is not None and site not in ("same-origin", "none"):
+            return False
+
+        origin = self.headers.get("Origin")
+        if not origin:
+            return True
+        host = self.headers.get("Host") or ""
+        allowed = {"http://%s" % host, "https://%s" % host}
+        if host.split(":")[0] in ("127.0.0.1", "localhost"):
+            port = host.split(":")[1] if ":" in host else ""
+            for name in ("127.0.0.1", "localhost"):
+                allowed.add("http://%s:%s" % (name, port) if port
+                            else "http://%s" % name)
+        return origin in allowed
+
     def do_POST(self):
+        if not self._same_origin():
+            # Named plainly in the log: if this ever fires it is worth
+            # knowing which page did it.
+            self._json({"ok": False, "error": "cross-site request refused"}, 403)
+            return
+
         length = int(self.headers.get("Content-Length") or 0)
         try:
             body = json.loads(self.rfile.read(length) or b"{}")

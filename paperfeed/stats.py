@@ -107,6 +107,13 @@ def run_stats(papers, keyword_sets):
 # Subject history, for "is this rising?"
 # --------------------------------------------------------------------------
 
+# Deliberately far above what a run produces. At 80 a real run of this tool
+# stored 80 of its 184 subjects, and 56 of those 80 were tied at a single
+# occurrence - so which survived was arbitrary, and subjects appeared to
+# vanish and return between runs purely from the tie-break.
+SUBJECTS_KEPT = 400
+
+
 def _load(path):
     if not os.path.exists(path):
         return []
@@ -138,8 +145,18 @@ def record(path, buckets, totals):
                 name: {
                     "total": totals.get(name, 0),
                     "subjects": {
-                        term: int(count) for term, count in counter.most_common(80)
+                        term: int(count)
+                        for term, count in counter.most_common(SUBJECTS_KEPT)
                     },
+                    # The count of the last subject kept, when the list was
+                    # cut. Without it, "this subject is absent from that run"
+                    # cannot be told from "that run's list was truncated
+                    # before reaching it" - and alerts() read absence as
+                    # never-seen, announcing long-standing subjects as new.
+                    "floor": (
+                        counter.most_common(SUBJECTS_KEPT)[-1][1]
+                        if len(counter) > SUBJECTS_KEPT else 0
+                    ),
                 }
                 for name, counter in buckets.items()
             },
@@ -154,6 +171,17 @@ def record(path, buckets, totals):
         json.dump(history, handle)
     os.replace(temporary, path)
     return history
+
+
+def _bucket_floor(entry, bucket):
+    """The count below which this run's stored subject list was cut off.
+
+    0 means nothing was cut, so absence from that run really is absence.
+    """
+    sets = entry.get("sets")
+    if isinstance(sets, dict):
+        return int((sets.get(bucket) or {}).get("floor") or 0)
+    return 0
 
 
 def _bucket_subjects(entry, bucket):
@@ -179,7 +207,13 @@ def alerts(history, current, limit=8, bucket=ALL):
 
     seen_before = Counter()
     appearances = Counter()
+    # The strictest cut-off any past run applied. A subject absent from a run
+    # that was cut at 3 might have occurred once or twice and simply not been
+    # stored, so absence only proves absence for subjects that would have
+    # cleared every cut-off.
+    strictest_cut = 0
     for entry in past:
+        strictest_cut = max(strictest_cut, _bucket_floor(entry, bucket))
         for name, count in _bucket_subjects(entry, bucket).items():
             seen_before[name] += count
             appearances[name] += 1
@@ -189,7 +223,11 @@ def alerts(history, current, limit=8, bucket=ALL):
     out = []
     for name, now in current.most_common(60):
         if name not in seen_before:
-            if now >= 2:
+            # Only claim "new" when the history could actually have recorded
+            # it. Saying "not seen in 5 earlier runs" about a subject those
+            # runs never had room to store is a fabricated alert, and it went
+            # into the alert email.
+            if now >= 2 and strictest_cut <= 1:
                 out.append((name, now, "new", "not seen in %d earlier run%s"
                             % (len(past), "" if len(past) == 1 else "s")))
             continue

@@ -908,17 +908,22 @@ EUROPEPMC_PAGE = 100        # the API maximum
 def fetch_pubmed_range(keyword_set, start, end, contact_email="",
                        datetype="pdat", progress=None):
     """Every PubMed paper published in [start, end]. Returns (papers, total)."""
-    search = _pubmed_query(keyword_set)
+    # `term` and the reply must not share a name. They did: renaming the
+    # query to `search` collided with the variable holding the response, so
+    # from page two onward PubMed was asked to search for the literal word
+    # "esearchresult", returned nothing, and the loop stopped - silently
+    # truncating the range and reporting a total of zero.
+    term = _pubmed_query(keyword_set)
     ids = []
     total = 0
     offset = 0
 
     while True:
-        search = _get(
+        payload = _get(
             EUTILS + "/esearch.fcgi",
             {
                 "db": "pubmed",
-                "term": search,
+                "term": term,
                 "retmode": "json",
                 "datetype": datetype,
                 "mindate": start.strftime("%Y/%m/%d"),
@@ -928,7 +933,13 @@ def fetch_pubmed_range(keyword_set, start, end, contact_email="",
             },
             contact_email,
         )
-        result = search.get("esearchresult", {}) or {}
+        result = payload.get("esearchresult", {}) or {}
+        for note in _pubmed_complaints(result):
+            # The feed path reads these; the retro path used to throw them
+            # away, so a phrase PubMed has no record of returned zero papers
+            # for a whole date range with nothing said. (Tier 5 #4.)
+            if progress:
+                progress("  ! %s" % note)
         page = result.get("idlist") or []
         try:
             total = int(result.get("count", 0))

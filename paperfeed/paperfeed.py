@@ -248,6 +248,114 @@ def build_dashboard(cfg, papers, window_papers, keyword_sets, hidden_count, meta
         return 0, []
 
 
+def build_trends(cfg, store):
+    """Write the periodic themed briefing. Returns (themes, path_or_None).
+
+    This function was called from two places and defined in none of them, so
+    `paperfeed.py trends` raised NameError and the in-run hook logged a
+    failure every time it came due. The feature was documented in the manual
+    and in `check`, and had never once run.
+
+    It re-queries the last `trends.months` across every enabled keyword set,
+    by PUBLICATION date rather than record-entry date - "what has the field
+    been doing" is a different question from "what is new to me" - and hands
+    the result to the model in one call.
+    """
+    settings = ai.settings_for(cfg, "trends")
+    if not settings["api_key"]:
+        log.warning(
+            "A trend report needs an API key. Set $%s, or turn trends off "
+            "in config.json.", settings["api_key_env"]
+        )
+        return [], None
+
+    keyword_sets = [entry for entry in cfg["keyword_sets"] if entry["enabled"]]
+    months = int(cfg["trends"].get("months") or 3)
+    end = date.today()
+    start = end - timedelta(days=round(months * 30.44))
+
+    papers, errors = [], []
+    for keyword_set in keyword_sets:
+        for label, fetcher in (("PubMed", sources.fetch_pubmed_range),
+                               ("Preprints", sources.fetch_preprints_range)):
+            key = "pubmed" if label == "PubMed" else "preprints"
+            enabled = dict(cfg["sources"])
+            enabled.update(keyword_set.get("sources") or {})
+            if not enabled.get(key):
+                continue
+            try:
+                found, _ = fetcher(keyword_set, start, end,
+                                   cfg.get("contact_email", ""))
+                papers.extend(found)
+            except Exception as error:      # one dead source must not stop it
+                errors.append("%s / %s: %s" % (label, keyword_set["name"], error))
+                log.warning("  ! %s / %s: %s", label, keyword_set["name"], error)
+
+    papers = store_module.deduplicate(papers)
+    papers = relevance.rank(relevance.score_all(papers, keyword_sets, cfg["ranking"]))
+    log.info("Trend report: %s across %s",
+             phrasing.count(len(papers), "paper"),
+             phrasing.count(months, "month"))
+
+    interests = (cfg["ai"].get("interests") or "").strip()
+    if not interests:
+        # Fall back to the per-topic lines, which is where the detail is.
+        interests = "\n".join(
+            "%s: %s" % (entry["name"], entry["interests"])
+            for entry in keyword_sets if entry.get("interests")
+        )
+
+    themes, usage, problem = ai.trend_report(
+        papers, cfg["trends"], interests, settings, log
+    )
+    if problem:
+        errors.append(problem)
+        log.error("Trend report: %s", problem)
+    spend = ai.cost_of(usage)
+    if usage:
+        log.info("Trend report used %d in / %d out tokens%s",
+                 usage.get("input_tokens", 0), usage.get("output_tokens", 0),
+                 (" (about $%.3f)" % spend) if spend is not None else "")
+
+    meta = {
+        "period": "%s to %s" % (start.isoformat(), end.isoformat()),
+        "date_label": digest_module.date_label(),
+        "paper_count": len(papers),
+        "months": months,
+        "model": settings.get("model", ""),
+        "errors": errors,
+    }
+    html_text = digest_module.render_trends(themes, meta)
+
+    filename = "trends-%s.html" % end.strftime("%Y-%m")
+    path = os.path.join(cfg["digest_dir"], filename)
+    os.makedirs(cfg["digest_dir"], exist_ok=True)
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(html_text)
+    log.info("Trend report written: %s", path)
+
+    # Record the cadence only once the file exists, so a failure retries
+    # next run instead of going quiet for a month.
+    store.set_mark("trends")
+    store.save(record_run=False)
+
+    if themes and cfg["trends"].get("email") and cfg["email"]["enabled"]:
+        try:
+            mailer.send(
+                cfg["email"],
+                "%s trends - %s" % (cfg["email"].get("subject_prefix",
+                                                     "[PaperFeed]"),
+                                    end.strftime("%b %Y")),
+                html_text,
+                "A trend report is ready: %s" % path,
+            )
+            log.info("Trend report emailed.")
+        except mailer.MailError as error:
+            log.error("Trend report email failed: %s. The file is on disk.",
+                      error)
+    return themes, path
+
+
 def _parse_day(text, label):
     try:
         return date.fromisoformat(text)
@@ -638,9 +746,16 @@ def command_run(args):
     # Everything that passed the filters is marked seen. Papers a filter
     # removed are deliberately left unmarked, so relaxing that filter later
     # lets them show up rather than silently swallowing them forever.
-    low_keys = {store_module.fingerprint(paper) for paper, _ in low_scoring}
+    #
+    # This must cover EVERY filter, not just the score threshold. It used to
+    # name `low_scoring` alone, so papers dropped by require_title_groups
+    # were marked seen while the digest printed "nothing hidden is marked as
+    # seen" directly above them - and lowering the threshold could not bring
+    # them back. `hidden` is the single list every filter appends to.
+    hidden_keys = {store_module.fingerprint(paper) for paper, _ in hidden}
     store.mark_seen(
-        [paper for paper in unique if store_module.fingerprint(paper) not in low_keys]
+        [paper for paper in unique
+         if store_module.fingerprint(paper) not in hidden_keys]
     )
     store.save(record_run=True)
 
@@ -1339,6 +1454,14 @@ def command_search(args):
 def command_trends(args):
     cfg = load_config_or_exit(args.config)
     setup_logging(cfg["log_path"], verbose=not args.quiet)
+
+    if not cfg["trends"]["enabled"]:
+        # Not a refusal - you asked for it explicitly. But say so, because
+        # the scheduled run will not produce one until this is turned on.
+        log.warning(
+            "trends.enabled is false in config.json, so no report will be "
+            "built automatically. Building this one because you asked."
+        )
 
     store = store_module.Store(cfg["state_path"])
     due, reason = store.due_mark("trends", cfg["trends"]["interval_days"])
