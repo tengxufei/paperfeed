@@ -8,6 +8,7 @@ Both APIs are free and need no account.
 """
 
 import html as html_module
+import random
 import re
 import time
 import xml.etree.ElementTree as ElementTree
@@ -26,11 +27,26 @@ EUROPEPMC = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
 # NCBI allows 3 requests/second without an API key. We stay well under that.
 POLITE_PAUSE_SECONDS = 0.4
 TIMEOUT_SECONDS = 30
-MAX_ATTEMPTS = 3
+
+# Five, not three. Europe PMC's empty-body fault hits roughly one call in ten
+# and arrives in bursts rather than independently, so three attempts inside
+# six seconds can land wholly inside one bad patch - which is exactly how a
+# whole source came back as "did not respond" on a run. Five attempts spread
+# over half a minute clear a burst.
+MAX_ATTEMPTS = 5
 
 
 class SourceError(Exception):
     """A source could not be reached or returned something unusable."""
+
+
+class EmptyReply(ValueError):
+    """HTTP 200 with a body that carries no results.
+
+    Europe PMC does this to about one call in ten. Named so the message can
+    say what actually happened rather than "the reply was not readable",
+    which sends you looking for a parsing bug that is not there.
+    """
 
 
 @dataclass
@@ -87,6 +103,10 @@ class Paper:
 
 def _describe(error):
     """Reduce a library exception to something a reader can act on."""
+    if isinstance(error, EmptyReply):
+        return ("%s. This is a known intermittent fault at Europe PMC, not "
+                "an empty week - the next run should pick the papers up"
+                % error)
     if isinstance(error, requests.exceptions.Timeout):
         return "no reply within %d seconds" % TIMEOUT_SECONDS
     if isinstance(error, requests.exceptions.ConnectionError):
@@ -127,15 +147,20 @@ def _get(url, params, contact_email, expect="json", require=None):
                 return response.text
             payload = response.json()
             if require and require not in payload:
-                raise ValueError(
-                    "the reply was missing %r - it carried only %s"
-                    % (require, ", ".join(sorted(payload)) or "nothing")
+                raise EmptyReply(
+                    "the service answered HTTP 200 with a %d-byte body "
+                    "carrying only %s, and no %r"
+                    % (len(response.content),
+                       ", ".join(sorted(payload)) or "nothing", require)
                 )
             return payload
         except Exception as error:  # network, HTTP status, or bad JSON
             last_error = error
             if attempt < MAX_ATTEMPTS:
-                time.sleep(2 ** attempt)  # 2s, then 4s
+                # Jittered, so retries do not march in step with whatever
+                # is misbehaving at the other end.
+                delay = min(2 ** attempt, 12) + random.uniform(0, 0.75)
+                time.sleep(delay)
     raise SourceError(
         "%s after %d attempts" % (_describe(last_error), MAX_ATTEMPTS)
     )
