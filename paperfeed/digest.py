@@ -1044,19 +1044,33 @@ def render_index(records):
             )
         )
 
+    total = sum(record.get("total", 0) for record in records)
+    meta = {
+        "date_label": "%s recorded" % phrasing.count(len(records), "run"),
+        "sources_label": "all digests",
+        "show_scores": False,
+        "digest_href": "latest.html",
+    }
     return "\n".join(
         [
             "<!doctype html>",
             '<html lang="en"><head><meta charset="utf-8">',
             '<meta name="viewport" content="width=device-width, initial-scale=1">',
             "<title>PaperFeed &mdash; all digests</title>",
-            "<style>%s</style></head><body><div class=\"wrap\">" % STYLE,
-            "<h1>PaperFeed</h1>",
-            '<p class="meta">%d digest%s, newest first</p>'
-            % (len(records), "" if len(records) == 1 else "s"),
+            "<style>%s%s</style></head><body class=\"shell\">" % (STYLE, SHELL_CSS),
+            sidebar(meta, "index", extras=search_panel("Find a run"),
+                    stats=[(len(records), "runs recorded"),
+                           (total, "papers alerted")]),
+            '<div class="wrap">',
+            "<h1>All digests</h1>",
+            '<p class="meta">%s, newest first</p>'
+            % phrasing.count(len(records), "digest"),
             "\n".join(rows) if rows else '<div class="empty">No digests yet.</div>',
             '<p class="footer"><a href="latest.html">Latest digest</a></p>',
-            "</div></body></html>",
+            "</div>",
+            shell_close(),
+            "<script>%s</script>" % SHELL_JS,
+            "</body></html>",
         ]
     )
 
@@ -1068,7 +1082,11 @@ def render_trends(themes, meta):
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
         "<title>PaperFeed trends &mdash; %s</title>" % _escape(meta.get("period", "")),
-        "<style>%s</style></head><body><div class=\"wrap\">" % STYLE,
+        "<style>%s%s</style></head><body class=\"shell\">" % (STYLE, SHELL_CSS),
+        sidebar({"date_label": _escape(meta.get("period", "")),
+                 "sources_label": "trend briefing", "show_scores": False},
+                "index"),
+        '<div class="wrap">',
         "<h1>What's been happening</h1>",
         '<p class="meta">%s &middot; from %s across %s</p>'
         % (
@@ -1118,7 +1136,10 @@ def render_trends(themes, meta):
         "could not be traced back to a real paper were dropped.</p>"
         % _escape(meta.get("model", "the model"))
     )
-    parts.append("</div></body></html>")
+    parts.append("</div>")
+    parts.append(shell_close())
+    parts.append("<script>%s</script>" % SHELL_JS)
+    parts.append("</body></html>")
     return "\n".join(parts)
 
 
