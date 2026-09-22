@@ -424,15 +424,24 @@ SHELL_JS = r"""
   var box = document.querySelector('.filterbox');
   var opts = document.querySelectorAll('.viewopts input');
   var count = document.querySelector('.hitcount');
-  var cards = Array.prototype.slice.call(document.querySelectorAll('.paper'));
-  if (!cards.length) { return; }
+  // Re-queried on every pass, not snapshotted once: removing a saved paper
+  // detached its card while this list kept counting it, so the sidebar read
+  // "23 papers" with 21 on screen. The searchable text is cached on the
+  // element itself rather than in a parallel array that can fall out of
+  // step with it.
+  function liveCards() {
+    return Array.prototype.slice.call(document.querySelectorAll('.paper'));
+  }
+  function textOf(card) {
+    if (card.__pfText === undefined) {
+      card.__pfText = (card.textContent || '').toLowerCase();
+    }
+    return card.__pfText;
+  }
+  if (!liveCards().length) { return; }
 
-  var text = cards.map(function (card) {
-    return (card.textContent || '').toLowerCase();
-  });
-
-  function wanted(card, index, needle) {
-    if (needle && text[index].indexOf(needle) === -1) { return false; }
+  function wanted(card, needle) {
+    if (needle && textOf(card).indexOf(needle) === -1) { return false; }
     // Pages with their own filter (the library's status pills) hand it in
     // here rather than setting display themselves. Two scripts both hiding
     // and showing the same cards would take it in turns to undo each other.
@@ -450,9 +459,10 @@ SHELL_JS = r"""
 
   function apply() {
     var needle = box ? box.value.trim().toLowerCase() : '';
+    var cards = liveCards();
     var shown = 0;
-    cards.forEach(function (card, index) {
-      var keep = wanted(card, index, needle);
+    cards.forEach(function (card) {
+      var keep = wanted(card, needle);
       card.style.display = keep ? '' : 'none';
       if (keep) { shown++; }
     });
@@ -711,7 +721,7 @@ def _metrics_row(paper):
             % citations
         )
         fwci = data.get("fwci")
-        if fwci:
+        if fwci is not None:
             bits.append(
                 '<span class="metric" title="Field-Weighted Citation Impact: '
                 '1.0 is the average for papers of the same field, type and '
@@ -1094,7 +1104,10 @@ def render_trends(themes, meta):
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
         "<title>PaperFeed trends &mdash; %s</title>" % _escape(meta.get("period", "")),
         "<style>%s%s</style></head><body class=\"shell\">" % (STYLE, SHELL_CSS),
-        sidebar({"date_label": _escape(meta.get("period", "")),
+        # sidebar() escapes what it is given; pre-escaping here rendered
+        # "Q1 &amp; Q2" as the literal "Q1 &amp;amp; Q2", and disagreed with
+        # the <title> on the same page, which uses the raw value.
+        sidebar({"date_label": meta.get("period", ""),
                  "sources_label": "trend briefing", "show_scores": False},
                 "index"),
         '<div class="wrap">',

@@ -91,7 +91,11 @@ def _scores(paper):
     bits = []
     if getattr(paper, "ai_score", None) is not None:
         bits.append(_chip("AI %.0f" % paper.ai_score, CHIP_AI))
-    if paper.score:
+    # `if paper.score:` treated a real 0.0 as absent, so a paper that scored
+    # zero showed no chip at all - indistinguishable from one that was never
+    # scored, while the web digest printed 0.0. Same class as the two
+    # `str(value or "")` bugs already fixed.
+    if paper.score is not None:
         bits.append(_chip("%.1f" % paper.score, CHIP_LOCAL))
     return "".join(bits)
 
@@ -289,7 +293,7 @@ def _rows(papers):
         marks = []
         if getattr(paper, "ai_score", None) is not None:
             marks.append("AI %.0f" % paper.ai_score)
-        if paper.score:
+        if paper.score is not None:
             marks.append("%.1f" % paper.score)
         lines.append(
             '<tr><td bgcolor="%s" width="72" valign="top" style="background:%s;'
@@ -359,7 +363,10 @@ def preheader(groups, meta):
     bits = []
     named = [(name, len(papers)) for name, papers in groups if papers]
     if named:
-        bits.append(", ".join("%d in %s" % (count, name) for name, count in named[:3]))
+        # Every other name path in this module escapes; this one was missed,
+        # and it is interpolated straight into the hidden preheader div.
+        bits.append(", ".join("%d in %s" % (count, _escape(name))
+                              for name, count in named[:3]))
     best = _best(groups)
     if best is not None and getattr(best, "ai_score", None) is not None:
         bits.append("best match %.0f/10" % best.ai_score)
@@ -517,7 +524,15 @@ def _body(groups, meta, cards_per_topic, tail_limit):
 
         parts.append(_rows(rest))
         if not shown and not rest:
-            parts.append(_notice("Only the paper above.", colour="#5b87c4"))
+            # At the smallest shape this fired for a topic whose other twenty
+            # papers had just been truncated, while the footer said "114 more
+            # papers would not fit". Say which it is.
+            held_back = len(papers) - 1
+            parts.append(_notice(
+                "Only the paper above." if held_back <= 0 else
+                "The paper above, plus %d more that would not fit in an "
+                "email - they are all in the digest on your Mac." % held_back,
+                colour="#5b87c4"))
 
     if trimmed:
         # The email trimming itself still has to say so, same rule as a filter.
@@ -614,7 +629,7 @@ def render_text(groups, meta):
             marks = []
             if getattr(paper, "ai_score", None) is not None:
                 marks.append("AI %.0f/10" % paper.ai_score)
-            if paper.score:
+            if paper.score is not None:
                 marks.append("score %.1f" % paper.score)
             out.append("[%s] %s" % (", ".join(marks) or "-", paper.title))
             byline = paper.author_line(limit=5)

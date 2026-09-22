@@ -48,6 +48,11 @@ def bars(pairs, width=560, bar_height=22, gap=6, label=""):
     biggest = max(value for _, value in pairs)
     label_width = 150
     track = width - label_width - 54
+    # Labels are right-anchored at label_width - 8, so a long one runs off
+    # the LEFT edge of the viewBox and is clipped away: measured, a 49-char
+    # affiliation started at x = -26. Truncate by the space actually
+    # available rather than by a fixed character count.
+    room = max(6, int((label_width - 10) / 6.1))
     height = len(pairs) * (bar_height + gap) + 6
 
     out = [_open(width, height, label or "bar chart")]
@@ -55,9 +60,11 @@ def bars(pairs, width=560, bar_height=22, gap=6, label=""):
         y = index * (bar_height + gap)
         length = max(2, (value / biggest) * track) if biggest else 2
         colour = PALETTE[index % len(PALETTE)]
+        caption = name if len(name) <= room else name[:room - 1].rstrip() + "\u2026"
         out.append(
-            '<text x="%d" y="%d" class="c-lab" text-anchor="end">%s</text>'
-            % (label_width - 8, y + bar_height * 0.72, _esc(name[:34]))
+            '<text x="%d" y="%d" class="c-lab" text-anchor="end">%s'
+            "<title>%s</title></text>"
+            % (label_width - 8, y + bar_height * 0.72, _esc(caption), _esc(name))
         )
         out.append(
             '<rect x="%d" y="%d" width="%.1f" height="%d" rx="3" fill="%s" '
@@ -94,19 +101,35 @@ def stacked(rows, width=560, height=46, label=""):
             )
         x += segment
 
-    x = 0.0
+    # The legend used to advance x with no wrap and no check against the
+    # width, so with five keyword sets entries three to five were drawn past
+    # the right edge and simply vanished - leaving coloured segments nobody
+    # could identify. Wrap instead, and grow the canvas to fit.
+    x, y = 0.0, 32.0
+    line_height = 15.0
     for index, (name, value, colour_index) in enumerate(rows):
+        caption = "%s (%g)" % (name[:22], value)
+        span = min(220.0, max(90.0, len(caption) * 6.1 + 26))
+        if x and x + span > width:
+            x, y = 0.0, y + line_height
         out.append(
-            '<rect x="%.1f" y="32" width="9" height="9" rx="2" fill="%s"/>'
-            % (x, PALETTE[colour_index % len(PALETTE)])
+            '<rect x="%.1f" y="%.1f" width="9" height="9" rx="2" fill="%s"/>'
+            % (x, y, PALETTE[colour_index % len(PALETTE)])
         )
         out.append(
-            '<text x="%.1f" y="40" class="c-lab">%s</text>'
-            % (x + 13, _esc("%s (%g)" % (name[:22], value)))
+            '<text x="%.1f" y="%.1f" class="c-lab">%s</text>'
+            % (x + 13, y + 8, _esc(caption))
         )
-        x += min(200, max(90, len(name) * 6.4 + 46))
+        x += span
+    needed = int(y + line_height + 4)
     out.append("</svg>")
-    return "".join(out)
+    svg = "".join(out)
+    if needed > height:
+        # The viewBox and the height attribute were both written on open.
+        svg = svg.replace('viewBox="0 0 %d %d"' % (width, height),
+                          'viewBox="0 0 %d %d"' % (width, needed), 1)
+        svg = svg.replace('height="%d"' % height, 'height="%d"' % needed, 1)
+    return svg
 
 
 def histogram(buckets, width=560, height=140, label=""):
@@ -201,9 +224,13 @@ def sparkline(series, width=560, height=110, label=""):
         '<text x="%d" y="%d" class="c-lab" text-anchor="end">%s</text>'
         % (width - 12, height - 6, _esc(series[-1][0]))
     )
-    out.append(
-        '<text x="%d" y="14" class="c-val">%g</text>' % (left - 26, biggest)
-    )
+    if max(values) > 0:
+        # `biggest = max(values) or 1` is a divide-by-zero guard, not a real
+        # maximum. Printing it labelled an all-zero chart with a 1 nobody
+        # measured.
+        out.append(
+            '<text x="%d" y="14" class="c-val">%g</text>' % (left - 26, biggest)
+        )
     out.append("</svg>")
     return "".join(out)
 
@@ -219,6 +246,19 @@ def donut(pairs, width=190, height=190, label=""):
     angle = -math.pi / 2
     for index, (name, value) in enumerate(pairs):
         sweep = value / total * 2 * math.pi
+        colour = PALETTE[index % len(PALETTE)]
+        if len(pairs) == 1:
+            # One category is the whole ring, and an arc whose start and end
+            # points are identical is dropped entirely by the SVG spec - so
+            # the commonest library state (everything unread) drew a bare
+            # number on white and read as a rendering failure. A circle has
+            # no endpoints to collide.
+            out.append(
+                '<circle cx="%.1f" cy="%.1f" r="%.1f" fill="none" stroke="%s" '
+                'stroke-width="%d" opacity="0.88"><title>%s: %g</title></circle>'
+                % (cx, cy, radius, colour, thickness, _esc(name), value)
+            )
+            break
         end = angle + sweep
         large = 1 if sweep > math.pi else 0
         x1, y1 = cx + radius * math.cos(angle), cy + radius * math.sin(angle)
@@ -228,7 +268,7 @@ def donut(pairs, width=190, height=190, label=""):
             'stroke="%s" stroke-width="%d" opacity="0.88">'
             "<title>%s: %g</title></path>"
             % (x1, y1, radius, radius, large, x2, y2,
-               PALETTE[index % len(PALETTE)], thickness, _esc(name), value)
+               colour, thickness, _esc(name), value)
         )
         angle = end
     out.append(

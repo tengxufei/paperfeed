@@ -191,7 +191,14 @@ def _freshness_panel(coll):
     """How long a paper had been out before it reached you."""
     if coll["median_age"] is None:
         return ""
-    buckets = [(label, count) for label, count in coll["age_buckets"] if count]
+    # Drop only the empty buckets at the ENDS. Removing them from the middle
+    # put "0-7" next to "15-30" and read as a contiguous distribution when
+    # there was a hole in it.
+    buckets = list(coll["age_buckets"])
+    while buckets and not buckets[0][1]:
+        buckets.pop(0)
+    while buckets and not buckets[-1][1]:
+        buckets.pop()
     verdict = (
         '<p class="verdict">Half your papers reached you within <b>%d day%s</b> '
         "of publication.%s</p>"
@@ -270,8 +277,8 @@ def _cited_panel(coll):
             % (_esc(row.get("url") or "#"), _esc(row.get("title") or ""),
                _esc(row.get("venue") or ""), _esc((row.get("published") or "")[:10]),
                row["_cited"],
-               ("%.1f&times;" % row["_m"]["fwci"]) if row["_m"].get("fwci")
-               else "&mdash;")
+               ("%.1f&times;" % row["_m"]["fwci"])
+               if row["_m"].get("fwci") is not None else "&mdash;")
             for row in coll["ranked"])
         return _panel(
             "The most-cited papers you have kept",

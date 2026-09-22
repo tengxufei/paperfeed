@@ -278,9 +278,19 @@ function post(url, body) {
   return fetch(url, {method:'POST', headers:{'Content-Type':'application/json'},
                      body: JSON.stringify(body || {})}).then(function (r) { return r.json(); });
 }
+// Escapes text for HTML *body* position only. innerHTML does not escape a
+// double quote, so this is not safe inside an attribute - see escAttr.
 function esc(s) {
   var d = document.createElement('div'); d.textContent = s == null ? '' : s;
   return d.innerHTML;
+}
+// For anything going inside an attribute. esc() leaves " untouched, so a
+// DOI of the form  10.1/x" onmouseover="alert(1)  closed the href and added
+// a live event handler. That text comes from the model's JSON, which is
+// built from titles and abstracts fetched from PubMed - not purely
+// self-inflicted.
+function escAttr(s) {
+  return esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 // The output panel is rendered with an inline display:none until a paper
 // has a summary. Changing className does not clear an inline style, so it
@@ -346,7 +356,7 @@ if (dirBtn) {
                '<div>' + esc(x.why) + '</div>' +
                (x.first_step ? '<div class="step"><b>Start with:</b> ' + esc(x.first_step) + '</div>' : '') +
                (x.papers.length ? '<div class="refs">from: ' + x.papers.map(function (doi) {
-                   return '<a href="https://doi.org/' + esc(doi) + '">' + esc(doi) + '</a>';
+                   return '<a href="https://doi.org/' + escAttr(doi) + '">' + esc(doi) + '</a>';
                  }).join(' &middot; ') + '</div>' : '') + '</div>';
       }).join('');
     }).catch(function () { dirBtn.disabled = false; busy(out, 'The server went away.'); });
@@ -378,7 +388,7 @@ if (askBtn) {
       if (a.papers && a.papers.length) {
         html += '<div class="refs" style="margin-top:7px">drawing on: ' +
                 a.papers.map(function (doi) {
-                  return '<a href="https://doi.org/' + esc(doi) + '">' + esc(doi) + '</a>';
+                  return '<a href="https://doi.org/' + escAttr(doi) + '">' + esc(doi) + '</a>';
                 }).join(' &middot; ') + '</div>';
       }
       if (a.gap) { html += '<div style="margin-top:9px;color:#8a6420"><b>Your saved papers do not cover:</b> ' + esc(a.gap) + '</div>'; }

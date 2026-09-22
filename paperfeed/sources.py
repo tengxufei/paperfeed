@@ -171,7 +171,13 @@ def _window(lookback_days):
     return end - timedelta(days=lookback_days), end
 
 
-_TAG = re.compile(r"<[^>]+>")
+# Must require a letter after the bracket. `<[^>]+>` spanned from a "<" in
+# one clause to a ">" several clauses later and deleted the prose between
+# them: "Tumours <2 cm respond better than those >5 cm" became "Tumours 5
+# cm". Scientific text is full of bare inequalities, and the damage ran deep
+# - the mangled title became the dedup and seen-memory key, and an exclude
+# term inside a deleted span silently stopped matching.
+_TAG = re.compile(r"</?[a-zA-Z][^<>]*>")
 _ABSTRACT_LABEL = re.compile(r"<title>\s*abstract\s*</title>", re.IGNORECASE)
 
 
