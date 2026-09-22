@@ -357,6 +357,34 @@ body.shell { padding: 0; }
 #compact:checked ~ .app .switch .dot::after { left: 13px; }
 .hitcount { font-size: 11.5px; color: var(--dim); margin: 8px 0 0; }
 
+/* topic tabs */
+.tabs {
+  display: flex; gap: 6px; margin: 0 0 16px; padding-bottom: 2px;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin; border-bottom: 1px solid var(--line);
+}
+.tabs .tab {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 13px; border-radius: 7px 7px 0 0; font-size: 13px;
+  color: #46505e; text-decoration: none; white-space: nowrap;
+  border: 1px solid transparent; border-bottom: none; margin-bottom: -1px;
+}
+.tabs .tab:hover { background: #eef1f5; }
+.tabs .tab b {
+  font-size: 10.5px; font-weight: 600; color: var(--dim);
+  background: #eef1f5; border-radius: 9px; padding: 1px 6px;
+}
+.tabs .tab.on {
+  background: var(--panel); color: var(--accent); font-weight: 600;
+  border-color: var(--line); border-bottom: 1px solid var(--panel);
+}
+.tabs .tab.on b { background: var(--accent-soft); color: var(--accent); }
+@media (prefers-color-scheme: dark) {
+  .tabs .tab { color: #b9c0c8; }
+  .tabs .tab:hover { background: #22262c; }
+  .tabs .tab b { background: #23272e; }
+}
+
 /* The drawer button and scrim exist only on narrow screens. */
 #navtoggle { position: absolute; opacity: 0; pointer-events: none; }
 .topbar { display: none; }
@@ -421,6 +449,13 @@ SHELL_JS = r"""
     });
   }
 
+  // Which topic is on screen. '' means all of them. The tabs do not hide
+  // anything themselves - they declare what they want and let the one
+  // filter decide, the same arrangement the library's status pills use, so
+  // a tab and a search term combine instead of overwriting each other.
+  var topic = '';
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs .tab'));
+
   var box = document.querySelector('.filterbox');
   var opts = document.querySelectorAll('.viewopts input');
   var count = document.querySelector('.hitcount');
@@ -442,6 +477,10 @@ SHELL_JS = r"""
 
   function wanted(card, needle) {
     if (needle && textOf(card).indexOf(needle) === -1) { return false; }
+    if (topic) {
+      var section = card.closest('details.set');
+      if (!section || section.id !== topic) { return false; }
+    }
     // Pages with their own filter (the library's status pills) hand it in
     // here rather than setting display themselves. Two scripts both hiding
     // and showing the same cards would take it in turns to undo each other.
@@ -467,10 +506,12 @@ SHELL_JS = r"""
       if (keep) { shown++; }
     });
     // A section whose papers are all hidden is just a confusing empty
-    // heading, so it goes too.
+    // heading, so it goes too. A section the active tab excludes goes
+    // whatever its contents.
     document.querySelectorAll('details.set').forEach(function (block) {
+      var wrongTopic = topic && block.id !== topic;
       var any = block.querySelector('.paper:not([style*="none"])');
-      block.style.display = any ? '' : 'none';
+      block.style.display = (any && !wrongTopic) ? '' : 'none';
     });
     if (count) {
       count.textContent = (shown === cards.length)
@@ -481,6 +522,19 @@ SHELL_JS = r"""
 
   if (box) { box.addEventListener('input', apply); }
   opts.forEach(function (option) { option.addEventListener('change', apply); });
+
+  tabs.forEach(function (tab) {
+    tab.addEventListener('click', function (event) {
+      event.preventDefault();          // it is an anchor only without JS
+      topic = tab.getAttribute('data-topic') || '';
+      tabs.forEach(function (other) {
+        other.classList.toggle('on', other === tab);
+      });
+      apply();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  });
+
   window.pfApplyFilters = apply;
   apply();
 })();
@@ -950,6 +1004,27 @@ def render_html(groups, meta):
         % (_escape(meta.get("date_label", "")), _escape(_headline_counts(meta))),
         _counts_line(meta),
     ]
+
+    # A horizontal strip of topics, so you can switch between fields instead
+    # of scrolling past the ones you are not reading right now.
+    #
+    # They are anchor links first and tabs second. With JavaScript off they
+    # jump to the section, which is what the old jump-nav did; the script
+    # upgrades them into real tabs that show one topic at a time. Nothing is
+    # lost if it never runs.
+    live = [(name, papers) for name, papers in groups if papers]
+    if len(live) > 1:
+        chips = ['<a class="tab on" href="#" data-topic="">All topics'
+                 '<b>%d</b></a>' % shown_total]
+        for name, papers in live:
+            fresh = sum(1 for paper in papers if getattr(paper, "is_new", True))
+            chips.append(
+                '<a class="tab" href="#%s" data-topic="%s">%s<b>%s</b></a>'
+                % (_slug(name), _slug(name), _escape(name),
+                   "%d&middot;%d new" % (len(papers), fresh) if fresh
+                   else str(len(papers)))
+            )
+        parts.append('<nav class="tabs">%s</nav>' % "".join(chips))
 
     sourcing = list(meta.get("metrics_lines") or [])
     if sourcing:

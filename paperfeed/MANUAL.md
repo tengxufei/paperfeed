@@ -364,6 +364,13 @@ title, not just hidden in a tooltip — a tooltip cannot be reached on a phone.
 
 ### The digest
 
+A strip of **topic tabs** runs across the top: click one to see just that
+field, or *All topics* for everything. A tab and the sidebar filter combine
+rather than overriding each other, so you can be inside one topic and still
+search within it. Without JavaScript the tabs fall back to jump links and
+every topic stays on the page, which is how the file behaves when you open
+it straight off disk with scripting disabled.
+
 Each keyword set is a collapsible section showing its **top 5**, with the
 rest behind a second fold. **compact list** in the rail collapses every card
 to one line. Papers with free full text are badged and linked. Each card
