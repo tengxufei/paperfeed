@@ -177,8 +177,11 @@ def _quality(rows, today):
     cited = []
     for row in rows:
         metrics = row["_m"]
-        published = _day(row.get("published"))
-        row["_age"] = (today - published).days if published else None
+        # The later of the two dates, for the reason metrics.age_in_days
+        # explains: a nominal journal date can predate the record by months.
+        known = [day for day in (_day(row.get("published")),
+                                 _day(metrics.get("published"))) if day]
+        row["_age"] = (today - max(known)).days if known else None
         row["_too_new"] = row["_age"] is not None and row["_age"] < TOO_NEW_DAYS
         count = metrics.get("citations")
         if count is not None and not row["_too_new"]:

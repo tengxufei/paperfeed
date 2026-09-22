@@ -388,6 +388,41 @@ def _masthead(meta, total):
     )
 
 
+def _key(groups, meta):
+    """What the two chips mean, said once, near the top.
+
+    The web page keeps this in the sidebar. An email has no sidebar and no
+    hover, so if it is not written next to the numbers it is nowhere: two
+    bare digits in front of a title is a puzzle, not a signal.
+    """
+    has_ai = any(getattr(paper, "ai_score", None) is not None
+                 for _, papers in groups for paper in papers)
+    rows = []
+    if has_ai:
+        rows.append(
+            "%s how well it matches what you wrote in <b>interests</b>, "
+            "judged by %s. 0&ndash;10."
+            % (_chip("AI 9", CHIP_AI), _escape(meta.get("ai_label") or "the AI"))
+        )
+    rows.append(
+        "%s PaperFeed's own score out of 10: a concept of your query in the "
+        "<b>title</b> is worth 4, a <b>MeSH heading</b> 2, a mention in the "
+        "<b>abstract</b> 1, an <b>author you follow</b> 3."
+        % _chip("8.0", CHIP_LOCAL)
+    )
+    if has_ai:
+        rows.append(
+            "Papers are ordered by the AI score where there is one, and by "
+            "PaperFeed's own score otherwise."
+        )
+    return _table(
+        '<tr><td bgcolor="%s" style="background:%s;padding:10px 14px;'
+        'font-size:11.5px;color:%s;line-height:1.65;">%s</td></tr>'
+        % (CARD, CARD, DIM, "<br>".join(rows)),
+        "border:1px solid %s;border-radius:8px;margin:0 0 10px;" % LINE,
+    )
+
+
 def _notice(text, colour="#c2703a"):
     return _table(
         '<tr><td bgcolor="%s" style="background:%s;border-left:3px solid %s;'
@@ -448,6 +483,7 @@ def _body(groups, meta, cards_per_topic, tail_limit):
 
     lead = _best(groups)
     parts.append(_lead_card(lead))
+    parts.append(_key(groups, meta))
 
     rising = meta.get("rising") or []
     if rising:
@@ -547,6 +583,16 @@ def render_text(groups, meta):
     if not total:
         out.append("Nothing new this time.")
         return "\n".join(out) + "\n"
+
+    has_ai = any(getattr(paper, "ai_score", None) is not None
+                 for _, papers in groups for paper in papers)
+    if has_ai:
+        out.append("AI n/10  = how well it matches your 'interests', judged by %s."
+                   % (meta.get("ai_label") or "the AI"))
+    out.append("score n  = PaperFeed's own, out of 10: a concept of your query")
+    out.append("           in the title 4, a MeSH heading 2, a mention in the")
+    out.append("           abstract 1, an author you follow 3.")
+    out.append("")
 
     for name, papers in groups:
         if not papers:

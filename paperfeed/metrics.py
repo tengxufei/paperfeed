@@ -532,6 +532,30 @@ def _apply_journal_table(papers, settings, report):
     report["table_misses"] = table.misses
 
 
+def _as_date(stamp):
+    try:
+        return date(*(int(part) for part in str(stamp or "")[:10].split("-")))
+    except (TypeError, ValueError):
+        return None
+
+
+def age_in_days(paper, today=None):
+    """How long this paper has really been readable.
+
+    The two dates disagree more often than you would expect. A volume in a
+    book series carries a journal date of 2026-01-01 while the record only
+    reached PubMed in September: take the journal date and it looks 264 days
+    old with nothing citing it, when in truth nobody could read it until
+    three days ago. The LATER of the two is the honest answer, so whichever
+    field is odd, the paper is never accused of being ignored.
+    """
+    known = [day for day in (_as_date(paper.issued), _as_date(paper.published))
+             if day]
+    if not known:
+        return None
+    return ((today or date.today()) - max(known)).days
+
+
 def _mark_new_papers(papers, new_paper_days):
     """Hide the citation count on papers too young to have one.
 
@@ -543,12 +567,8 @@ def _mark_new_papers(papers, new_paper_days):
         return
     today = date.today()
     for paper in papers:
-        stamp = (paper.issued or paper.published or "")[:10]
-        try:
-            published = date(*(int(part) for part in stamp.split("-")))
-        except (TypeError, ValueError):
-            continue
-        if (today - published).days < new_paper_days:
+        age = age_in_days(paper, today)
+        if age is not None and age < new_paper_days:
             paper.metrics["too_new"] = True
             paper.metrics.pop("citations", None)
 

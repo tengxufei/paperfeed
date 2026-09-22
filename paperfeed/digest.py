@@ -500,10 +500,10 @@ def _score_key(meta):
         )
     rows.append(
         '<div class="row"><span class="score strong" style="--fill:80%">8.0</span>'
-        "<span>PaperFeed's own score, out of 10. A concept in the title is "
-        "worth 4, a MeSH heading 2, a mention in the abstract 1. The bar "
-        "behind it fills with the score; hover for the reasons, which are "
-        "also printed under each title.</span></div>"
+        "<span>PaperFeed's own score, out of 10. A concept of your query in "
+        "the title is worth 4, a MeSH heading 2, a mention in the abstract 1, "
+        "and an author you follow 3. The bar behind it fills with the score; "
+        "the reasons are printed under each title.</span></div>"
     )
     if meta.get("ai_label"):
         rows.append(
