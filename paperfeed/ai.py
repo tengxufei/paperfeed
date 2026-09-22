@@ -179,6 +179,65 @@ def _endpoint(settings):
     return provider, base + spec["path"]
 
 
+# A 429 is not one thing. Google returns it both for "you sent those a little
+# too fast" and for "your free allowance for the whole day is gone", and the
+# two need opposite handling: the first is worth waiting out, the second
+# cannot be retried at all. Worse, it attaches a RetryInfo of a few seconds
+# to BOTH - truthful for the per-minute cap, meaningless for the daily one.
+# Reporting the daily case as "the service was busy" sent people back to
+# retry something that could not work for hours.
+def _quota_problem(response, provider):
+    """Read what the service actually said about a 429.
+
+    Returns (message, retry_seconds). retry_seconds is None when waiting
+    cannot help - the case that used to be reported as a busy service.
+    """
+    try:
+        error = (response.json() or {}).get("error") or {}
+    except ValueError:
+        error = {}
+
+    violation, retry_delay = {}, None
+    for detail in error.get("details") or []:
+        kind = str(detail.get("@type", "")).rsplit(".", 1)[-1]
+        if kind == "QuotaFailure" and detail.get("violations"):
+            violation = detail["violations"][0] or {}
+        elif kind == "RetryInfo":
+            retry_delay = detail.get("retryDelay")
+
+    quota_id = str(violation.get("quotaId") or "")
+    limit = violation.get("quotaValue")
+    model = (violation.get("quotaDimensions") or {}).get("model")
+    label = (PROVIDERS.get(provider) or {}).get("label", provider)
+
+    seconds = None
+    for raw in (retry_delay, response.headers.get("Retry-After")):
+        if seconds is None and raw:
+            try:
+                seconds = float(str(raw).rstrip("s"))
+            except ValueError:
+                pass
+
+    if "PerDay" in quota_id:
+        # Deliberately does not repeat the RetryInfo delay: the daily
+        # allowance does not come back in seventeen seconds.
+        return (
+            "%s's free allowance for %s is used up for today%s. Waiting will "
+            "not help - this is a daily cap, not a busy service. You can wait "
+            "for it to reset, point ai.model at a different model (each model "
+            "has its own allowance), or turn on billing. Your current usage "
+            "is at https://ai.dev/rate-limit"
+            % (label, model or "this model",
+               " (%s requests a day)" % limit if limit else ""),
+            None,
+        )
+    return (
+        "%s is rate-limiting requests%s" % (
+            label, " (limit %s)" % limit if limit else ""),
+        seconds,
+    )
+
+
 def call(settings, system, user_text, max_tokens=2000, effort=None, timeout=120):
     """One request to whichever service is configured. Returns (text, usage)."""
     key = (settings or {}).get("api_key") or ""
@@ -272,6 +331,16 @@ def call(settings, system, user_text, max_tokens=2000, effort=None, timeout=120)
             raise AIError(
                 "the service rejected the request (400): %s" % response.text[:200]
             )
+        if response.status_code == 429:
+            message, wait = _quota_problem(response, provider)
+            if wait is None:
+                # A daily allowance. Retrying is not slow, it is useless.
+                raise AIError(message)
+            last = message
+            if attempt < MAX_ATTEMPTS:
+                # Honour what the service asked for, within reason.
+                time.sleep(min(max(wait, 1.0), 60.0))
+            continue
         if response.status_code in RETRYABLE:
             last = "the service was busy (HTTP %d)" % response.status_code
             if attempt < MAX_ATTEMPTS:
