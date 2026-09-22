@@ -27,21 +27,6 @@ API_VERSION = "2023-06-01"
 KEYCHAIN_SERVICE = "paperfeed-anthropic-key"
 KEYCHAIN_ACCOUNT = "paperfeed"
 
-# Prices per million tokens, from the Anthropic pricing table (2026-06).
-# Used only to show you an estimate before you switch anything on.
-PRICING = {
-    "claude-haiku-4-5": {"input": 1.00, "output": 5.00},
-    "claude-sonnet-5": {"input": 2.00, "output": 10.00},
-    "claude-opus-5": {"input": 5.00, "output": 25.00},
-}
-
-DEFAULT_SCORING_MODEL = "claude-haiku-4-5"
-DEFAULT_TRENDS_MODEL = "claude-sonnet-5"
-
-RETRYABLE = (429, 500, 502, 503, 529)
-MAX_ATTEMPTS = 3
-
-
 # PaperFeed talks to whichever model service you point it at. Two request
 # shapes cover almost everything: Anthropic's Messages API, and the OpenAI
 # chat-completions shape that OpenAI, Groq, DeepSeek, Together, OpenRouter,
