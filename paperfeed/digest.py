@@ -441,7 +441,7 @@ SHELL_JS = r"""
       if (!opts[i].checked) { continue; }
       var rule = opts[i].getAttribute('data-rule');
       if (rule === 'oa' && !card.querySelector('.badge.oa')) { return false; }
-      if (rule === 'primary' && card.querySelector('.badge.kind')) { return false; }
+      if (rule === 'primary' && card.dataset.secondary) { return false; }
       if (rule === 'nonew' && card.querySelector('.metric.quiet')) { return false; }
       if (rule === 'new' && !card.querySelector('.badge.new')) { return false; }
     }
@@ -658,6 +658,14 @@ def _chips(paper):
 
 # Article kinds worth showing on the card. "Journal Article" is on almost
 # every record and says nothing, so it is not one of them.
+# What "hide reviews and comments" should actually hide. A randomised
+# controlled trial and a retraction notice are neither, and hiding them
+# behind that label meant a user asking to see primary research saw FEWER
+# trials, and lost retraction notices entirely.
+SECONDARY_TYPES = frozenset({
+    "Review", "Systematic Review", "Comment", "Editorial", "Letter",
+})
+
 NOTABLE_TYPES = (
     "Review", "Systematic Review", "Meta-Analysis", "Case Reports",
     "Comment", "Editorial", "Letter", "Retracted Publication",
@@ -792,7 +800,10 @@ def _badges(paper):
 
 
 def _paper_html(paper, show_scores, ai_label=""):
-    parts = ['<div class="paper" data-doi="%s">' % _escape(paper.doi)]
+    kind = _article_kind(paper)
+    parts = ['<div class="paper" data-doi="%s"%s>'
+             % (_escape(paper.doi),
+                ' data-secondary="1"' if kind in SECONDARY_TYPES else "")]
 
     head = ['<div class="head">']
     if getattr(paper, "ai_score", None) is not None:
@@ -902,7 +913,7 @@ def render_html(groups, meta):
 
     options = [("oa", "free full text only"),
                ("primary", "hide reviews and comments"),
-               ("nonew", "hide papers with no citations yet")]
+               ("nonew", "hide papers too new to be cited")]
     if total and total < shown_total:
         # Only worth offering when the page actually holds both kinds.
         options.insert(0, ("new", "only papers new to me"))

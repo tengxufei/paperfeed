@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PaperFeed &mdash; Building a Tool with an AI Agent</title>
+<style>
+:root{--navy:#1a2b47;--ink:#1f2430;--gray:#55606d;--line:#c9ced6;--bad:#b3261e;--paper:#ffffff;}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#3a3f47;font-family:Arial,Helvetica,sans-serif;color:var(--ink)}
+#deck{height:100%}
+.slide{display:none;height:100vh;align-items:center;justify-content:center;position:relative}
+.slide.active{display:flex}
+.stage{width:1280px;height:720px;transform-origin:center center;background:var(--paper);
+  box-shadow:0 8px 40px rgba(0,0,0,.5);position:relative}
+.frame{position:absolute;inset:0;padding:56px 64px}
+.kicker{font-size:15px;letter-spacing:.10em;text-transform:uppercase;color:var(--gray);font-weight:700}
+.rule{height:3px;width:64px;background:var(--navy);margin:10px 0 18px}
+.title{font-size:34px;line-height:1.18;color:var(--navy);font-weight:700;max-width:1120px}
+.body{margin-top:26px;font-size:20px;line-height:1.5}
+.pagenum{position:absolute;right:64px;bottom:34px;font-size:14px;color:var(--gray)}
+.panel{display:flex;gap:0;align-items:stretch}
+.pleft{flex:1 1 60%;min-width:0;padding-right:26px}
+.pright{flex:1 1 40%;padding-left:26px}
+.vrule{width:1px;background:var(--line)}
+.notes-head{font-size:15px;letter-spacing:.06em;text-transform:uppercase;color:var(--gray);font-weight:700;margin-bottom:12px}
+.pright p{margin:0 0 12px;font-size:18px;line-height:1.45}
+.single{font-size:20px;line-height:1.5}
+.single.big{display:flex;flex-direction:column;justify-content:center;height:100%}
+pre.code{background:#f4f5f7;border:1px solid #e2e4e8;border-left:3px solid var(--navy);
+  border-radius:3px;padding:16px 18px;overflow:auto;max-height:520px}
+pre.code code{font-family:"SF Mono",Menlo,Consolas,monospace;font-size:15px;line-height:1.5;color:#20242c;white-space:pre}
+.fig{width:100%;height:auto;margin:6px 0 4px}
+.cap{font-size:15px;color:var(--gray);font-style:italic;margin-top:8px}
+.hero{height:100%;display:flex;flex-direction:column;justify-content:center}
+.lede{font-size:24px;line-height:1.5;margin:0 0 16px;max-width:1040px}
+.huge{font-size:52px;line-height:1.15;color:var(--navy);font-weight:700;margin-bottom:22px}
+.by{font-size:18px;color:var(--gray);margin-top:20px}
+.dim{color:var(--gray)}
+.bad{color:var(--bad);font-weight:700}
+.mono{font-family:"SF Mono",Menlo,Consolas,monospace;font-size:16px;background:#f4f5f7;padding:2px 6px;border-radius:3px;display:inline-block}
+.install .ins-h{font-weight:700;font-size:19px;margin-bottom:12px}
+.install p{margin:0 0 10px;font-size:18px;line-height:1.45}
+.notes{display:none}
+code{font-family:"SF Mono",Menlo,Consolas,monospace}
+/* control bar */
+#bar{position:fixed;top:0;left:0;right:0;height:44px;background:#20242c;color:#e8eaed;
+  display:flex;align-items:center;gap:14px;padding:0 16px;font-size:14px;z-index:100}
+#bar button{background:#333a45;color:#e8eaed;border:1px solid #4a525f;border-radius:4px;
+  padding:5px 12px;font-size:13px;cursor:pointer;font-family:Arial}
+#bar button:hover{background:#414a57}
+#bar .sp{flex:1}
+#count{color:#9aa4b2}
+body.presenting #bar{display:none}
+/* notes panel */
+#notespanel{position:fixed;bottom:0;left:0;right:0;max-height:34vh;overflow:auto;background:#111418;
+  color:#dfe3e8;padding:16px 22px;font-size:16px;line-height:1.5;border-top:2px solid var(--navy);
+  display:none;z-index:90}
+body.shownotes #notespanel{display:block}
+#notespanel h4{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#8b95a3;margin-bottom:8px}
+/* edit */
+.slidebar{display:none;position:absolute;top:12px;right:12px;gap:6px;z-index:80}
+body.editing .slidebar{display:flex}
+body.editing .stage{outline:2px dashed #6b7686}
+.slidebar button{background:#20242c;color:#fff;border:none;border-radius:4px;width:30px;height:30px;
+  font-size:16px;cursor:pointer}
+body.editing .title,body.editing .body,body.editing .kicker,body.editing .notes p{outline:1px dotted #9aa4b2}
+</style></head>
+<body>
+<div id="bar">
+  <b>PaperFeed &mdash; lab meeting</b>
+  <button onclick="prev()">&larr; Prev</button>
+  <button onclick="next()">Next &rarr;</button>
+  <span id="count"></span>
+  <span class="sp"></span>
+  <button onclick="toggleNotes()">Notes (N)</button>
+  <button onclick="present()">Present (F)</button>
+  <button onclick="toggleEdit()">Edit</button>
+  <button onclick="save()">Save</button>
+</div>
+<div id="deck"><section class="slide" data-i="0"><div class="slidebar" contenteditable="false"><button onclick="mv(0,-1)">&uarr;</button><button onclick="mv(0,1)">&darr;</button><button onclick="del(0)">&times;</button></div><div class="stage"><div class="frame"><div class="kicker">Lab meeting · practical AI</div><div class="rule"></div><h2 class="title">You can build a real research tool just by talking to an AI agent</h2><div class="body"><div class="single"><div class="hero"><p class="lede">PaperFeed &mdash; a literature radar that checks PubMed and the preprint servers and writes you a digest of new papers &mdash; is our worked example.</p><p class="lede">The tool is the example. The real lesson is the <b>workflow</b>: how you work <i>with</i> an agent.</p><p class="by">Xufei Teng · IMCB · 22 Sep 2026</p></div></div></div><div class="pagenum"></div></div></div><aside class="notes"><div class="notes-title">Speaker notes</div><p>Set the frame in one line: I am not going to teach you to code. I am going to show you how I directed an AI agent to build something my whole lab can use, and the handful of habits that make the difference between a toy and a tool. Everything today hangs on one loop. Transition: here is the loop.</p></aside></section>
+<section class="slide" data-i="1"><div class="slidebar" contenteditable="false"><button onclick="mv(1,-1)">&uarr;</button><button onclick="mv(1,1)">&darr;</button><button onclick="del(1)">&times;</button></div><div class="stage"><div class="frame"><div class="kicker">The throughline</div><div class="rule"></div><h2 class="title">One loop, five moves &mdash; you direct, the agent types</h2><div class="body"><div class="single"><svg viewBox="0 0 1160 150" class="fig">
+<rect x="8" y="45" width="180" height="60" rx="4" fill="none" stroke="#1a2b47" stroke-width="2"/><text x="98" y="80" text-anchor="middle" font-size="22" font-weight="700" fill="#1a2b47">Plan</text><line x1="188" y1="75" x2="228" y2="75" stroke="#1a2b47" stroke-width="2"/><polygon points="228,70 228,80 236,75" fill="#1a2b47"/><rect x="236" y="45" width="180" height="60" rx="4" fill="none" stroke="#1a2b47" stroke-width="2"/><text x="326" y="80" text-anchor="middle" font-size="22" font-weight="700" fill="#1a2b47">Build</text><line x1="416" y1="75" x2="456" y2="75" stroke="#1a2b47" stroke-width="2"/><polygon points="456,70 456,80 464,75" fill="#1a2b47"/><rect x="464" y="45" width="180" height="60" rx="4" fill="none" stroke="#1a2b47" stroke-width="2"/><text x="554" y="80" text-anchor="middle" font-size="22" font-weight="700" fill="#1a2b47">Verify</text><line x1="644" y1="75" x2="684" y2="75" stroke="#1a2b47" stroke-width="2"/><polygon points="684,70 684,80 692,75" fill="#1a2b47"/><rect x="692" y="45" width="180" height="60" rx="4" fill="none" stroke="#1a2b47" stroke-width="2"/><text x="782" y="80" text-anchor="middle" font-size="22" font-weight="700" fill="#1a2b47">Improve</text><line x1="872" y1="75" x2="912" y2="75" stroke="#1a2b47" stroke-width="2"/><polygon points="912,70 912,80 920,75" fill="#1a2b47"/><rect x="920" y="45" width="180" height="60" rx="4" fill="none" stroke="#1a2b47" stroke-width="2"/><text x="1010" y="80" text-anchor="middle" font-size="22" font-weight="700" fill="#1a2b47">Commit</text>
+</svg><div class="cap">You run this loop once per feature. Judgment is yours at every box; typing is the agent&rsquo;s.</div></div></div><div class="pagenum"></div></div></div><aside class="notes"><div class="notes-title">Speaker notes</div><p>This is the spine of the whole talk; point at each box. PLAN: you decide what you want. BUILD: agent writes it. VERIFY: you RUN it and look. IMPROVE: add one thing. COMMIT: save a checkpoint. Say it out loud: the agent supplies speed, you supply judgment. Everything else today is an example of one of these boxes. Transition: first, what are we actually building?</p></aside></section>
+<section class="slide" data-i="2"><div class="slidebar" contenteditable="false"><button onclick="mv(2,-1)">&uarr;</button><button onclick="mv(2,1)">&darr;</button><button onclick="del(2)">&times;</button></div><div class="stage"><div class="frame"><div class="kicker">The example</div><div class="rule"></div><h2 class="title">PaperFeed: keywords in, a digest of new papers out</h2><div class="body"><div class="panel"><div class="pleft"><pre class="code"><code>paperfeed/
+  paperfeed.py    the command you run
+  config.json     the ONLY file you edit (keywords, filters)
+  sources.py      PubMed + Europe PMC (+ OpenAlex citations)
+  relevance.py    drops noise, scores what's left, says WHY
+  store.py        decides what's "already seen"
+  digest.py       builds the HTML digest
+  ai.py           optional AI features (off by default)
+  digests/latest.html   always written - what you check</code></pre></div><div class="vrule"></div><div class="pright"><div class="notes-head">What it does</div><p>You give it keywords; it checks PubMed + the preprint servers on a schedule.</p><p>It remembers what it showed you, so each paper appears once.</p><p>It writes <b>digests/latest.html</b> every run &mdash; the file you open.</p><p>Standard-library Python + <code>requests</code>. No database server, no account.</p></div></div></div><div class="pagenum"></div></div></div><aside class="notes"><div class="notes-title">Speaker notes</div><p>Show the file map so people can follow along when they open the folder. The one path to remember is digests/latest.html - that is the output we check. Note how small it is: each file does one job. Don't dwell; this is orientation. Transition: it started as one plain-language request.</p></aside></section>
+<section class="slide" data-i="3"><div class="slidebar" contenteditable="false"><button onclick="mv(3,-1)">&uarr;</button><button onclick="mv(3,1)">&darr;</button><button onclick="del(3)">&times;</button></div><div class="stage"><div class="frame"><div class="kicker">PLAN</div><div class="rule"></div><h2 class="title">Planning is you deciding what you want &mdash; before any code</h2><div class="body"><div class="panel"><div class="pleft"><pre class="code"><code>We're building a tool called PaperFeed. I'm a researcher, not
+a strong coder: explain choices in plain language and keep the design as simple
+as it can be while still working.
+
+WHAT IT IS
+A literature-alert tool: I give it keywords, it finds recent matching papers
+from PubMed and the preprint servers, and writes me a digest of the new ones.
+
+HARD RULE
+ALWAYS write a local digest file too, so if email fails I still see the results.
+Treat that file as the thing we check to verify it worked.
+
+Give me a plan first and wait for my approval before writing any code.</code></pre></div><div class="vrule"></div><div class="pright"><div class="notes-head">file: BUILD_PROMPT.md</div><p>The whole method is the last line: <b>plan first, wait for my approval</b>.</p><p>Notice I stated the <b>hard rule</b> (always write the local file) up front.</p><p>I described the job, not the implementation.</p><p>The agent replies with a <i>plan</i> to approve &mdash; not a wall of code.</p></div></div></div><div class="pagenum"></div></div></div><aside class="notes"><div class="notes-title">Speaker notes</div><p>Read the last line aloud. This one sentence is the single most valuable habit: make the agent plan before it writes. Point out that I gave it a hard rule - always write the local file - because that becomes how we verify later. The plan comes back as prose you can say yes or no to. Transition: I also told it where I wanted to end up.</p></aside></section>
+<section class="slide" data-i="4"><div class="slidebar" contenteditable="false"><button onclick="mv(4,-1)">&uarr;</button><button onclick="mv(4,1)">&darr;</button><button onclick="del(4)">&times;</button></div><div class="stage"><div class="frame"><div class="kicker">PLAN</div><div class="rule"></div><h2 class="title">Design toward where you want to end up &mdash; don&rsquo;t bolt it on later</h2><div class="body"><div class="panel"><div class="pleft"><pre class="code"><code>Build it in this order, and stop after each for me to look at it:
+
+  1. Alert   — the core job: find new papers on my topics and deliver them.
+  2. Keep    — let me save the ones worth reading; keep the strongest on its own.
+  3. Show    — a dashboard over the collection, rebuilt every run.
+  4. Analyse — search any date range; compare one period against another.
+
+Stages 2 to 4 are worth nothing if stage 1 has stopped working.</code></pre></div><div class="vrule"></div><div class="pright"><div class="notes-head">file: building_prompts.md</div><p>I named the end state, then said <b>build in this order, stop after each</b>.</p><p>Smallest useful thing first: <b>Alert</b> before dashboards or AI.</p><p>A standing rule: later stages must never break the alert.</p><p>Stopping to look after each stage is a checkpoint, not a delay.</p></div></div></div><div class="pagenum"></div></div></div><aside class="notes"><div class="notes-title">Speaker notes</div><p>The lesson here is staging. I didn't ask for everything at once; I gave an order and a stop point after each. That keeps you in control and keeps each piece verifiable. Emphasize the standing rule: the core job must keep working. Transition: stage one - build the smallest useful thing.</p></aside></section>
+<section class="slide" data-i="5"><div class="slidebar" contenteditable="false"><button onclick="mv(5,-1)">&uarr;</button><button onclick="mv(5,1)">&darr;</button><button onclick="del(5)">&times;</button></div><div class="stage"><div class="frame"><div class="kicker">BUILD</div><div class="rule"></div><h2 class="title">Build the smallest useful thing first &mdash; just the alert</h2><div class="body"><div class="single"><svg viewBox="0 0 1160 130" class="fig">
+<rect x="8" y="30" width="250" height="70" rx="4" fill="none" stroke="#1a2b47" stroke-width="2"/><text x="133" y="60" text-anchor="middle" font-size="20" font-weight="700" fill="#1a2b47">sources.py</text><text x="133" y="84" text-anchor="middle" font-size="14" fill="#55606d">find papers</text><line x1="258" y1="65" x2="298" y2="65" stroke="#1a2b47" stroke-width="2"/><polygon points="298,60 298,70 306,65" fill="#1a2b47"/><rect x="298" y="30" width="250" height="70" rx="4" fill="none" stroke="#1a2b47" stroke-width="2"/><text x="423" y="60" text-anchor="middle" font-size="20" font-weight="700" fill="#1a2b47">relevance.py</text><text x="423" y="84" text-anchor="middle" font-size="14" fill="#55606d">score + filter</text><line x1="548" y1="65" x2="588" y2="65" stroke="#1a2b47" stroke-width="2"/><polygon points="588,60 588,70 596,65" fill="#1a2b47"/><rect x="588" y="30" width="250" height="70" rx="4" fill="none" stroke="#1a2b47" stroke-width="2"/><text x="713" y="60" text-anchor="middle" font-size="20" font-weight="700" fill="#1a2b47">store.py</text><text x="713" y="84" text-anchor="middle" font-size="14" fill="#55606d">forget seen</text><line x1="838" y1="65" x2="878" y2="65" stroke="#1a2b47" stroke-width="2"/><polygon points="878,60 878,70 886,65" fill="#1a2b47"/><rect x="878" y="30" width="250" height="70" rx="4" fill="none" stroke="#1a2b47" stroke-width="2"/><text x="1003" y="60" text-anchor="middle" font-size="20" font-weight="700" fill="#1a2b47">digest.py</text><text x="1003" y="84" text-anchor="middle" font-size="14" fill="#55606d">write HTML</text>
+</svg><div class="cap">The alert pipeline the agent built first. Four files, one job each &mdash; dashboards and AI came later.</div></div></div><div class="pagenum"></div></div></div><aside class="notes"><div class="notes-title">Speaker notes</div><p>Walk left to right: sources finds papers, relevance scores and filters them, store forgets anything already shown, digest writes the HTML. This is the entire core. Resisting the urge to build everything at once is a skill - a small thing that works beats a big thing that half-works. Transition: now the single most important habit in this whole talk.</p></aside></section>
+<section class="slide" data-i="6"><div class="slidebar" contenteditable="false"><button onclick="mv(6,-1)">&uarr;</button><button onclick="mv(6,1)">&darr;</button><button onclick="del(6)">&times;</button></div><div class="stage"><div class="frame"><div class="kicker">VERIFY</div><div class="rule"></div><h2 class="title">Verify by running and opening the output &mdash; not by reading the code</h2><div class="body"><div class="panel"><div class="pleft"><pre class="code"><code>"""PaperFeed - keyword-driven literature alerts.
+...
+The order of operations matters: the digest file is written to disk *before*
+email is attempted, and a failed email never fails the run. The file is the
+thing to check.
+"""</code></pre></div><div class="vrule"></div><div class="pright"><div class="notes-head">file: paperfeed.py</div><p>I told it: <b>verify by running it and opening the output</b>, and tell me what you observed.</p><p>The design writes the digest <b>before</b> anything that can fail.</p><p>So there is always a real file to check.</p><p>Then <i>I</i> read the top papers &mdash; I am the ground truth, not the tool.</p></div></div></div><div class="pagenum"></div></div></div><aside class="notes"><div class="notes-title">Speaker notes</div><p>This is the hinge of the talk. An agent is fast and confident and almost never throws an error - which is exactly why 'it ran' feels like 'it worked'. Make them repeat it: running is not verifying until you look at the output. The next three slides are all the same lesson: things that ran cleanly and were wrong. Transition: bug one.</p></aside></section>
+<section class="slide" data-i="7"><div class="slidebar" contenteditable="false"><button onclick="mv(7,-1)">&uarr;</button><button onclick="mv(7,1)">&darr;</button><button onclick="del(7)">&times;</button></div><div class="stage"><div class="frame"><div class="kicker">VERIFY &mdash; don&rsquo;t trust</div><div class="rule"></div><h2 class="title">The ranking looked right and was scoring backwards</h2><div class="body"><div class="panel"><div class="pleft"><pre class="code"><code>DEFAULT_WEIGHTS = {
+    "title_weight":    4.0,   # what a paper is ABOUT - the strongest signal
+    "mesh_weight":     2.0,   # an indexer decided the paper is about it
+    "abstract_weight": 1.0,   # a passing mention is weak
+    "recency_bonus":   1.0,   # a tiebreaker only: in a 14-day window almost
+                              # everything is recent, so it cannot drive rank
+}</code></pre></div><div class="vrule"></div><div class="pright"><div class="notes-head">file: relevance.py</div><p>In testing, a paper with a term <b>in its title</b> was beaten by a review that only <b>mentioned</b> it twice.</p><p>The code ran and produced a tidy ranked list. The list was wrong.</p><p>Fix: a title hit is <b>4</b>; two passing mentions are <b>1 + 1</b>. Title always wins.</p><p><span class='bad'>No error would ever have told me</span> &mdash; only reading the top 5.</p></div></div></div><div class="pagenum"></div></div></div><aside class="notes"><div class="notes-title">Speaker notes</div><p>This is the headline bug. Tell the story concretely: the paper that was actually about binder design sat below a review that just name-dropped it. Point at the numbers - title 4 beats abstract 1 plus 1. The teaching beat: it ran, it gave an answer, the answer was wrong, and only a human reading the output caught it. Transition: a second one, even quieter.</p></aside></section>
+<section class="slide" data-i="8"><div class="slidebar" contenteditable="false"><button onclick="mv(8,-1)">&uarr;</button><button onclick="mv(8,1)">&darr;</button><button onclick="del(8)">&times;</button></div><div class="stage"><div class="frame"><div class="kicker">VERIFY &mdash; don&rsquo;t trust</div><div class="rule"></div><h2 class="title">The author filter matched the wrong scientist</h2><div class="body"><div class="panel"><div class="pleft"><pre class="code"><code>def author_matches(followed, authors):
+    """Does this paper have the author you follow on it?
+
+    Plain substring matching is wrong here: "Baker D" would match "Baker DA",
+    who is a different person in a different field. Names must line up on a
+    whole-initial boundary, so "Baker" still matches "Baker D" but "Baker D"
+    does not match "Baker DA".
+    """</code></pre></div><div class="vrule"></div><div class="pright"><div class="notes-head">file: relevance.py</div><p>Following <code>&quot;Baker D&quot;</code> also returns papers by <code>&quot;Baker DA&quot;</code> &mdash; a different person.</p><p>A plain text match <i>looks</i> like the feature working.</p><p>Fix: the follow-bonus needs the initials to line up exactly.</p><p>Wrong-author papers sink instead of topping your feed.</p></div></div></div><div class="pagenum"></div></div></div><aside class="notes"><div class="notes-title">Speaker notes</div><p>A false match that looks like success. You only catch it by following a real name and reading who actually shows up. This matters for a lab: you'll each follow people you know, and a lookalike name would quietly pollute your digest. The fix is in the code and the caveat is written into the config so nobody is surprised. Transition: the sharpest one.</p></aside></section>
+<section class="slide" data-i="9"><div class="slidebar" contenteditable="false"><button onclick="mv(9,-1)">&uarr;</button><button onclick="mv(9,1)">&darr;</button><button onclick="del(9)">&times;</button></div><div class="stage"><div class="frame"><div class="kicker">VERIFY &mdash; don&rsquo;t trust</div><div class="rule"></div><h2 class="title">&ldquo;It ran without an error&rdquo; is not &ldquo;it worked&rdquo;</h2><div class="body"><div class="panel"><div class="pleft"><pre class="code"><code># Neither search engine tells you a query is wrong.
+# Measured against the LIVE APIs:
+
+  (IDH1[tiab] AND glioma[tiab]   unbalanced bracket -&gt; HTTP 200, 2088 hits
+  IDH1[notafield]                invented field     -&gt; HTTP 200, 2254 hits
+  IDH1[tiab] ANDD glioma[tiab]   typo               -&gt; HTTP 200,    0 hits
+  BOGUSFIELD:"glioma" (EuropePMC) invented field    -&gt; HTTP 200,    0 hits
+
+# Every one is a SUCCESSFUL request that returns the wrong papers.
+# A query you cannot validate is a query you cannot trust.</code></pre></div><div class="vrule"></div><div class="pright"><div class="notes-head">file: query.py</div><p>Malformed searches &mdash; a stray bracket, a made-up field, a typo &mdash; all return <b>HTTP 200</b>.</p><p>Success code, <span class='bad'>wrong papers</span>. No error anywhere.</p><p>So the tool validates every query <b>before</b> it is sent.</p><p>This was measured against the live APIs, not assumed.</p></div></div></div><div class="pagenum"></div></div></div><aside class="notes"><div class="notes-title">Speaker notes</div><p>This is the strongest single slide - use it as the emotional peak. There was nothing visibly broken: the request succeeded and returned papers, just the wrong ones. If you trust the green light, you never find out. Say the takeaway line here and let it land: it ran without an error is not it worked. Transition: verifying is also about failure - what happens when a part breaks?</p></aside></section>
+<section class="slide" data-i="10"><div class="slidebar" contenteditable="false"><button onclick="mv(10,-1)">&uarr;</button><button onclick="mv(10,1)">&darr;</button><button onclick="del(10)">&times;</button></div><div class="stage"><div class="frame"><div class="kicker">VERIFY &mdash; don&rsquo;t trust</div><div class="rule"></div><h2 class="title">The digest survives everything that can fail</h2><div class="body"><div class="panel"><div class="pleft"><pre class="code"><code># ai.py - every AI feature is written to fail soft:
+# if the key is missing, wrong, or the network is down, the caller logs it
+# and carries on with the local ranking. The digest is written either way.
+
+# README, "Turning on email":
+# A missing password was once a FATAL config error - the scheduled run aborted
+# before writing anything. The exact failure the local file exists to prevent.</code></pre></div><div class="vrule"></div><div class="pright"><div class="notes-head">files: ai.py, README</div><p>Email down, network down, no API key, garbled reply &mdash; the digest is still written.</p><p>Because the file is written <b>first</b>, before anything risky.</p><p>This was learned the hard way: a missing password was <b>once fatal</b>.</p><p>Verifying isn&rsquo;t only &lsquo;does it work?&rsquo; &mdash; it&rsquo;s &lsquo;what happens when a part fails?&rsquo;</p></div></div></div><div class="pagenum"></div></div></div><aside class="notes"><div class="notes-title">Speaker notes</div><p>Round out the verify theme: you find robustness by making parts fail on purpose. The missing-password story is perfect - the very thing meant to protect you (the local file) was once skipped because an unrelated error aborted the run first. Ask the agent 'what happens if X fails' as a habit. Transition: once it works, you make it better - carefully.</p></aside></section>
+<section class="slide" data-i="11"><div class="slidebar" contenteditable="false"><button onclick="mv(11,-1)">&uarr;</button><button onclick="mv(11,1)">&darr;</button><button onclick="del(11)">&times;</button></div><div class="stage"><div class="frame"><div class="kicker">IMPROVE</div><div class="rule"></div><h2 class="title">Add capability one at a time &mdash; menu, then plan, then build</h2><div class="body"><div class="panel"><div class="pleft"><pre class="code"><code>Before we add anything: git init if needed, and commit the current
+working PaperFeed as our baseline so we can always roll back.
+
+Now propose a MENU of improvements that would make it more useful - grouped as
+(a) improving what's here and (b) genuinely new capabilities. One line each.
+Don't build. Give me the menu, I'll pick, then plan only the ones I choose.</code></pre></div><div class="vrule"></div><div class="pright"><div class="notes-head">file: building_prompts.md</div><p>I asked for a <b>menu</b> first, and said explicitly: don&rsquo;t build.</p><p>I pick; the agent plans only what I chose; then it builds.</p><p>Each addition gets its own plan-and-approve.</p><p>Same loop as before, just faster.</p></div></div></div><div class="pagenum"></div></div></div><aside class="notes"><div class="notes-title">Speaker notes</div><p>The improve step is the loop again. Two habits: ask for options before committing to one, and add things one at a time so each stays verifiable. Note the first line - commit a baseline BEFORE improving. That is the next slide. Transition: the safety net.</p></aside></section>
+<section class="slide" data-i="12"><div class="slidebar" contenteditable="false"><button onclick="mv(12,-1)">&uarr;</button><button onclick="mv(12,1)">&darr;</button><button onclick="del(12)">&times;</button></div><div class="stage"><div class="frame"><div class="kicker">COMMIT</div><div class="rule"></div><h2 class="title">Commit a working baseline you can always roll back to</h2><div class="body"><div class="single"><div class="single big"><pre class="code"><code>git init      # once
+git add -A &amp;&amp; git commit -m "working baseline"
+#   ... experiment freely ...
+git checkout .   # nothing good? roll straight back</code></pre><div class="cap">A commit is a checkpoint. It turns &ldquo;I might break it&rdquo; into &ldquo;I can always go back.&rdquo;</div></div></div></div><div class="pagenum"></div></div></div><aside class="notes"><div class="notes-title">Speaker notes</div><p>Keep this short and reassuring. The reason coding-shy people fear editing is that they might break something they can't undo. A commit removes that fear: you can always return to the last working version. Have the agent do it for you - you don't need to memorize git. Transition: now the part that is uniquely yours.</p></aside></section>
+<section class="slide" data-i="13"><div class="slidebar" contenteditable="false"><button onclick="mv(13,-1)">&uarr;</button><button onclick="mv(13,1)">&darr;</button><button onclick="del(13)">&times;</button></div><div class="stage"><div class="frame"><div class="kicker">The part only you can do</div><div class="rule"></div><h2 class="title">The watch list is domain judgment &mdash; that part is yours, not the agent&rsquo;s</h2><div class="body"><div class="panel"><div class="pleft"><pre class="code"><code>{
+  "name": "IDH1 in glioma",
+  "query": "(IDH1 OR \"isocitrate dehydrogenase 1\"
+        OR mesh:\"Isocitrate Dehydrogenase\")
+        AND (glioma OR glioblastoma)",
+  "authors": ["Yan H"],        // people you follow
+  "require_title_groups": 1,   // must be ABOUT this
+  "min_score": 4,              // 4 = "about", not "named"
+  "enabled": true
+}</code></pre></div><div class="vrule"></div><div class="pright"><div class="notes-head">file: config.json</div><p>The agent can build the machine. Only <b>you</b> know what to watch.</p><p>Four knobs are pure biology judgment:</p><p>&bull; the <b>query</b> concepts &nbsp;&bull; <b>authors</b> to follow</p><p>&bull; <b>exclude / mute</b> the lookalike traps &nbsp;&bull; <b>min_score</b> (your precision)</p></div></div></div><div class="pagenum"></div></div></div><aside class="notes"><div class="notes-title">Speaker notes</div><p>This is the slide for our audience specifically. Everyone here can build the same tool; what makes YOUR radar good is your config - and that is expertise no agent has. Point at the four knobs. One shared tool, one config per person = each of you encodes your own field. Seniors can hand down a vetted starter config. Transition: so what do you actually need to start?</p></aside></section>
+<section class="slide" data-i="14"><div class="slidebar" contenteditable="false"><button onclick="mv(14,-1)">&uarr;</button><button onclick="mv(14,1)">&darr;</button><button onclick="del(14)">&times;</button></div><div class="stage"><div class="frame"><div class="kicker">Getting started</div><div class="rule"></div><h2 class="title">Install one thing by hand; ask the agent for everything else</h2><div class="body"><div class="panel"><div class="pleft"><div class="install"><p class="ins-h">By hand (once):</p><p>1. A Claude <b>Pro or Max</b> plan (free doesn&rsquo;t include Claude Code).</p><p>2. Install Claude Code:</p><pre class="code"><code>curl -fsSL https://claude.ai/install.sh | bash</code></pre><p class="dim">&hellip;or install the Claude <b>Desktop app</b> for a window, no terminal.</p></div></div><div class="vrule"></div><div class="pright"><div class="notes-head">then just ask, in plain words</div><p>Everything else &mdash; Python, libraries, git &mdash; you ask the agent to set up:</p><p><i>e.g.</i></p><p><span class='mono'>Check whether I have Python 3 and install it if not, then confirm it works.</span></p><p>That&rsquo;s the whole point: describe the need, sign off, let the agent do the plumbing.</p></div></div></div><div class="pagenum"></div></div></div><aside class="notes"><div class="notes-title">Speaker notes</div><p>Practical slide. Only one manual step - get Claude Code. For the least technical labmates, point them at the Desktop app so they never touch a terminal. Then everything else is a sentence to the agent. Reassure: you will not be memorizing install commands. Transition: if you remember one thing from today...</p></aside></section>
+<section class="slide" data-i="15"><div class="slidebar" contenteditable="false"><button onclick="mv(15,-1)">&uarr;</button><button onclick="mv(15,1)">&darr;</button><button onclick="del(15)">&times;</button></div><div class="stage"><div class="frame"><div class="kicker">The one takeaway</div><div class="rule"></div><h2 class="title">Verify by running, not by reading</h2><div class="body"><div class="single"><div class="hero"><p class="huge">Verify by running, not by reading.</p><p class="lede">The agent writes code that <i>looks</i> right. Only running it on real data tells you whether it <i>is</i> right.</p><p class="lede dim">The agent supplies speed. You supply judgment.</p></div></div></div><div class="pagenum"></div></div></div><aside class="notes"><div class="notes-title">Speaker notes</div><p>Land the plane. Say the line, pause, say it again. Tie it back to the three bugs: every one ran cleanly and every one was wrong until a human looked. This is the habit that makes AI-built tools trustworthy. Then the human note: your judgment is the irreplaceable part. Transition: here is how to try it yourself.</p></aside></section>
+<section class="slide" data-i="16"><div class="slidebar" contenteditable="false"><button onclick="mv(16,-1)">&uarr;</button><button onclick="mv(16,1)">&darr;</button><button onclick="del(16)">&times;</button></div><div class="stage"><div class="frame"><div class="kicker">Your turn</div><div class="rule"></div><h2 class="title">The runbook has every prompt ready to paste</h2><div class="body"><div class="panel"><div class="pleft"><div class="install"><p class="ins-h">Two companion docs:</p><p>&bull; <b>Workshop Runbook</b> &mdash; copy-paste prompts, station by station.</p><p>&bull; <b>Presentation Plan</b> &mdash; the narrative and the code pointers.</p><p class="dim">Both live in my Claude artifacts; I&rsquo;ll share them.</p></div></div><div class="vrule"></div><div class="pright"><div class="notes-head">take-home actions</div><p>Get Claude Code before the workshop (see the checklist).</p><p>Bring one or two topics you actually follow &mdash; they become your keywords.</p><p>In the session: run the loop once, end to end, on your own field.</p><p>Then keep the config growing &mdash; it&rsquo;s your radar.</p></div></div></div><div class="pagenum"></div></div></div><aside class="notes"><div class="notes-title">Speaker notes</div><p>Close with the concrete next steps so people leave knowing what to do. The runbook does the heavy lifting in the hands-on session; today was the why and the shape. Invite them to bring real topics so the workshop builds something they'll actually use. Thanks, and open for questions.</p></aside></section></div>
+<div id="notespanel"><h4>Speaker notes</h4><div id="notesbody"></div></div>
+<script>
+var idx=0, slides=[];
+function q(){return Array.prototype.slice.call(document.querySelectorAll('.slide'));}
+function fit(){var s=document.querySelector('.slide.active .stage');if(!s)return;
+  var pad=document.body.classList.contains('presenting')?0:60;
+  var top=document.body.classList.contains('presenting')?0:44;
+  var aw=window.innerWidth-pad, ah=window.innerHeight-top-pad;
+  var k=Math.min(aw/1280, ah/720); s.style.transform='scale('+k+')';}
+function show(n){slides=q();if(!slides.length)return;idx=Math.max(0,Math.min(n,slides.length-1));
+  slides.forEach(function(el,i){el.classList.toggle('active',i===idx);
+    var pn=el.querySelector('.pagenum');if(pn)pn.textContent=(i+1)+' / '+slides.length;});
+  document.getElementById('count').textContent=(idx+1)+' / '+slides.length;
+  renderNotes();location.hash=idx+1;fit();}
+function renderNotes(){var el=slides[idx];if(!el)return;
+  var n=el.querySelector('.notes');document.getElementById('notesbody').innerHTML=n?n.innerHTML:'';}
+function next(){show(idx+1)} function prev(){show(idx-1)}
+function toggleNotes(){document.body.classList.toggle('shownotes');fit()}
+function present(){document.body.classList.toggle('presenting');
+  if(document.body.classList.contains('presenting')){if(document.documentElement.requestFullscreen)document.documentElement.requestFullscreen();}
+  else if(document.exitFullscreen&&document.fullscreenElement)document.exitFullscreen();fit()}
+function toggleEdit(){var on=document.body.classList.toggle('editing');
+  ['.kicker','.title','.body','.notes p'].forEach(function(sel){
+    document.querySelectorAll(sel).forEach(function(e){e.contentEditable=on?'true':'false';});});}
+function mv(i,d){slides=q();var el=slides[i];if(!el)return;
+  if(d<0&&el.previousElementSibling)el.parentNode.insertBefore(el,el.previousElementSibling);
+  else if(d>0&&el.nextElementSibling)el.parentNode.insertBefore(el.nextElementSibling,el);
+  reindex();show(Math.max(0,Math.min(i+d,q().length-1)));}
+function del(i){if(!confirm('Delete this slide? This cannot be undone.'))return;
+  slides=q();slides[i].remove();reindex();show(Math.min(i,q().length-1));}
+function reindex(){q().forEach(function(el,i){el.setAttribute('data-i',i);
+  var b=el.querySelector('.slidebar');if(b)b.innerHTML='<button onclick="mv('+i+',-1)">&uarr;</button>'+
+    '<button onclick="mv('+i+',1)">&darr;</button><button onclick="del('+i+')">&times;</button>';});}
+function save(){var doc=document.documentElement.cloneNode(true);
+  doc.classList.remove('editing','shownotes','presenting');
+  doc.querySelectorAll('[contenteditable]').forEach(function(e){e.removeAttribute('contenteditable')});
+  doc.querySelectorAll('#bar,#notespanel,.slidebar').forEach(function(e){e.remove()});
+  doc.querySelectorAll('.slide').forEach(function(e,i){e.classList.toggle('active',i===0)});
+  var html='<!DOCTYPE html>\n<html>'+doc.innerHTML+'</html>';
+  var b=new Blob([html],{type:'text/html'});var a=document.createElement('a');
+  a.href=URL.createObjectURL(b);a.download='paperfeed_deck_edited.html';a.click();}
+document.addEventListener('keydown',function(e){
+  if(document.body.classList.contains('editing'))return;
+  if(e.key==='ArrowRight'||e.key==='PageDown'||e.key===' '){e.preventDefault();next();}
+  else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();prev();}
+  else if(e.key==='n'||e.key==='N'){toggleNotes();}
+  else if(e.key==='f'||e.key==='F'){present();}
+  else if(e.key==='Escape'&&document.body.classList.contains('presenting')){present();}});
+window.addEventListener('resize',fit);
+window.addEventListener('load',function(){var h=parseInt((location.hash||'').replace('#',''));
+  show(isNaN(h)?0:h-1);});
+</script>
+</body></html>

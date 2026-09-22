@@ -566,21 +566,22 @@ def command_run(args):
     ]
 
     ranking = cfg["ranking"]
+    # ranking.enabled decides whether scores are SHOWN. It used to gate the
+    # filters too, so turning it off silently switched off every min_score
+    # and every require_title_groups with nothing said - two filters the
+    # user had configured, quietly not running. Scoring always happens; only
+    # the display is optional.
     show_scores = bool(ranking.get("enabled", True))
-    low_scoring = []
-    if show_scores:
-        relevance.score_all(shown, keyword_sets, ranking)
-        # Title coverage first: "is this paper about my topic at all" is a
-        # clearer question than "did it accumulate enough points", and
-        # answering it first keeps the score threshold doing one job.
-        shown, thin = relevance.drop_below_title_concepts(
-            shown, keyword_sets
-        )
-        hidden.extend(thin)
-        shown, low_scoring = relevance.drop_below_per_set(
-            shown, keyword_sets, ranking.get("min_score", 0)
-        )
-        hidden.extend(low_scoring)
+    relevance.score_all(shown, keyword_sets, ranking)
+    # Title coverage first: "is this paper about my topic at all" is a
+    # clearer question than "did it accumulate enough points", and
+    # answering it first keeps the score threshold doing one job.
+    shown, thin = relevance.drop_below_title_concepts(shown, keyword_sets)
+    hidden.extend(thin)
+    shown, low_scoring = relevance.drop_below_per_set(
+        shown, keyword_sets, ranking.get("min_score", 0)
+    )
+    hidden.extend(low_scoring)
 
     # Everything the digest will show, and the subset that is genuinely new.
     # Only the second goes in the email, the collector and the run counts.

@@ -42,7 +42,34 @@ def search_terms(keyword_set):
 
 
 def _contains(haystack, needle):
-    return needle.lower() in (haystack or "").lower()
+    """Does this text contain the term, starting at a word boundary?
+
+    Plain `in` was wrong in a way that showed up in the printed reasons: a
+    paper titled "Chain-of-thought said nothing" scored for "AI" and the card
+    announced "'AI' in title", because s-AI-d contains it. `exclude: ["rat"]`
+    hid "generation of rational designs" for the same reason.
+
+    The term must now START on a word boundary. It deliberately does NOT have
+    to END on one, because that is what keeps the matches you want: glioma
+    finds gliomas, design finds designed and designing, IDH1 finds
+    IDH1-mutant. The residue is prefix matching - "rat" still finds
+    "rational" - which is the same behaviour as PubMed's own truncation and
+    is far less surprising than matching inside a word.
+    """
+    text = (haystack or "").lower()
+    term = (needle or "").lower().strip()
+    if not term or not text:
+        return False
+
+    start = 0
+    while True:
+        at = text.find(term, start)
+        if at < 0:
+            return False
+        before = text[at - 1] if at else ""
+        if not (before.isalnum() or before == "_"):
+            return True
+        start = at + 1
 
 
 def author_matches(followed, authors):
@@ -142,9 +169,16 @@ def filter_papers(papers, keyword_set, cfg):
                 if any(_contains(kind, wanted) for kind in kinds):
                     reason = "it is a %s, which this set excludes" % wanted
                     break
-        if reason is None and type_only and kinds:
-            if not any(_contains(kind, wanted)
-                       for kind in kinds for wanted in type_only):
+        if reason is None and type_only:
+            # `and kinds` used to guard this, so a record with no publication
+            # types skipped the check and slipped through an EXCLUSIVE list
+            # with nothing said. An allow-list that quietly does not apply is
+            # the mirror image of a filter that does not say what it hid.
+            if not kinds:
+                reason = ("its kind is not recorded, and this set only wants "
+                          "%s" % " or ".join(type_only))
+            elif not any(_contains(kind, wanted)
+                         for kind in kinds for wanted in type_only):
                 reason = ("it is a %s, and this set only wants %s"
                           % (", ".join(kinds), " or ".join(type_only)))
 
@@ -288,16 +322,25 @@ def score_paper(paper, keyword_set, weights=None, today=None):
     raw = 0.0
     reasons = []
     matched = set()
+    in_title = False
 
     for term in search_terms(keyword_set):
         if _contains(paper.title, term):
             raw += settings["title_weight"]
             matched.add(term.lower())
+            in_title = True
             reasons.append("%r in title" % term)
         elif _contains(paper.abstract, term):
             raw += settings["abstract_weight"]
             matched.add(term.lower())
             reasons.append("%r in abstract" % term)
+
+    # A set that still uses terms/all_of has no bracketed concepts, but it
+    # must still answer "is any of this in the title" - otherwise
+    # require_title_groups reads the dataclass default of 0 and hides every
+    # paper, explaining itself as "0 of your 0 concepts".
+    paper.total_concepts = 1 if search_terms(keyword_set) else 0
+    paper.title_concepts = 1 if in_title else 0
 
     # Matching several different terms is a better signal than matching one
     # term repeatedly, so breadth earns its own bonus.

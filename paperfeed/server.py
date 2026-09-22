@@ -495,7 +495,8 @@ def library_page(db_path, has_key, ai_on, key_env="PAPERFEED_AI_KEY", cfg=None):
                 html.escape(record["title"]),
                 html.escape(authors),
                 html.escape(" \u00b7 ".join(tail)),
-                digest_module._metrics_row(enriched[record["key"]])
+                (digest_module._badges(enriched[record["key"]])
+                 + digest_module._metrics_row(enriched[record["key"]]))
                 if record["key"] in enriched else "",
                 buttons,
                 explain,
@@ -577,10 +578,13 @@ def library_page(db_path, has_key, ai_on, key_env="PAPERFEED_AI_KEY", cfg=None):
         "show_scores": False,
         "ai_label": ai.describe_model(cfg or {}) if cfg else "",
     }
+    # Only offer what the cards can actually answer. Library rows do not
+    # store publication types, so "hide reviews" had nothing to key on and
+    # was a silent no-op; "free full text only" keyed on a badge these cards
+    # never emitted, so ticking it hid all 23 papers. The badge is now
+    # emitted below from the metric cache, and the review option is gone.
     panel = digest_module.search_panel(
-        "Search your library",
-        (("oa", "free full text only"),
-         ("primary", "hide reviews and comments")),
+        "Search your library", (("oa", "free full text only"),),
     )
     glance = [(counts.get("unread", 0), "unread"),
               (counts.get("reading", 0), "reading"),

@@ -19,6 +19,7 @@ library: delete it and you lose only fetch time.
 
 import dataclasses
 import json
+import hashlib
 import os
 import re
 from datetime import date, timedelta
@@ -55,9 +56,31 @@ def cache_dir(base_dir):
     return os.path.join(base_dir, "cache")
 
 
-def _cache_file(base_dir, set_name, source, month):
+def _fingerprint(keyword_set):
+    """A short hash of what this set actually searches for.
+
+    The cache used to be keyed on the set's NAME alone, so editing its query
+    and re-running the same date range returned the OLD query's papers,
+    reported as "from cache", with nothing to say the question had changed.
+    _slug also truncates to 48 characters, so two sets whose names share a
+    long prefix collided outright.
+    """
+    parts = [
+        keyword_set.get("query") or "",
+        "|".join(keyword_set.get("terms") or []),
+        "|".join(keyword_set.get("all_of") or []),
+        "|".join(keyword_set.get("authors") or []),
+        keyword_set.get("fields") or "",
+    ]
+    digest = hashlib.sha1("\x00".join(parts).encode("utf-8")).hexdigest()
+    return digest[:10]
+
+
+def _cache_file(base_dir, keyword_set, source, month):
     return os.path.join(
-        cache_dir(base_dir), "%s__%s__%s.json" % (_slug(set_name), source, month)
+        cache_dir(base_dir),
+        "%s__%s__%s__%s.json" % (_slug(keyword_set["name"]),
+                                 _fingerprint(keyword_set), source, month),
     )
 
 
@@ -115,7 +138,7 @@ def search(cfg, keyword_sets, start, end, refresh=False, progress=None):
                 if not cfg["sources"].get(source_key):
                     continue
 
-                path = _cache_file(cfg["base_dir"], keyword_set["name"], source_key, month)
+                path = _cache_file(cfg["base_dir"], keyword_set, source_key, month)
                 if not refresh:
                     cached = _load(path)
                     if cached is not None:
