@@ -30,27 +30,47 @@ from datetime import date, datetime, timedelta
 TOO_NEW_DAYS = 90
 
 
+# Both databases are in rollback-journal mode, so any writer blocks every
+# reader for the length of its transaction - and a run IS a writer while
+# `serve` is rendering dashboards from the same files. Wait rather than give
+# up instantly, and say so when the wait is not enough.
+BUSY_TIMEOUT_MS = 4000
+
+
+def _open(path):
+    connection = sqlite3.connect("file:%s?mode=ro" % path, uri=True)
+    connection.execute("PRAGMA busy_timeout = %d" % BUSY_TIMEOUT_MS)
+    return connection
+
+
 def _rows(path):
+    """Returns (rows, problem). A problem is NOT an empty library.
+
+    Swallowing sqlite3.Error and returning [] made a locked or unreadable
+    database indistinguishable from having saved nothing: the dashboard
+    showed zeros everywhere and advised turning on a collector that was
+    already on, with 23 papers sitting on disk.
+    """
     if not path or not os.path.exists(path):
-        return []
+        return [], ""
     try:
-        connection = sqlite3.connect(path)
+        connection = _open(path)
         connection.row_factory = sqlite3.Row
         rows = [dict(row) for row in connection.execute(
             "SELECT * FROM saved ORDER BY saved_at DESC")]
         connection.close()
-        return rows
-    except sqlite3.Error:
-        return []
+        return rows, ""
+    except sqlite3.Error as error:
+        return [], "your library could not be read (%s)" % error
 
 
 def _metric_cache(path):
     """Everything the metrics module has already looked up, by key."""
     works, journals = {}, {}
     if not path or not os.path.exists(path):
-        return works, journals
+        return works, journals, ""
     try:
-        connection = sqlite3.connect(path)
+        connection = _open(path)
         for kind, key, payload in connection.execute(
                 "SELECT kind, key, payload FROM entries"):
             try:
@@ -59,9 +79,16 @@ def _metric_cache(path):
                 continue
             (works if kind == "work" else journals)[key] = value
         connection.close()
-    except sqlite3.Error:
-        pass
-    return works, journals
+    except sqlite3.Error as error:
+        return works, journals, "the metric cache could not be read (%s)" % error
+    return works, journals, ""
+
+
+def _tidy_issn(value):
+    """Same normalisation metrics.py uses, so the two agree on a key."""
+    text = "".join(ch for ch in str(value or "").strip().upper()
+                   if ch.isdigit() or ch == "X")
+    return (text[:4] + "-" + text[4:]) if len(text) == 8 else ""
 
 
 def _day(text):
@@ -78,19 +105,29 @@ def _week_start(when):
 def snapshot(library_path, metrics_path, scope=None, today=None):
     """Everything the dashboard needs about the papers you have kept."""
     today = today or date.today()
-    rows = _rows(library_path)
+    rows, trouble = _rows(library_path)
     if scope:
         rows = [row for row in rows if row.get("set_name") == scope]
 
-    works, journals = _metric_cache(metrics_path)
+    works, journals, cache_trouble = _metric_cache(metrics_path)
+    problems = [note for note in (trouble, cache_trouble) if note]
     for row in rows:
         doi = (row.get("doi") or "").strip().lower()
         row["_m"] = works.get("doi:%s" % doi, {}) if doi else {}
-        issn = (row["_m"].get("journal_issn") or "").strip()
-        row["_j"] = journals.get(issn, {}) if issn else {}
+        # The journal was cached under whichever ISSN was ASKED for, which is
+        # not always the issn_l OpenAlex reports back on the work. Try both,
+        # tidied the same way metrics.py tidies them, or the figures sit in
+        # the cache while the panel shows a bare venue name.
+        row["_j"] = {}
+        for candidate in (row["_m"].get("journal_issn"), row.get("issn")):
+            key = _tidy_issn(candidate)
+            if key and key in journals:
+                row["_j"] = journals[key]
+                break
 
     out = {
         "total": len(rows),
+        "problems": problems,
         "scope": scope,
         "by_status": Counter(row.get("status") or "unread" for row in rows),
         "by_origin": Counter(row.get("origin") or "you" for row in rows),
@@ -190,16 +227,35 @@ def _quality(rows, today):
         else:
             row["_cited"] = None
 
-    open_access = sum(1 for row in rows
+    # A paper with no cache entry used to contribute 0 to the numerator and
+    # 1 to the denominator, so the "free to read" share moved 26 points on
+    # cache state alone while the library sat unchanged. Only count rows we
+    # can actually answer for: a preprint is knowably open without metrics,
+    # anything else needs its work record.
+    knowable = [row for row in rows
+                if row["_m"] or row.get("source") == "Preprint"]
+    open_access = sum(1 for row in knowable
                       if row["_m"].get("is_oa") or row.get("source") == "Preprint")
     lag = [row["_age"] for row in rows if row["_age"] is not None]
+
+    # How long it took to reach you, which is NOT the same as how old it is
+    # now. The headline claimed the second while printing the first, so the
+    # sentence grew with the calendar while the library stood still.
+    delays = []
+    for row in rows:
+        published = _day(row.get("published"))
+        saved = _day(row.get("saved_at"))
+        if published and saved and saved >= published:
+            delays.append((saved - published).days)
 
     return {
         "ranked": sorted(cited, key=lambda row: -row["_cited"])[:8],
         "citable": len(cited),
         "too_new": sum(1 for row in rows if row["_too_new"]),
         "open_access": open_access,
-        "open_share": (100.0 * open_access / len(rows)) if rows else 0.0,
+        "open_measured": len(knowable),
+        "open_share": (100.0 * open_access / len(knowable)) if knowable else 0.0,
+        "median_delay": int(statistics.median(delays)) if delays else None,
         "retracted": [row for row in rows if row["_m"].get("retracted")],
         "median_age": int(statistics.median(lag)) if lag else None,
         "age_buckets": _age_buckets(rows),
@@ -251,6 +307,9 @@ def _headline(out, rows, today):
     A wall of figures leaves the reader to work out whether any of it is
     good news. This says it outright.
     """
+    if out.get("problems"):
+        return ("Some of this page could not be read: %s. The numbers below "
+                "are incomplete." % "; ".join(out["problems"]))
     if not rows:
         return ("Nothing saved yet. Turn the collector on in config.json, or "
                 "click Save on anything worth keeping in the digest.")
@@ -269,9 +328,11 @@ def _headline(out, rows, today):
     if out["untouched"]:
         bits.append("%d %s still unread"
                     % (out["untouched"], "is" if out["untouched"] == 1 else "are"))
-    if out["median_age"] is not None:
-        bits.append("the typical one was published %d days before you saw it"
-                    % out["median_age"])
+    if out["median_delay"] is not None:
+        bits.append("the typical one reached you %s after publication"
+                    % ("the same day" if out["median_delay"] == 0
+                       else "%d day%s" % (out["median_delay"],
+                                          "" if out["median_delay"] == 1 else "s")))
     return "; ".join(bits).capitalize() + "."
 
 

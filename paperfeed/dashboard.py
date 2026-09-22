@@ -286,11 +286,14 @@ def _cited_panel(coll):
     return _panel(
         "The most-cited papers you have kept",
         "Nothing here yet, and that is the correct answer.",
-        '<p class="empty-note">All %d of your saved papers are less than %d '
-        "days old, so none has had the chance to be cited. Showing zeros "
+        '<p class="empty-note">%d of your %d saved papers are less than %d '
+        "days old, so they have had no chance to be cited%s. Showing zeros "
         "would read as a judgement where there has simply been no "
         "opportunity. This panel fills itself in as your collection "
-        "ages.</p>" % (coll["too_new"], collection.TOO_NEW_DAYS))
+        "ages.</p>"
+        % (coll["too_new"], coll["total"], collection.TOO_NEW_DAYS,
+           "" if coll["too_new"] >= coll["total"]
+           else ", and the rest are not in OpenAlex"))
 
 
 def _reading_panel(coll):
@@ -408,6 +411,11 @@ def render(run, history_rows, alerts, library_summary, meta,
         '<p class="meta">%s</p>' % _esc(meta.get("date_label", "")),
     ]
 
+    if coll.get("problems"):
+        parts.append(_notice(
+            "This page is incomplete: %s. A run writing to the same file "
+            "while you were reading will do this; reload in a moment."
+            % _esc("; ".join(coll["problems"]))))
     if coll["headline"]:
         parts.append('<p class="headline">%s</p>' % _esc(coll["headline"]))
 
@@ -430,7 +438,9 @@ def render(run, history_rows, alerts, library_summary, meta,
             _tile(coll["total"], "papers kept"),
             _tile(coll["added_30d_auto"], "collected for you, 30 days"),
             _tile(coll["untouched"], "still unread"),
-            _tile("%d%%" % round(coll["open_share"]), "free to read"),
+            _tile("%d%%" % round(coll["open_share"]),
+                  "free to read" if coll.get("open_measured", 0) == coll["total"]
+                  else "free to read, of %d measured" % coll.get("open_measured", 0)),
             _tile(len(coll["journals"]), "journals covered"),
             _tile(run["total"], "new this run"),
         ]))

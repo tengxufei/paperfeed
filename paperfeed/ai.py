@@ -76,12 +76,24 @@ ANTHROPIC_VERSION = "2023-06-01"
 
 # Prices per million tokens, used only for the estimate shown before you
 # switch anything on. A model that is not listed reports cost as unknown.
+# Dollars per million tokens. Checked 2026-09-22; providers change these,
+# so an estimate built from this table is only ever roughly right - which is
+# why `check` says "rough" and the log reports real usage per run.
 PRICING = {
     "claude-haiku-4-5": {"input": 1.00, "output": 5.00},
     "claude-sonnet-5": {"input": 2.00, "output": 10.00},
     "claude-opus-5": {"input": 5.00, "output": 25.00},
     "gpt-4o-mini": {"input": 0.15, "output": 0.60},
     "gpt-4o": {"input": 2.50, "output": 10.00},
+    "gemini-2.5-flash": {"input": 0.30, "output": 2.50},
+    "gemini-2.5-pro": {"input": 1.25, "output": 10.00},
+}
+
+# Models the provider has announced an end date for. Worth saying out loud in
+# `check`: a scheduled run that starts failing because a model was withdrawn
+# looks like a broken tool.
+RETIRING = {
+    "gemini-2.5-flash": "2026-10-16",
 }
 
 DEFAULT_SCORING_MODEL = "claude-haiku-4-5"

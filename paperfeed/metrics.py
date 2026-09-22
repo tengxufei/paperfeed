@@ -362,7 +362,7 @@ def enrich(papers, cfg, log=None):
         "enabled": False, "asked": 0, "enriched": 0, "no_identifier": 0,
         "journals": 0, "budget_stopped": False, "requests": 0,
         "remaining": None, "errors": [], "table": "", "table_error": "",
-        "table_misses": 0, "note": "", "papers": 0,
+        "table_misses": 0, "note": "", "papers": 0, "fetched_now": 0,
     }
     settings = cfg.get("metrics") or {}
     if not settings.get("enabled"):
@@ -428,7 +428,15 @@ def _enrich_works(papers, settings, cache, budget, contact, report, log):
         prefix, _, value = key.partition(":")
         by_prefix[prefix].append(value)
 
+    satisfied = set()
     for prefix, values in by_prefix.items():
+        # A work returned by the DOI batch is indexed under BOTH its doi: and
+        # pmid: keys, so a paper known only by PMID is already enriched by
+        # the time the PMID pass runs. Asking again spent a credit against a
+        # metered allowance and counted the same paper twice, which is how
+        # "figures for 4 of the 2 papers below" got printed.
+        values = [value for value in values
+                  if "%s:%s" % (prefix, value) not in satisfied]
         for chunk in _chunks(values, BATCH):
             if budget.exhausted():
                 if log:
@@ -458,9 +466,13 @@ def _enrich_works(papers, settings, cache, budget, contact, report, log):
 
             for key, summary in found.items():
                 cache.put("work", key, summary)
+                if key in satisfied:
+                    continue
+                satisfied.add(key)
                 for paper in wanted.get(key, []):
                     paper.metrics.update(summary)
                     report["enriched"] += 1
+                    report["fetched_now"] += 1
             cache.commit()
 
 
@@ -505,8 +517,14 @@ def _enrich_journals(papers, settings, cache, budget, contact, report, log):
             # attaching it to the wrong journal would be worse than nothing.
             owned = {_tidy_issn(value) for value in
                      list(summary["issn"]) + [summary["issn_l"]]}
-            for issn in owned & set(chunk):
+            owned.discard("")
+            # Cache under EVERY ISSN this record answers to, not only the one
+            # that was asked for. A journal asked for as 2998-4165 but whose
+            # issn_l is 1545-5963 was stored under the first and looked up
+            # under the second, so the figures sat in the cache unused.
+            for issn in owned:
                 cache.put("journal", issn, summary)
+            for issn in owned & set(chunk):
                 for paper in wanted.get(issn, []):
                     paper.metrics["journal"] = summary
                     report["journals"] += 1
@@ -581,10 +599,21 @@ def describe(report):
     lines = []
     if report["enriched"]:
         total = report.get("papers") or report["enriched"]
+        # Most figures on most runs come from the cache, which holds them for
+        # up to 30 days. Stamping the lot with today's date claimed a
+        # provenance they do not have.
+        fresh = report.get("fetched_now", 0)
+        if fresh >= report["enriched"]:
+            when = "read from OpenAlex (CC0) on %s" % date.today().isoformat()
+        elif fresh:
+            when = ("from OpenAlex (CC0); %d read today, the rest from the "
+                    "local cache" % fresh)
+        else:
+            when = "from OpenAlex (CC0), out of the local cache"
         lines.append(
-            "Citation and journal figures for %d of the %d papers below come "
-            "from OpenAlex (CC0), read on %s.%s"
-            % (report["enriched"], total, date.today().isoformat(),
+            "Citation and journal figures for %d of the %d papers below are "
+            "%s.%s"
+            % (report["enriched"], total, when,
                "" if report["enriched"] >= total
                else " The rest are not in OpenAlex or could not be looked up.")
         )

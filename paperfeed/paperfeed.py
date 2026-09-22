@@ -1160,13 +1160,33 @@ def command_check(args):
                     cfg["trends"]["interval_days"],
                 )
             )
+        # A model with no entry in ai.PRICING produces per_run None, and the
+        # lines above are skipped. Printing a total anyway said "roughly
+        # $0.00 a year" for a configured, enabled, billable model - which is
+        # not an estimate, it is a wrong answer.
+        unpriced = sorted({
+            value["model"] for key_name, value in estimates.items()
+            if value["per_run"] is None and value.get("model")
+            and (cfg[key_name if key_name != "scoring" else "ai"]["enabled"]
+                 or args.costs)
+        })
         total = sum(
             value["per_year"]
             for key_name, value in estimates.items()
             if value["per_year"] is not None
             and (cfg[key_name if key_name != "scoring" else "ai"]["enabled"] or args.costs)
         )
-        print("    -> roughly $%.2f a year in total" % total)
+        if unpriced:
+            print(
+                "    no published price here for %s, so the total below "
+                "covers only what is priced." % ", ".join(unpriced)
+            )
+        if total or not unpriced:
+            print("    -> roughly $%.2f a year in total" % total)
+        for model, when in sorted(ai.RETIRING.items()):
+            if model in (estimates["scoring"]["model"], estimates["trends"]["model"]):
+                print("    NOTE: %s is scheduled for withdrawal on %s. After "
+                      "that, runs using it will fail." % (model, when))
         if not cfg["ai"]["enabled"] and not cfg["trends"]["enabled"]:
             print("    (both are currently off, so you are spending nothing)")
     return 0
