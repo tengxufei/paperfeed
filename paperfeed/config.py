@@ -65,6 +65,10 @@ DEFAULTS = {
         "interval_days": 30,
         "email": False,
     },
+    # How far back the digest SHOWS. Distinct from lookback_days, which is
+    # how far back it SEARCHES: the search window is deliberately wider so a
+    # gap in running never costs a paper.
+    "digest_days": 3,
     "lookback_days": 14,
     "max_per_set": 30,
     "contact_email": "",
@@ -594,7 +598,14 @@ def load(config_path):
     if hours < 0:
         raise ConfigError("'interval_hours' cannot be negative.")
     cfg["interval_hours"] = float(hours)
+    cfg["digest_days"] = _positive_int(cfg, "digest_days")
     cfg["lookback_days"] = _positive_int(cfg, "lookback_days")
+    if cfg["digest_days"] > cfg["lookback_days"]:
+        raise ConfigError(
+            "'digest_days' is %d but 'lookback_days' is only %d, so the "
+            "digest is asking to show more days than the search looks at. "
+            "Raise lookback_days." % (cfg["digest_days"], cfg["lookback_days"])
+        )
     cfg["max_per_set"] = _positive_int(cfg, "max_per_set")
 
     sources = dict(DEFAULTS["sources"])

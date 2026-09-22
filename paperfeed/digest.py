@@ -170,6 +170,7 @@ details.rest { margin-top: 4px; }
 .badge.preprint { background: #f4ecdf; color: #7a5a1e; }
 .badge.oa { background: #d9ead3; color: #2c5d1e; }
 .badge.kind { background: #efe7f4; color: #5c3f73; }
+.badge.new { background: #2c5d1e; color: #ffffff; letter-spacing: .04em; }
 .metrics { margin-top: 7px; display: flex; flex-wrap: wrap; gap: 5px; }
 .metric {
   display: inline-block; font-size: 11.5px; padding: 2px 8px;
@@ -245,6 +246,7 @@ details p { font-size: 13.5px; color: #333; margin: 8px 0 0; }
   .badge.preprint { background: #3b3325; color: #d7b377; }
   .badge.oa { background: #26381f; color: #a6cf92; }
   .badge.kind { background: #322a3d; color: #c0a6dd; }
+  .badge.new { background: #3f7a2c; color: #ffffff; }
   .metric { background: #23272e; color: #a8b0ba; border-color: #32373f; }
   .metric .src { color: #767d87; }
   .metric.quiet { background: #1e2126; color: #767d87; }
@@ -441,6 +443,7 @@ SHELL_JS = r"""
       if (rule === 'oa' && !card.querySelector('.badge.oa')) { return false; }
       if (rule === 'primary' && card.querySelector('.badge.kind')) { return false; }
       if (rule === 'nonew' && card.querySelector('.metric.quiet')) { return false; }
+      if (rule === 'new' && !card.querySelector('.badge.new')) { return false; }
     }
     return true;
   }
@@ -738,7 +741,13 @@ def _metrics_row(paper):
 
 def _badges(paper):
     badge_class = "badge preprint" if paper.source == "Preprint" else "badge"
-    bits = ['<span class="%s">%s</span>' % (badge_class, _escape(paper.source))]
+    bits = []
+    # The digest shows a whole recent window, not only what changed, so this
+    # is what separates "you have not seen this" from "this is merely
+    # recent". Without it the two are indistinguishable.
+    if getattr(paper, "is_new", True):
+        bits.append('<span class="badge new">new</span>')
+    bits.append('<span class="%s">%s</span>' % (badge_class, _escape(paper.source)))
     kind = _article_kind(paper)
     if kind and kind != "Preprint":
         bits.append('<span class="badge kind">%s</span>' % _escape(kind))
@@ -834,6 +843,23 @@ def _paper_html(paper, show_scores, ai_label=""):
     return "\n".join(parts)
 
 
+def _headline_counts(meta):
+    """Two numbers, because they answer different questions: how much is
+    recent, and how much of it you have not seen."""
+    shown = meta.get("total_shown", meta.get("total_new", 0))
+    fresh = meta.get("total_new", 0)
+    days = meta.get("digest_days", 3)
+    line = "%s from the last %s" % (
+        phrasing.count(shown, "paper"),
+        "day" if days == 1 else "%d days" % days,
+    )
+    if fresh == shown:
+        return line + ", all new to you"
+    if fresh:
+        return line + ", %d new to you" % fresh
+    return line + ", none of them new to you"
+
+
 def _counts_line(meta):
     bits = []
     for label, number in sorted((meta.get("source_counts") or {}).items()):
@@ -847,24 +873,28 @@ def _counts_line(meta):
 def render_html(groups, meta):
     """groups is a list of (keyword set name, [Paper]) — including empty ones."""
     total = meta.get("total_new", 0)
+    shown_total = meta.get("total_shown", total)
     show_scores = meta.get("show_scores", True)
     topics = [
         {"label": name, "href": "#" + _slug(name), "count": len(papers)}
         for name, papers in groups
     ]
     counts = meta.get("source_counts") or {}
-    glance = [(total, "new this run")]
+    glance = [(shown_total, "in the last %d days" % meta.get("digest_days", 3))]
+    if total:
+        glance.append((total, "new to you"))
     for label, number in sorted(counts.items()):
         glance.append((number, "from %s" % label))
     if meta.get("hidden_count"):
         glance.append((meta["hidden_count"], "hidden by filters"))
 
-    panel = search_panel(
-        "Filter these papers",
-        (("oa", "free full text only"),
-         ("primary", "hide reviews and comments"),
-         ("nonew", "hide papers with no citations yet")),
-    ) + (
+    options = [("oa", "free full text only"),
+               ("primary", "hide reviews and comments"),
+               ("nonew", "hide papers with no citations yet")]
+    if total and total < shown_total:
+        # Only worth offering when the page actually holds both kinds.
+        options.insert(0, ("new", "only papers new to me"))
+    panel = search_panel("Filter these papers", tuple(options)) + (
         # A plain <label for> drives the real checkbox, which lives outside
         # .app because the compact-mode CSS reaches it as a sibling. No
         # script, and no second checkbox to get out of step with the first.
@@ -883,13 +913,8 @@ def render_html(groups, meta):
         sidebar(meta, "digest", topics=topics, extras=panel, stats=glance),
         '<div class="wrap">',
         "<h1>PaperFeed</h1>",
-        '<p class="meta">%s &middot; %d new paper%s &middot; searched the last %d days</p>'
-        % (
-            _escape(meta.get("date_label", "")),
-            total,
-            "" if total == 1 else "s",
-            meta.get("lookback_days", 0),
-        ),
+        '<p class="meta">%s &middot; %s</p>'
+        % (_escape(meta.get("date_label", "")), _escape(_headline_counts(meta))),
         _counts_line(meta),
     ]
 
@@ -910,17 +935,20 @@ def render_html(groups, meta):
     if meta.get("ai_note"):
         parts.append('<div class="errors">%s</div>' % _escape(meta["ai_note"]))
 
-    if total == 0 and meta.get("errors"):
+    # The page is gated on how many papers there are to SHOW, not on how
+    # many are new. A quiet week still has a window worth looking at, and
+    # gating on the new count blanked a page holding twelve papers.
+    if shown_total == 0 and meta.get("errors"):
         parts.append(
-            '<div class="empty">No new papers to show &mdash; but at least one '
+            '<div class="empty">Nothing to show &mdash; but at least one '
             "source did not answer, so this may not be the full picture. "
             "The next run will pick up anything that was missed.</div>"
         )
-    elif total == 0:
+    elif shown_total == 0:
         parts.append(
-            '<div class="empty">No new papers this time. '
-            "Everything matching your keywords in the last %d days has already "
-            "appeared in an earlier digest.</div>" % meta.get("lookback_days", 0)
+            '<div class="empty">Nothing matched your keywords in the last %d '
+            "days, and there is nothing older you have not already seen.</div>"
+            % meta.get("digest_days", 3)
         )
     else:
         # One collapsible section per keyword set. Each opens on its best
@@ -936,9 +964,12 @@ def render_html(groups, meta):
                 % _slug(name)
             )
             parts.append("<span>%s</span>" % _escape(name))
+            fresh = sum(1 for paper in papers if getattr(paper, "is_new", True))
             parts.append(
-                '<span class="setcount">%d new</span></div></summary>'
-                '<div class="setbody">' % len(papers)
+                '<span class="setcount">%s</span></div></summary>'
+                '<div class="setbody">'
+                % ("%d &middot; %d new" % (len(papers), fresh) if fresh
+                   else "%d" % len(papers))
             )
             if rest:
                 parts.append(

@@ -62,6 +62,11 @@ class Paper:
     # whether or not OpenAlex answered.
     metrics: dict = field(default_factory=dict)
 
+    # True until the seen-memory says otherwise: a paper PaperFeed has never
+    # put in front of you before. The digest shows a whole recent window, so
+    # this is what tells the genuinely new apart from the merely recent.
+    is_new: bool = True
+
     # Filled in later by relevance.py.
     score: float = 0.0
     score_reasons: List[str] = field(default_factory=list)

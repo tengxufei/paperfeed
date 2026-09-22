@@ -433,39 +433,65 @@ def command_run(args):
         fetched.extend(kept)
 
     unique = store_module.deduplicate(fetched)
-    new_papers = store.filter_new(unique)
+
+    # Two different questions, deliberately separated.
+    #
+    #   is_new    has PaperFeed ever put this in front of you? The email
+    #             carries only these, so nothing repeats in your inbox.
+    #   shown     what the digest displays: everything from the last
+    #             digest_days, whether or not you have seen it, PLUS
+    #             anything older you have never been shown.
+    #
+    # The second half of that matters: with a strict window, being away for
+    # five days would silently cost you the papers from days four and five.
+    # The window is a floor, not a ceiling.
+    unseen_keys = {
+        store_module.fingerprint(paper) for paper in store.filter_new(unique)
+    }
+    for paper in unique:
+        paper.is_new = store_module.fingerprint(paper) in unseen_keys
+
+    cutoff = (date.today() - timedelta(days=cfg["digest_days"])).isoformat()
+    shown = [
+        paper for paper in unique
+        if paper.is_new or (paper.published or "")[:10] >= cutoff
+    ]
 
     ranking = cfg["ranking"]
     show_scores = bool(ranking.get("enabled", True))
     low_scoring = []
     if show_scores:
-        relevance.score_all(new_papers, keyword_sets, ranking)
+        relevance.score_all(shown, keyword_sets, ranking)
         # Title coverage first: "is this paper about my topic at all" is a
         # clearer question than "did it accumulate enough points", and
         # answering it first keeps the score threshold doing one job.
-        new_papers, thin = relevance.drop_below_title_concepts(
-            new_papers, keyword_sets
+        shown, thin = relevance.drop_below_title_concepts(
+            shown, keyword_sets
         )
         hidden.extend(thin)
-        new_papers, low_scoring = relevance.drop_below_per_set(
-            new_papers, keyword_sets, ranking.get("min_score", 0)
+        shown, low_scoring = relevance.drop_below_per_set(
+            shown, keyword_sets, ranking.get("min_score", 0)
         )
         hidden.extend(low_scoring)
 
+    # Everything the digest will show, and the subset that is genuinely new.
+    # Only the second goes in the email, the collector and the run counts.
+    new_papers = [paper for paper in shown if paper.is_new]
+
+    in_window = sum(1 for paper in shown if (paper.published or "")[:10] >= cutoff)
     log.info(
-        "%d kept after filters, %d after deduplication, %d new, %d hidden",
-        len(fetched),
-        len(unique),
-        len(new_papers),
-        len(hidden),
+        "%d kept after filters, %d after deduplication, %d in the last %d "
+        "days, %d never shown before, %d hidden",
+        len(fetched), len(unique), in_window, cfg["digest_days"],
+        len(new_papers), len(hidden),
     )
 
     # Journal and citation figures. Like AI scoring below, this is laid on
     # top of a digest that has to be produced whether or not it works, so
     # enrich() swallows its own failures and reports what it managed.
     metrics_report = {"enabled": False}
-    if new_papers and not args.dry_run:
-        metrics_report = metrics_module.enrich(new_papers, cfg, log)
+    if shown and not args.dry_run:
+        metrics_report = metrics_module.enrich(shown, cfg, log)
         if metrics_report.get("enriched"):
             log.info(
                 "metrics: %d paper(s) and %d journal(s) from OpenAlex in "
@@ -482,7 +508,7 @@ def command_run(args):
     # local ranking in place and the digest still gets written.
     ai_note = None
     used_ai = False
-    if cfg["ai"]["enabled"] and new_papers and not args.dry_run:
+    if cfg["ai"]["enabled"] and shown and not args.dry_run:
         settings = ai.settings_for(cfg)
         if not settings["api_key"]:
             ai_note = (
@@ -492,7 +518,7 @@ def command_run(args):
         else:
             try:
                 scored, usage, problem = ai.score_papers(
-                    new_papers, cfg["ai"], settings, keyword_sets, log
+                    shown, cfg["ai"], settings, keyword_sets, log
                 )
                 used_ai = scored > 0
                 if scored:
@@ -516,8 +542,23 @@ def command_run(args):
     if ai_note:
         log.warning(ai_note)
 
+    def grouped(papers):
+        by_set = {}
+        for paper in papers:
+            by_set.setdefault(paper.set_name, []).append(paper)
+        for name in by_set:
+            if used_ai:
+                by_set[name] = relevance.rank_with_ai(by_set[name])
+            elif show_scores:
+                by_set[name] = relevance.rank(by_set[name])
+            else:
+                by_set[name].sort(key=lambda paper: paper.published or "",
+                                  reverse=True)
+        return [(entry["name"], by_set.get(entry["name"], []))
+                for entry in keyword_sets]
+
     by_set = {}
-    for paper in new_papers:
+    for paper in shown:
         by_set.setdefault(paper.set_name, []).append(paper)
     for name in by_set:
         if used_ai:
@@ -527,12 +568,15 @@ def command_run(args):
         else:
             by_set[name].sort(key=lambda paper: paper.published or "", reverse=True)
     groups = [(entry["name"], by_set.get(entry["name"], [])) for entry in keyword_sets]
+    # The email carries only what you have never been shown, so a paper never
+    # arrives in your inbox twice however often the job runs.
+    email_groups = grouped(new_papers)
 
     moment = datetime.now()
     enabled_sources = [
         label for key, (label, _) in sources.SOURCES.items() if cfg["sources"].get(key)
     ]
-    source_counts = dict(Counter(paper.source for paper in new_papers))
+    source_counts = dict(Counter(paper.source for paper in shown))
 
     hidden_examples = list(notices)
     if hidden:
@@ -553,6 +597,8 @@ def command_run(args):
     meta = {
         "date_label": digest_module.date_label(moment),
         "total_new": len(new_papers),
+        "total_shown": len(shown),
+        "digest_days": cfg["digest_days"],
         "lookback_days": cfg["lookback_days"],
         "errors": errors,
         "sources_label": " and ".join(enabled_sources),
@@ -561,8 +607,9 @@ def command_run(args):
         "hidden_count": len(hidden),
         "hidden_examples": hidden_examples,
         "top_papers": (
-            (relevance.rank_with_ai(new_papers)[:5] if used_ai else relevance.top_n(new_papers, 5))
-            if len(new_papers) > 5
+            (relevance.rank_with_ai(shown)[:5] if used_ai
+             else relevance.top_n(shown, 5))
+            if len(shown) > 5
             else []
         ),
         "ai_note": ai_note,
@@ -610,8 +657,8 @@ def command_run(args):
     meta["library"] = collection.snapshot(
         cfg["library_path"], cfg.get("metrics", {}).get("path", "")
     )
-    text_body = email_digest.render_text(groups, meta)
-    email_html = email_digest.render(groups, meta)
+    text_body = email_digest.render_text(email_groups, meta)
+    email_html = email_digest.render(email_groups, meta)
 
     update_index(
         cfg,
@@ -639,7 +686,7 @@ def command_run(args):
         log.info("No new papers, so no email sent (email.send_when_empty is false).")
     else:
         subject = email_digest.subject_line(
-            groups, meta,
+            email_groups, meta,
             email_settings.get("subject_prefix", "[PaperFeed]"),
         )
         try:
@@ -887,6 +934,10 @@ def command_check(args):
     for entry in cfg["keyword_sets"]:
         if entry["enabled"]:
             print("    %s: %s" % (entry["name"], describe_set(entry)))
+    print(
+        "  showing the last %d days, searching back %d days"
+        % (cfg["digest_days"], cfg["lookback_days"])
+    )
     print(
         "  %s, looking back %d days"
         % (

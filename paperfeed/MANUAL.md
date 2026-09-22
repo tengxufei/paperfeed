@@ -270,6 +270,40 @@ credit per request however many papers it asks about. PaperFeed batches 50
 at a time and caches, so a normal run costs two or three. When the
 allowance runs low it stops and says how far it got.
 
+### What counts as "new"
+
+PaperFeed does not diff against the previous digest. It keeps a memory file,
+`state/seen.json`, holding a fingerprint per paper with the date it was first
+shown to you. A paper is **new** if none of its fingerprints is in that file.
+
+Each paper gets more than one fingerprint:
+
+- its **DOI**, normalised for case, `https://doi.org/` prefixes and stray
+  trailing dots
+- a **squashed title** — lowercased, punctuation stripped — but only if it is
+  at least 40 characters
+
+That catches three things a digest-to-digest diff would miss: a paper you
+were shown five runs ago, the same paper arriving from both sources, and a
+**preprint later published in a journal** — different DOIs, same paper. The
+40-character floor stops generic titles ("Correction", "Editorial Board")
+collapsing unrelated work together. Fingerprints are forgotten after 400
+days. Papers a filter removed are deliberately *not* remembered, so loosening
+a filter brings them back.
+
+**What the digest shows** is a wider thing than what is new. It shows every
+paper from the last `digest_days` (3 by default), whether or not you have
+seen it, plus anything older within `lookback_days` that you have never been
+shown. Papers new to you carry a green **new** badge, and the header says
+both numbers: *"12 papers from the last 3 days, 2 new to you"*.
+
+The catch-up half matters: with a strict three-day window, being away for
+five days would quietly cost you the papers from days four and five. The
+window is a floor, not a ceiling.
+
+**The email carries only the new ones**, so a paper never reaches your inbox
+twice however often the job runs.
+
 ### Schedule and volume
 
 | Setting | Meaning |
