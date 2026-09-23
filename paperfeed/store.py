@@ -85,6 +85,11 @@ def deduplicate(papers):
     return unique
 
 
+# See Store.due - absorbs the seconds a run itself takes, so a fixed-hour
+# scheduler does not fall one day short of its own interval.
+SCHEDULE_SLACK = timedelta(minutes=5)
+
+
 def _now():
     return datetime.now(timezone.utc)
 
@@ -156,6 +161,14 @@ class Store:
 
         interval_hours wins when set, so a short cadence can be expressed
         without writing interval_days as a fraction.
+
+        SCHEDULE_SLACK absorbs the run's own duration. A scheduler that wakes
+        at a fixed hour arrives a few seconds SHORT of an exact multiple,
+        because last_run was stamped after the previous run finished. Compared
+        strictly, "every 3 days" woken daily at 08:00 fires on the fourth
+        morning, not the third, and then keeps slipping a day. Measured: 8 runs
+        in 31 days instead of 11. The window is far smaller than any sane
+        interval, so it cannot cause a double run.
         """
         gap = (
             timedelta(hours=interval_hours)
@@ -165,7 +178,7 @@ class Store:
         if self.last_run is None:
             return True, "first run"
         elapsed = _now() - self.last_run
-        if elapsed >= gap:
+        if elapsed >= gap - SCHEDULE_SLACK:
             return True, self._describe_gap(elapsed.total_seconds(), "waited")
         return False, self._describe_gap(
             (gap - elapsed).total_seconds(), "next run in"
