@@ -835,21 +835,22 @@ def _badges(paper):
     kind = _article_kind(paper)
     if kind and kind != "Preprint":
         bits.append('<span class="badge kind">%s</span>' % _escape(kind))
-    if paper.free_fulltext:
-        if paper.fulltext_url:
-            bits.append(
-                '<a class="badge oa" href="%s">free full text</a>'
-                % _escape(paper.fulltext_url)
-            )
-        else:
-            bits.append('<span class="badge oa">free full text</span>')
-    else:
-        oa_url = (getattr(paper, "metrics", None) or {}).get("oa_url")
+    # A free copy can be known three ways: the source said so (a PMC id, or a
+    # Europe PMC link marked Free), or OpenAlex resolved one. Prefer a real
+    # URL, but say "free full text" on OpenAlex's verdict alone - the DOI
+    # still resolves to the paper. The email already counted is_oa; the web
+    # page did not, so the same paper could carry the chip in the inbox and
+    # not on the page.
+    metrics = getattr(paper, "metrics", None) or {}
+    oa_url = paper.fulltext_url or metrics.get("oa_url") or ""
+    if paper.free_fulltext or metrics.get("is_oa") or oa_url:
         if oa_url:
             bits.append(
                 '<a class="badge oa" href="%s">free full text</a>'
                 % _escape(oa_url)
             )
+        else:
+            bits.append('<span class="badge oa">free full text</span>')
 
     tail = []
     if paper.venue:

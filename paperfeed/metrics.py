@@ -290,6 +290,35 @@ class JournalTable:
 # Reading OpenAlex replies
 # --------------------------------------------------------------------------
 
+# OpenAlex assembles a record over several days. A paper indexed within
+# hours of reaching PubMed often arrives as a stub: primary_location pointing
+# at PubMed itself rather than the publisher, and open_access reported as
+# "closed" simply because nobody has resolved it yet. That is a record still
+# being written, not a finding about the paper.
+#
+# Caching such a stub for the full week hides the free PDF during exactly the
+# week the paper is new enough to appear in a digest, so an unsettled record
+# is re-checked the next day instead. A positive OA verdict is never doubted;
+# OpenAlex does not take those back.
+PROVISIONAL_DAYS = 60          # how recent a paper must be to be doubted
+PROVISIONAL_CACHE_DAYS = 1     # how long a doubted record is trusted
+STUB_SOURCES = {"", "pubmed", "pubmed central", "europe pmc"}
+
+
+def _provisional(summary):
+    """True when this cached record looks half-assembled rather than settled."""
+    summary = summary or {}
+    try:
+        issued = date.fromisoformat((summary.get("published") or "")[:10])
+    except (TypeError, ValueError):
+        return False
+    if (date.today() - issued).days > PROVISIONAL_DAYS:
+        return False
+    if (summary.get("journal_name") or "").strip().lower() in STUB_SOURCES:
+        return True
+    return not summary.get("is_oa")
+
+
 def _work_summary(work):
     access = work.get("open_access") or {}
     location = work.get("primary_location") or {}
@@ -360,6 +389,7 @@ def enrich(papers, cfg, log=None):
     """
     report = {
         "enabled": False, "asked": 0, "enriched": 0, "no_identifier": 0,
+        "rechecked": 0,
         "journals": 0, "budget_stopped": False, "requests": 0,
         "remaining": None, "errors": [], "table": "", "table_error": "",
         "table_misses": 0, "note": "", "papers": 0, "fetched_now": 0,
@@ -416,6 +446,11 @@ def _enrich_works(papers, settings, cache, budget, contact, report, log):
             report["no_identifier"] += 1
             continue
         cached = cache.get("work", key, max_age)
+        if cached is not None and _provisional(cached):
+            # Trust an unsettled record for a day, not for a week.
+            cached = cache.get("work", key, PROVISIONAL_CACHE_DAYS)
+            if cached is None:
+                report["rechecked"] += 1
         if cached is not None:
             paper.metrics.update(cached)
             report["enriched"] += 1
