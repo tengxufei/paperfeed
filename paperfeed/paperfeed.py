@@ -22,6 +22,22 @@ import sys
 from collections import Counter
 from datetime import date, datetime, timedelta
 
+try:
+    import requests  # noqa: F401  - imported here only to fail helpfully
+except ImportError:
+    # macOS ships Python 3 but not this package, and the bare traceback that
+    # follows an `import requests` five files deep tells a first-time user
+    # nothing they can act on. Everything else PaperFeed needs is standard
+    # library, so this is the one and only install step.
+    sys.stderr.write(
+        "\nPaperFeed needs one package that macOS does not ship: requests.\n"
+        "\nInstall it, then run this again:\n"
+        "\n    python3 -m pip install --user requests\n"
+        "\nIf that says 'No module named pip', run this first:\n"
+        "\n    python3 -m ensurepip --user\n\n"
+    )
+    raise SystemExit(1)
+
 import ai
 import collection
 import config as config_module

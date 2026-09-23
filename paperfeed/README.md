@@ -8,6 +8,15 @@ Python standard library plus `requests`. No account, no API key, no database.
 
 ## Quick start
 
+macOS ships Python 3 but not `requests`, so install that one package first.
+It is the only thing PaperFeed needs that is not already on your Mac.
+
+```bash
+python3 -m pip install --user requests
+```
+
+Then:
+
 ```bash
 cd paperfeed
 cp config.example.json config.json   # first time only; then edit your keywords
@@ -15,6 +24,10 @@ python3 paperfeed.py check      # is my config valid?
 python3 paperfeed.py run        # fetch and write a digest
 open digests/latest.html
 ```
+
+If `python3` itself is missing, macOS offers to install the Command Line
+Tools the first time you type it. Accept, wait for it to finish, and start
+again. Nothing else needs installing: no Homebrew, no virtualenv, no account.
 
 `digests/latest.html` is always written, even when email is off and even when
 nothing new turned up. If you ever wonder whether a run worked, that file is
