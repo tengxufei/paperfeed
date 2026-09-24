@@ -85,11 +85,6 @@ def deduplicate(papers):
     return unique
 
 
-# See Store.due - absorbs the seconds a run itself takes, so a fixed-hour
-# scheduler does not fall one day short of its own interval.
-SCHEDULE_SLACK = timedelta(minutes=5)
-
-
 def _now():
     return datetime.now(timezone.utc)
 
@@ -159,29 +154,41 @@ class Store:
     def due(self, interval_days, interval_hours=0):
         """Has enough time passed since the last digest?
 
-        interval_hours wins when set, so a short cadence can be expressed
-        without writing interval_days as a fraction.
+        interval_hours wins when set, and is measured as an exact span -
+        that is what a sub-day cadence means, and a relative scheduler
+        (launchd's StartInterval) re-arms itself from each launch, so it
+        stays in step on its own.
 
-        SCHEDULE_SLACK absorbs the run's own duration. A scheduler that wakes
-        at a fixed hour arrives a few seconds SHORT of an exact multiple,
-        because last_run was stamped after the previous run finished. Compared
-        strictly, "every 3 days" woken daily at 08:00 fires on the fourth
-        morning, not the third, and then keeps slipping a day. Measured: 8 runs
-        in 31 days instead of 11. The window is far smaller than any sane
-        interval, so it cannot cause a double run.
+        A day interval is counted in CALENDAR DAYS instead. A scheduler that
+        wakes at a fixed clock time never lands on an exact multiple of 24
+        hours: last_run is stamped when the previous run FINISHED, and launchd
+        itself fires late - measured at 6m27s on this Mac, for an 08:00 job.
+        Compared as an exact span, the third morning falls a minute or two
+        short, "every 3 days" silently becomes every 4, and it keeps slipping
+        a day each cycle. Counting calendar days removes the question
+        entirely: the third morning is the third morning, whatever the clock
+        did, and no tolerance has to be guessed.
         """
-        gap = (
-            timedelta(hours=interval_hours)
-            if interval_hours
-            else timedelta(days=interval_days)
-        )
         if self.last_run is None:
             return True, "first run"
-        elapsed = _now() - self.last_run
-        if elapsed >= gap - SCHEDULE_SLACK:
+
+        now = _now()
+        elapsed = now - self.last_run
+
+        if interval_hours:
+            gap = timedelta(hours=interval_hours)
+            if elapsed >= gap:
+                return True, self._describe_gap(elapsed.total_seconds(), "waited")
+            return False, self._describe_gap(
+                (gap - elapsed).total_seconds(), "next run in"
+            )
+
+        waited = (now.astimezone().date() - self.last_run.astimezone().date()).days
+        if waited >= interval_days:
             return True, self._describe_gap(elapsed.total_seconds(), "waited")
+        target = self.last_run + timedelta(days=interval_days)
         return False, self._describe_gap(
-            (gap - elapsed).total_seconds(), "next run in"
+            max((target - now).total_seconds(), 0.0), "next run in"
         )
 
     def due_mark(self, name, interval_days):
