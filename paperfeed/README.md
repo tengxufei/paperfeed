@@ -392,6 +392,38 @@ launchctl unload ~/Library/LaunchAgents/com.paperfeed.daily.plist
 ```
 
 Note: a laptop that is asleep at 08:00 runs the job when it next wakes.
+A laptop that is switched off runs nothing until it is switched on.
+
+### Or on GitHub's servers, with the laptop off
+
+If the code is in a GitHub repository, `.github/workflows/paperfeed.yml` runs
+it on GitHub's servers instead: every morning at 07:37 Singapore time, due
+every `interval_days`, free within a private repository's monthly allowance.
+It needs three things, under **Settings → Secrets and variables → Actions**:
+
+| Name | Kind | What |
+|---|---|---|
+| `PAPERFEED_CONFIG` | variable | the whole of your `config.json` |
+| `PAPERFEED_SMTP_PASSWORD` | secret | your Gmail app password |
+| `PAPERFEED_AI_KEY` | secret | optional - without it, papers are ranked locally |
+
+What it has already sent is kept on a branch called `paperfeed-state`, never
+on `main`. Each run's digest is attached to the run for 30 days.
+
+**When you change `config.json`, send the new version up**, or GitHub keeps
+using the old one:
+
+```bash
+gh variable set PAPERFEED_CONFIG < config.json
+```
+
+If an email fails, the run is marked failed (so GitHub emails you), nothing is
+marked as seen, and the next morning's run tries again with the same papers.
+To run it now from a browser or phone: the repository's **Actions** tab →
+PaperFeed → **Run workflow**, and tick *force*.
+
+Run it in one place only. If GitHub sends the email, take the password out
+of the LaunchAgent on the Mac, or you will get every alert twice.
 
 ## Turning on email
 

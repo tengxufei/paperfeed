@@ -1,0 +1,152 @@
+name: PaperFeed
+
+# Runs PaperFeed on GitHub's servers, so the alert arrives whether or not the
+# laptop is open. It wakes once a day and lets PaperFeed decide whether it is
+# due - exactly as the LaunchAgent on the Mac does - so interval_days in the
+# config sets the cadence and this file never needs editing to change it.
+#
+# What it needs, all under Settings -> Secrets and variables -> Actions:
+#   variable  PAPERFEED_CONFIG         the whole of paperfeed/config.json
+#   secret    PAPERFEED_SMTP_PASSWORD  the Gmail app password (required)
+#   secret    PAPERFEED_AI_KEY         the AI key (optional; ranks locally without)
+#
+# What it remembers between runs lives on the paperfeed-state branch: which
+# papers you have already been sent, and when the last digest went out.
+# Nothing personal is ever committed to main.
+
+on:
+  schedule:
+    # 23:37 UTC is 07:37 in Singapore. GitHub starts scheduled jobs late when
+    # it is busy, worst on the hour, so this sits early and off the hour.
+    - cron: "37 23 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Run now even if not due (sends an email)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write          # to save what has been sent to paperfeed-state
+
+concurrency:
+  group: paperfeed         # never two runs at once over the same memory
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Calendar days are counted in YOUR days. On UTC, a run delayed past
+      # midnight would count a day early or late and shift the schedule.
+      TZ: Asia/Singapore
+      PAPERFEED_SMTP_PASSWORD: ${{ secrets.PAPERFEED_SMTP_PASSWORD }}
+      PAPERFEED_AI_KEY: ${{ secrets.PAPERFEED_AI_KEY }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: app
+
+      - uses: actions/checkout@v7
+        with:
+          ref: paperfeed-state
+          path: saved
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install the one outside package
+        run: python -m pip install --quiet requests
+
+      - name: Write config and restore memory
+        working-directory: app/paperfeed
+        env:
+          PAPERFEED_CONFIG: ${{ vars.PAPERFEED_CONFIG }}
+        run: |
+          if [ -z "$PAPERFEED_CONFIG" ]; then
+            echo "::error::The PAPERFEED_CONFIG variable is empty. Set it from your laptop: gh variable set PAPERFEED_CONFIG < paperfeed/config.json"
+            exit 1
+          fi
+          if [ -z "$PAPERFEED_SMTP_PASSWORD" ]; then
+            echo "::error::The PAPERFEED_SMTP_PASSWORD secret is not set, so no email could be sent. Nothing was run and nothing was marked as seen."
+            exit 1
+          fi
+          printf '%s' "$PAPERFEED_CONFIG" > config.json
+          # Two differences from the laptop, both deliberate:
+          #  - email is forced on: sending it is this job's whole purpose.
+          #  - the collector is off: your library lives on the laptop, where
+          #    you read and mark papers. A throwaway copy here would put
+          #    "13 kept, 13 unread" in the email footer, which is untrue.
+          python - <<'EOF'
+          import json
+          cfg = json.load(open("config.json", encoding="utf-8"))
+          cfg.setdefault("email", {})["enabled"] = True
+          cfg.setdefault("collect", {})["enabled"] = False
+          json.dump(cfg, open("config.json", "w", encoding="utf-8"), indent=2)
+          EOF
+          mkdir -p state
+          cp ../../saved/state/*.json state/
+          python paperfeed.py check
+
+      - name: Run PaperFeed
+        id: run
+        working-directory: app/paperfeed
+        env:
+          FORCE_FLAG: ${{ inputs.force && '--force' || '' }}
+        run: |
+          set +e
+          python paperfeed.py run $FORCE_FLAG 2>&1 | tee run.out
+          code=${PIPESTATUS[0]}
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          if grep -qE "Email failed|could not be built" run.out; then
+            echo "email_failed=true" >> "$GITHUB_OUTPUT"
+          fi
+          if ls digests/*.html >/dev/null 2>&1; then
+            echo "wrote=true" >> "$GITHUB_OUTPUT"
+          fi
+          { echo '```'; tail -n 12 run.out; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+
+      # PaperFeed marks papers as seen BEFORE it sends, because on a laptop the
+      # digest file stays on disk. Here nothing stays. So if the email failed,
+      # the memory is NOT saved: tomorrow's run is due again and re-sends the
+      # same papers, and keeps trying daily until the email gets through.
+      - name: Save what has been sent
+        if: steps.run.outcome == 'success' && steps.run.outputs.email_failed != 'true'
+        run: |
+          cp app/paperfeed/state/*.json saved/state/
+          cd saved
+          git add state
+          if git diff --cached --quiet; then
+            echo "Not due, nothing changed."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git commit --quiet -m "PaperFeed run $(date '+%Y-%m-%d %H:%M %Z')"
+          git push --quiet
+
+      - name: Keep the digest for 30 days
+        if: steps.run.outputs.wrote == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: digest-${{ github.run_number }}
+          path: |
+            app/paperfeed/digests/
+            app/paperfeed/paperfeed.log
+          retention-days: 30
+
+      # A failed job is what makes GitHub email you about it. The email
+      # failing is the one thing that must never be quiet.
+      - name: Fail loudly if the email did not go
+        if: steps.run.outputs.email_failed == 'true'
+        run: |
+          echo "::error::The email was not sent. Nothing was marked as seen, so tomorrow's run will try again with the same papers. This run's digest is attached above."
+          exit 1
+
+      - name: Note a partial run
+        if: steps.run.outputs.code != '0' && steps.run.outputs.email_failed != 'true'
+        run: echo "::warning::A source had a problem this run. The email says which; the rest of the run completed."
