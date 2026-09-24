@@ -194,7 +194,7 @@ Three providers are built in:
 | `provider` | `base_url` | example `model` |
 |---|---|---|
 | `anthropic` | leave blank | `claude-haiku-4-5` |
-| `gemini` | leave blank | `gemini-2.5-flash` |
+| `gemini` | leave blank | `gemini-3.1-flash-lite` |
 | `openai` | leave blank | `gpt-4o-mini` |
 
 `openai` also covers anything that speaks the same chat-completions API —

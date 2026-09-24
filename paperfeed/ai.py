@@ -49,7 +49,7 @@ PROVIDERS = {
         "base_url": "https://generativelanguage.googleapis.com/v1beta",
         "path": "",          # the model name is part of the path; built below
         "label": "Google Gemini",
-        "example_models": ["gemini-2.5-flash", "gemini-2.5-pro"],
+        "example_models": ["gemini-3-flash-preview", "gemini-3.1-flash-lite"],
     },
 }
 
@@ -61,7 +61,8 @@ ANTHROPIC_VERSION = "2023-06-01"
 
 # Prices per million tokens, used only for the estimate shown before you
 # switch anything on. A model that is not listed reports cost as unknown.
-# Dollars per million tokens. Checked 2026-09-22; providers change these,
+# Dollars per million tokens. Checked 2026-09-22, the two Gemini 3 rows on
+# 2026-09-24 against ai.google.dev/gemini-api/docs/pricing; providers change these,
 # so an estimate built from this table is only ever roughly right - which is
 # why `check` says "rough" and the log reports real usage per run.
 PRICING = {
@@ -70,6 +71,8 @@ PRICING = {
     "claude-opus-5": {"input": 5.00, "output": 25.00},
     "gpt-4o-mini": {"input": 0.15, "output": 0.60},
     "gpt-4o": {"input": 2.50, "output": 10.00},
+    "gemini-3-flash-preview": {"input": 0.50, "output": 3.00},
+    "gemini-3.1-flash-lite": {"input": 0.25, "output": 1.50},
     "gemini-2.5-flash": {"input": 0.30, "output": 2.50},
     "gemini-2.5-pro": {"input": 1.25, "output": 10.00},
 }
@@ -159,7 +162,8 @@ def _endpoint(settings):
         )
     base = (settings.get("base_url") or spec["base_url"]).rstrip("/")
     if provider == "gemini":
-        model = settings.get("model") or "gemini-2.5-flash"
+        # Flash-Lite, not a preview: a default has to still exist next month.
+        model = settings.get("model") or "gemini-3.1-flash-lite"
         return provider, "%s/models/%s:generateContent" % (base, model)
     return provider, base + spec["path"]
 

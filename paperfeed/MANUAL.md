@@ -562,7 +562,7 @@ scoring, filters, charts, dashboards — works with no key at all.
   "enabled": true,
   "provider": "gemini",
   "base_url": "",
-  "model": "gemini-2.5-flash",
+  "model": "gemini-3-flash-preview",
   "api_key_env": "PAPERFEED_AI_KEY",
   "interests": "what you actually care about, in a sentence or two"
 }
@@ -577,7 +577,7 @@ echo "export PAPERFEED_AI_KEY='your-api-key'" >> ~/.zshrc
 | `provider` | `base_url` | example `model` |
 |---|---|---|
 | `anthropic` | blank | `claude-haiku-4-5` |
-| `gemini` | blank | `gemini-2.5-flash` |
+| `gemini` | blank | `gemini-3.1-flash-lite` |
 | `openai` | blank | `gpt-4o-mini` |
 | `openai` | `https://api.groq.com/openai/v1` | Groq's models |
 | `openai` | `http://localhost:11434/v1` | a local Ollama model |
