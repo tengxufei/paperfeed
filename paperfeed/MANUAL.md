@@ -562,11 +562,27 @@ scoring, filters, charts, dashboards — works with no key at all.
   "enabled": true,
   "provider": "gemini",
   "base_url": "",
-  "model": "gemini-3-flash-preview",
+  "model": "gemini-3.1-flash-lite",
   "api_key_env": "PAPERFEED_AI_KEY",
   "interests": "what you actually care about, in a sentence or two"
 }
 ```
+
+`ai.model` scores every paper in every scheduled run, with nobody there to
+retry, so it wants the model that answers reliably. `trends.model` drives
+Suggest research directions, Troubleshoot and the trend report, where you are
+waiting on the page and a better model is worth an occasional retry:
+
+```json
+"trends": { "model": "gemini-3-flash-preview" }
+```
+
+Measured on 24 Sep 2026: gemini-3-flash-preview was overloaded (HTTP 503) in
+both of its unattended scoring runs, and in the second only 6 papers were
+scored; gemini-3.1-flash-lite scored 40 of 40. On the directions button it was
+the other way round in speed - 7 seconds against 53. Keep the two on different
+models: Google's free allowance is counted per model, so heavy clicking can
+never use up what the scheduled scoring needs.
 
 The key comes from the environment, exactly like the email password:
 
