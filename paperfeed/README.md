@@ -410,6 +410,15 @@ It needs three things, under **Settings → Secrets and variables → Actions**:
 What it has already sent is kept on a branch called `paperfeed-state`, never
 on `main`. Each run's digest is attached to the run for 30 days.
 
+**A website to read the digest.** Switch on GitHub Pages - **Settings →
+Pages → Source: GitHub Actions** - and every run also publishes the digests
+and dashboards, at `https://<you>.github.io/<repo>/latest.html`, with every
+past digest listed at the site's front page. It is read-only: Save, the
+library and the AI buttons need `paperfeed serve` on your Mac, and the page
+says so rather than offering a link that goes nowhere. **The site is public**
+- anyone with the address can read it - and on a free GitHub account Pages
+needs the repository itself to be public too.
+
 **When you change `config.json`, send the new version up**, or GitHub keeps
 using the old one:
 

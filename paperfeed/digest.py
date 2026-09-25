@@ -439,13 +439,16 @@ body.shell { padding: 0; }
 # if it never runs, which is why the page is readable without it.
 SHELL_JS = r"""
 (function () {
-  // Opened straight off disk, /library is a dead link - there is no server
-  // to answer it. Say so instead of offering a link that goes nowhere.
-  if (location.protocol === 'file:') {
+  // Only `paperfeed serve` can answer /library, and it only ever listens on
+  // this Mac. Opened anywhere else - straight off disk, or on a website such
+  // as GitHub Pages - there is nothing behind the link. Testing for file:
+  // alone left it live on https, where it went to the web host's 404 page.
+  var served = location.hostname === '127.0.0.1' || location.hostname === 'localhost';
+  if (!served) {
     document.querySelectorAll('a[data-needs-server]').forEach(function (link) {
       link.removeAttribute('href');
       link.classList.add('off');
-      link.title = 'Run: python3 paperfeed.py serve';
+      link.title = 'Only on your Mac: python3 paperfeed.py serve';
     });
   }
 

@@ -234,7 +234,7 @@ def _unread_panel(coll):
     return _panel(
         "Waiting for you",
         "The %d unread papers that have been sitting longest. "
-        '<a href="/library">Open the library</a> to mark them off.'
+        '<a href="/library" data-needs-server>Open the library</a> to mark them off.'
         % coll["untouched"],
         '<table class="dtable"><tr><th>Paper</th><th class="num">Topic</th></tr>'
         "%s</table>" % cells)

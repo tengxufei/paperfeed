@@ -11,8 +11,14 @@ name: PaperFeed
 #   secret    PAPERFEED_AI_KEY         the AI key (optional; ranks locally without)
 #
 # What it remembers between runs lives on the paperfeed-state branch: which
-# papers you have already been sent, and when the last digest went out.
-# Nothing personal is ever committed to main.
+# papers you have already been sent, when the last digest went out, and every
+# digest page so far. Nothing personal is ever committed to main.
+#
+# The website: when GitHub Pages is switched on for this repository
+# (Settings -> Pages -> Source: GitHub Actions), every run also publishes the
+# digests and dashboards there. Read-only - Save, the library and the AI
+# buttons need `paperfeed serve` on the Mac. While Pages is off, the run says
+# so and publishes nothing.
 
 on:
   schedule:
@@ -28,6 +34,7 @@ on:
 
 permissions:
   contents: write          # to save what has been sent to paperfeed-state
+  pages: read              # to ask whether the website is switched on
 
 concurrency:
   group: paperfeed         # never two runs at once over the same memory
@@ -37,6 +44,8 @@ jobs:
   run:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    outputs:
+      site: ${{ steps.site.outputs.ready }}
     env:
       # Calendar days are counted in YOUR days. On UTC, a run delayed past
       # midnight would count a day early or late and shift the schedule.
@@ -75,6 +84,11 @@ jobs:
             exit 1
           fi
           printf '%s' "$PAPERFEED_CONFIG" > config.json
+          # Your address appears in the log ("Email sent to ..."). Masked, so
+          # it stays out of the log even if this repository is ever public.
+          for address in $(python -c "import json; e = json.load(open('config.json'))['email']; to = e.get('to_addresses') or []; to = [to] if isinstance(to, str) else to; print(' '.join({a for a in to + [e.get('username', ''), e.get('from_address', '')] if a}))"); do
+            echo "::add-mask::$address"
+          done
           # Two differences from the laptop, both deliberate:
           #  - email is forced on: sending it is this job's whole purpose.
           #  - the collector is off: your library lives on the laptop, where
@@ -87,8 +101,9 @@ jobs:
           cfg.setdefault("collect", {})["enabled"] = False
           json.dump(cfg, open("config.json", "w", encoding="utf-8"), indent=2)
           EOF
-          mkdir -p state
+          mkdir -p state digests
           cp ../../saved/state/*.json state/
+          if [ -d ../../saved/digests ]; then cp -R ../../saved/digests/. digests/; fi
           python paperfeed.py check
 
       - name: Run PaperFeed
@@ -104,10 +119,13 @@ jobs:
           if grep -qE "Email failed|could not be built" run.out; then
             echo "email_failed=true" >> "$GITHUB_OUTPUT"
           fi
-          if ls digests/*.html >/dev/null 2>&1; then
+          # Earlier digests were restored above, so files being present says
+          # nothing about this run. Only PaperFeed's own line does.
+          if grep -q "^Digest written" run.out; then
             echo "wrote=true" >> "$GITHUB_OUTPUT"
           fi
-          { echo '```'; tail -n 12 run.out; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          # The summary is not a log line, so masking does not reach it.
+          { echo '```'; tail -n 12 run.out | sed -E 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/***/g'; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           exit 0
 
       # PaperFeed marks papers as seen BEFORE it sends, because on a laptop the
@@ -118,8 +136,10 @@ jobs:
         if: steps.run.outcome == 'success' && steps.run.outputs.email_failed != 'true'
         run: |
           cp app/paperfeed/state/*.json saved/state/
+          mkdir -p saved/digests
+          cp -R app/paperfeed/digests/. saved/digests/
           cd saved
-          git add state
+          git add state digests
           if git diff --cached --quiet; then
             echo "Not due, nothing changed."
             exit 0
@@ -139,6 +159,26 @@ jobs:
             app/paperfeed/paperfeed.log
           retention-days: 30
 
+      - name: Is the website switched on?
+        id: site
+        if: steps.run.outcome == 'success' && steps.run.outputs.email_failed != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh api "repos/${{ github.repository }}/pages" --silent 2>/dev/null; then
+            echo "::notice::GitHub Pages is not switched on for this repository, so no website was published. Settings -> Pages -> Source: GitHub Actions."
+          elif [ ! -f app/paperfeed/digests/latest.html ]; then
+            echo "::notice::No digest has been written yet, so there is nothing to publish."
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Package the website
+        if: steps.site.outputs.ready == 'true'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: app/paperfeed/digests
+
       # A failed job is what makes GitHub email you about it. The email
       # failing is the one thing that must never be quiet.
       - name: Fail loudly if the email did not go
@@ -150,3 +190,17 @@ jobs:
       - name: Note a partial run
         if: steps.run.outputs.code != '0' && steps.run.outputs.email_failed != 'true'
         run: echo "::warning::A source had a problem this run. The email says which; the rest of the run completed."
+
+  publish:
+    needs: run
+    if: needs.run.outputs.site == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write         # to publish the site
+      id-token: write      # GitHub's proof to Pages that this run is allowed to
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}latest.html
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v5
