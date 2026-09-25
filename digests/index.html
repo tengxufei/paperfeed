@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PaperFeed &mdash; all digests</title>
+<style>
+:root { color-scheme: light dark; }
+* { box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  line-height: 1.55; margin: 0; padding: 24px 16px 64px;
+  background: #f6f7f9; color: #1a1a1a;
+}
+.wrap { max-width: 820px; margin: 0 auto; }
+
+/* jump-nav (A3) */
+.jump {
+  position: sticky; top: 0; z-index: 20; margin: 0 -16px 18px;
+  padding: 9px 16px; background: rgba(246,247,249,.94);
+  backdrop-filter: blur(6px); border-bottom: 1px solid #e0e3e8;
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  font-size: 12.5px;
+}
+.jump a { color: #33507a; text-decoration: none; padding: 3px 9px;
+          border-radius: 11px; background: #eceff3; }
+.jump a:hover { background: #dfe5ee; }
+.jump a b { color: #6a727c; font-weight: 600; }
+.jump .spacer { margin-left: auto; }
+.jump a.pf-page {
+  background: none; color: #6a727c; text-decoration: underline;
+  text-underline-offset: 3px; padding: 3px 4px; font-weight: 500;
+}
+.jump a.pf-page:hover { background: none; color: #11467f; }
+.jump .sep { color: #c3c8cf; }
+.jump label { cursor: pointer; user-select: none; color: #55606d; }
+
+/* compact mode (A1) - pure CSS, driven by a checkbox, so the file still
+   needs no JavaScript to work */
+#compact { position: absolute; opacity: 0; pointer-events: none; }
+#compact:checked ~ .wrap .paper,
+#compact:checked ~ .app .paper {
+  padding: 6px 12px; margin-bottom: 5px; border-radius: 5px;
+}
+#compact:checked ~ .wrap .paper .byline,
+#compact:checked ~ .wrap .paper .why,
+#compact:checked ~ .wrap .paper .chips,
+#compact:checked ~ .wrap .paper details,
+#compact:checked ~ .wrap .paper .ai-why,
+#compact:checked ~ .app .paper .byline,
+#compact:checked ~ .app .paper .why,
+#compact:checked ~ .app .paper .chips,
+#compact:checked ~ .app .paper .metrics,
+#compact:checked ~ .app .paper details,
+#compact:checked ~ .app .paper .ai-why { display: none; }
+#compact:checked ~ .wrap .paper .head,
+#compact:checked ~ .app .paper .head { align-items: center; }
+#compact:checked ~ .wrap .paper a.title,
+#compact:checked ~ .app .paper a.title { font-size: 14px; font-weight: 500; }
+#compact:checked ~ .wrap .paper .tags,
+#compact:checked ~ .app .paper .tags {
+  margin: 2px 0 0 48px; font-size: 11px; opacity: .8;
+}
+#compact:checked ~ .wrap .showing,
+#compact:checked ~ .app .showing { margin-bottom: 6px; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+.meta { color: #666; font-size: 13px; margin-bottom: 6px; }
+.counts { color: #666; font-size: 13px; margin: 0 0 24px; }
+.counts b { color: #333; }
+h2 {
+  font-size: 15px; text-transform: uppercase; letter-spacing: .06em;
+  color: #444; border-bottom: 2px solid #d8dadd;
+  padding-bottom: 6px; margin: 34px 0 12px;
+}
+h2 .count { color: #888; font-weight: normal; text-transform: none; letter-spacing: 0; }
+.highlights { border-bottom-color: #b98b3a; color: #8a6420; }
+details.set { margin: 0 0 18px; }
+details.set > summary {
+  list-style: none; cursor: pointer; user-select: none;
+  /* no `display` here: in WebKit it stops <summary> toggling at all */
+  padding: 11px 14px; border-radius: 8px;
+  background: #e9edf2; border: 1px solid #d6dbe2;
+  font-size: 15px; font-weight: 600; color: #26456f;
+}
+details.set > summary::-webkit-details-marker { display: none; }
+.setbar { display: flex; align-items: baseline; gap: 10px; }
+.setbar::before { content: "▸"; font-size: 12px; color: #7d8894;
+  transition: transform .15s ease; display: inline-block; }
+
+details.set[open] > summary .setbar::before { transform: rotate(90deg); }
+details.set > summary:hover { background: #dfe5ee; }
+.setcount {
+  margin-left: auto; font-weight: 600; font-size: 12px; color: #55606d;
+  background: #fff; border-radius: 10px; padding: 1px 9px;
+}
+.setbody { padding: 14px 0 0; }
+.showing { font-size: 12px; color: #7d8894; margin: 0 0 10px 2px; }
+details.rest > summary {
+  cursor: pointer; font-size: 13px; color: #11467f; padding: 8px 2px;
+  width: fit-content;
+}
+details.rest { margin-top: 4px; }
+.paper {
+  background: #fff; border: 1px solid #e2e4e8; border-radius: 8px;
+  padding: 14px 16px; margin-bottom: 12px;
+}
+.head { display: flex; gap: 10px; align-items: baseline; }
+.score {
+  flex: 0 0 auto; font-size: 12px; font-weight: 700; padding: 2px 8px;
+  border-radius: 10px; background: #eceff3; color: #63696f;
+}
+.score.strong { background: #d9ead3; color: #2c5d1e; }
+.score.ai { background: #ece3f5; color: #573a78; }
+.score.medium { background: #e8edf4; color: #33507a; }
+.paper a.title { font-size: 16.5px; font-weight: 600; color: #11467f;
+                 text-decoration: none; line-height: 1.35; }
+.paper a.title:hover { text-decoration: underline; }
+.byline { font-size: 13px; color: #555; margin: 5px 0 0; line-height: 1.45; }
+.affil { color: #777; font-style: italic; }
+.why { font-size: 12px; color: #6b7a52; margin: 5px 0 0; }
+.ai-why { font-size: 13px; color: #573a78; margin: 6px 0 0; }
+.theme { background: #fff; border: 1px solid #e2e4e8; border-radius: 8px;
+         padding: 18px 20px; margin-bottom: 16px; border-left: 4px solid #6f86a8; }
+.theme h3 { margin: 0 0 10px; font-size: 18px; color: #11467f;
+            line-height: 1.3; letter-spacing: -.01em; }
+.theme .num { display: inline-block; width: 26px; height: 26px; margin-right: 9px;
+              border-radius: 50%; background: #e8edf4; color: #33507a;
+              font-size: 13px; line-height: 26px; text-align: center;
+              font-weight: 700; vertical-align: 2px; }
+.theme p { line-height: 1.6; }
+.theme ol { margin: 0; padding-left: 20px; font-size: 13px; }
+.theme ol li { margin-bottom: 5px; }
+.theme .reflabel { font-size: 11.5px; text-transform: uppercase;
+                   letter-spacing: .05em; color: #77818d; margin: 12px 0 5px; }
+.theme p { margin: 0 0 10px; font-size: 14px; }
+.theme ol { margin: 0; padding-left: 20px; font-size: 13px; }
+.theme li { margin-bottom: 4px; }
+.cooling { font-size: 13px; color: #7a5a1e; border-left: 3px solid #d7b377;
+           padding-left: 10px; margin-top: 10px; }
+.tags { font-size: 12px; color: #777; margin-top: 6px; }
+.badge {
+  display: inline-block; padding: 1px 7px; border-radius: 10px;
+  background: #e8edf4; color: #33507a; font-weight: 600; margin-right: 6px;
+}
+.badge.preprint { background: #f4ecdf; color: #7a5a1e; }
+.badge.oa { background: #d9ead3; color: #2c5d1e; }
+.badge.kind { background: #efe7f4; color: #5c3f73; }
+.badge.new { background: #2c5d1e; color: #ffffff; letter-spacing: .04em; }
+.metrics { margin-top: 7px; display: flex; flex-wrap: wrap; gap: 5px; }
+.metric {
+  display: inline-block; font-size: 11.5px; padding: 2px 8px;
+  border-radius: 4px; background: #f2f5f9; color: #46505e;
+  border: 1px solid #e2e8f0; cursor: help;
+}
+.metric .src {
+  display: inline-block; margin-left: 6px; font-size: 10px;
+  color: #8a929c; text-transform: uppercase; letter-spacing: 0.02em;
+}
+.metric.quiet { background: #fafafa; color: #8a929c; font-style: italic; }
+.metric.bad { background: #fbe4e4; color: #8f2020; border-color: #f0c4c4;
+              font-weight: 600; }
+.metric.own { background: #fff6e5; border-color: #f0e0c0; color: #6b5320; }
+.sourced {
+  font-size: 12px; color: #6b727b; margin: 10px 0 0; line-height: 1.55;
+  border-left: 3px solid #dfe3e8; padding-left: 10px;
+}
+.score.ai .tag {
+  font-size: 8.5px; font-weight: 700; letter-spacing: .06em;
+  opacity: .8; margin-right: 3px; vertical-align: 1px;
+}
+.chips { margin-top: 8px; }
+.chip {
+  display: inline-block; font-size: 11px; padding: 1px 7px; margin: 0 4px 4px 0;
+  border-radius: 4px; background: #f0f1f3; color: #5a6068;
+}
+details { margin-top: 9px; }
+summary {
+  cursor: pointer; font-size: 13px; color: #11467f; outline: none;
+  width: fit-content;
+}
+details p { font-size: 13.5px; color: #333; margin: 8px 0 0; }
+.empty, .errors, .hidden-note {
+  background: #fff; border: 1px solid #e2e4e8; border-left: 4px solid #9aa3ad;
+  border-radius: 6px; padding: 14px 16px; font-size: 14px;
+}
+.errors { border-left-color: #c2703a; margin-bottom: 20px; }
+.hidden-note { border-left-color: #9aa3ad; margin-top: 24px; font-size: 13px; color: #555; }
+.footer { margin-top: 40px; font-size: 12px; color: #888; }
+.footer a { color: #11467f; }
+@media (max-width: 480px) {
+  body { padding: 16px 12px 48px; }
+  .paper { padding: 12px; }
+  .paper a.title { font-size: 17px; }
+  summary { padding: 6px 0; }
+}
+@media print {
+  body { background: #fff; color: #000; padding: 0; }
+  .jump, .pf-bar, .pf-save { display: none !important; }
+  .paper { break-inside: avoid; border-color: #ccc; box-shadow: none; }
+  details { display: block; }
+  details > summary { display: none; }
+  a { color: #000; text-decoration: none; }
+  .paper a.title::after { content: " (" attr(href) ")"; font-size: 10px;
+                          font-weight: 400; color: #555; word-break: break-all; }
+}
+@media (prefers-color-scheme: dark) {
+  body { background: #16181c; color: #e6e6e6; }
+  .jump { background: rgba(22,24,28,.94); border-bottom-color: #2e333a; }
+  .jump a { background: #282c33; color: #9dbbe4; }
+  .jump a:hover { background: #333941; }
+  .jump label { color: #98a0a8; }
+  h2 { color: #b9bec6; border-bottom-color: #33373d; }
+  .highlights { color: #d8ab63; border-bottom-color: #7a5a1e; }
+  .paper, .empty, .errors, .hidden-note { background: #1f2228; border-color: #33373d; }
+  .paper a.title { color: #86b3ec; }
+  .byline { color: #a8aeb6; }
+  .affil { color: #8d949c; }
+  .why { color: #9fb07f; }
+  details p { color: #c9ced5; }
+  .badge { background: #2a3547; color: #9dbbe4; }
+  .badge.preprint { background: #3b3325; color: #d7b377; }
+  .badge.oa { background: #26381f; color: #a6cf92; }
+  .badge.kind { background: #322a3d; color: #c0a6dd; }
+  .badge.new { background: #3f7a2c; color: #ffffff; }
+  .metric { background: #23272e; color: #a8b0ba; border-color: #32373f; }
+  .metric .src { color: #767d87; }
+  .metric.quiet { background: #1e2126; color: #767d87; }
+  .metric.bad { background: #3a2222; color: #e8a0a0; border-color: #543030; }
+  .metric.own { background: #332c1e; border-color: #4a4130; color: #d7b377; }
+  .sourced { color: #8d949c; border-left-color: #353a42; }
+  .chip { background: #282c33; color: #9aa1aa; }
+  .score { background: #282c33; color: #9aa1aa; }
+  .score.strong { background: #26381f; color: #a6cf92; }
+  .score.ai { background: #322a3d; color: #c0a6dd; }
+  details.set > summary { background: #23272e; border-color: #353a42; color: #a8c4e8; }
+  details.set > summary:hover { background: #2a2f37; }
+  .setcount { background: #16181c; color: #98a0a8; }
+  .showing { color: #79828d; }
+  .ai-why { color: #c0a6dd; }
+  .theme { background: #1f2228; border-color: #33373d; }
+  .theme h3 { color: #86b3ec; }
+  .score.medium { background: #2a3547; color: #9dbbe4; }
+  .counts b { color: #d8dce1; }
+  .meta, .counts, .hidden-note { color: #98a0a8; }
+}
+
+:root {
+  --rail: 248px; --ink: #1a1a1a; --dim: #6a727c; --line: #e2e5ea;
+  --panel: #ffffff; --page: #f6f7f9; --accent: #11467f; --accent-soft: #eaf0f8;
+}
+body.shell { padding: 0; }
+.app { display: flex; align-items: flex-start; min-height: 100vh; }
+.side {
+  width: var(--rail); flex: 0 0 var(--rail); align-self: stretch;
+  background: var(--panel); border-right: 1px solid var(--line);
+  padding: 20px 16px 40px; position: sticky; top: 0; height: 100vh;
+  overflow-y: auto; box-sizing: border-box;
+}
+.main { flex: 1 1 auto; min-width: 0; padding: 22px 18px 64px; }
+.main > .wrap { max-width: 860px; margin: 0 auto; }
+
+.brand { display: flex; align-items: baseline; gap: 8px; margin: 0 0 2px; }
+.brand b { font-size: 17px; letter-spacing: -0.01em; color: var(--ink); }
+.brand span { font-size: 11px; color: var(--dim); }
+.side .when { font-size: 11.5px; color: var(--dim); margin: 0 0 18px; }
+
+.rail-h {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em;
+  color: #9aa1aa; margin: 20px 0 7px; font-weight: 600;
+}
+.rail-nav { display: flex; flex-direction: column; gap: 1px; }
+.rail-nav a {
+  display: flex; align-items: center; gap: 9px; padding: 7px 9px;
+  border-radius: 7px; text-decoration: none; font-size: 13.5px;
+  color: #3d4550;
+}
+.rail-nav a:hover { background: #f1f3f6; }
+.rail-nav a.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.rail-nav a .ico { width: 15px; text-align: center; opacity: .75; font-size: 13px; }
+.rail-nav a .n {
+  margin-left: auto; font-size: 11px; color: var(--dim);
+  background: #f0f2f5; border-radius: 9px; padding: 0 6px; font-weight: 600;
+}
+.rail-nav a.on .n { background: #ffffff; color: var(--accent); }
+.rail-nav a.off { opacity: .45; cursor: help; }
+
+.rail-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.rail-stat {
+  background: #f7f8fa; border: 1px solid var(--line); border-radius: 7px;
+  padding: 7px 8px;
+}
+.rail-stat b { display: block; font-size: 16px; line-height: 1.2; color: var(--ink); }
+.rail-stat span { font-size: 10.5px; color: var(--dim); }
+
+.key { font-size: 11.5px; color: var(--dim); line-height: 1.5; }
+.key .row { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
+.key .row > :first-child { flex: 0 0 auto; margin-top: 1px; }
+
+.filterbox {
+  width: 100%; box-sizing: border-box; font: inherit; font-size: 13px;
+  padding: 7px 10px; border: 1px solid var(--line); border-radius: 7px;
+  background: #fbfbfc; color: var(--ink);
+}
+.filterbox:focus { outline: none; border-color: #b9c8dd; background: #fff; }
+.viewopts { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; }
+.viewopts label {
+  display: flex; align-items: center; gap: 7px; cursor: pointer;
+  color: #46505e; user-select: none;
+}
+.switch .dot {
+  width: 26px; height: 15px; border-radius: 8px; background: #d8dde4;
+  position: relative; transition: background .15s; flex: 0 0 auto;
+}
+.switch .dot::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 11px;
+  height: 11px; border-radius: 50%; background: #fff; transition: left .15s;
+}
+#compact:checked ~ .app .switch .dot { background: #5b87c4; }
+#compact:checked ~ .app .switch .dot::after { left: 13px; }
+.hitcount { font-size: 11.5px; color: var(--dim); margin: 8px 0 0; }
+
+/* topic tabs */
+.tabs {
+  display: flex; gap: 6px; margin: 0 0 16px; padding-bottom: 2px;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin; border-bottom: 1px solid var(--line);
+}
+.tabs .tab {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 13px; border-radius: 7px 7px 0 0; font-size: 13px;
+  color: #46505e; text-decoration: none; white-space: nowrap;
+  border: 1px solid transparent; border-bottom: none; margin-bottom: -1px;
+}
+.tabs .tab:hover { background: #eef1f5; }
+.tabs .tab b {
+  font-size: 10.5px; font-weight: 600; color: var(--dim);
+  background: #eef1f5; border-radius: 9px; padding: 1px 6px;
+}
+.tabs .tab.on {
+  background: var(--panel); color: var(--accent); font-weight: 600;
+  border-color: var(--line); border-bottom: 1px solid var(--panel);
+}
+.tabs .tab.on b { background: var(--accent-soft); color: var(--accent); }
+@media (prefers-color-scheme: dark) {
+  .tabs .tab { color: #b9c0c8; }
+  .tabs .tab:hover { background: #22262c; }
+  .tabs .tab b { background: #23272e; }
+}
+
+/* The drawer button and scrim exist only on narrow screens. */
+#navtoggle { position: absolute; opacity: 0; pointer-events: none; }
+.topbar { display: none; }
+.scrim { display: none; }
+
+@media (max-width: 899px) {
+  .side {
+    position: fixed; z-index: 60; top: 0; left: 0; bottom: 0; height: 100%;
+    transform: translateX(-100%); transition: transform .18s ease-out;
+    box-shadow: 0 0 24px rgba(0,0,0,.14);
+  }
+  #navtoggle:checked ~ .app .side { transform: none; }
+  #navtoggle:checked ~ .app .scrim {
+    display: block; position: fixed; inset: 0; z-index: 50;
+    background: rgba(20,24,30,.34);
+  }
+  .main { padding-top: 8px; }
+  .topbar {
+    display: flex; align-items: center; gap: 10px; position: sticky; top: 0;
+    z-index: 30; margin: -8px -18px 12px; padding: 9px 14px;
+    background: rgba(246,247,249,.95); backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar label.burger {
+    cursor: pointer; font-size: 17px; line-height: 1; padding: 3px 9px;
+    border: 1px solid var(--line); border-radius: 7px; background: #fff;
+    color: #3d4550;
+  }
+  .topbar .here { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e7e9ec; --dim: #8d949c; --line: #2c3037; --panel: #1a1d22;
+    --page: #14161a; --accent: #9dbbe4; --accent-soft: #23303f;
+  }
+  .rail-nav a { color: #b9c0c8; }
+  .rail-nav a:hover { background: #22262c; }
+  .rail-nav a .n { background: #23272e; color: #8d949c; }
+  .rail-nav a.on .n { background: #14161a; color: var(--accent); }
+  .rail-stat { background: #1e2126; border-color: #2c3037; }
+  .filterbox { background: #1e2126; border-color: #2c3037; color: #e7e9ec; }
+  .filterbox:focus { background: #23272e; border-color: #3d4550; }
+  .viewopts label { color: #b9c0c8; }
+  .switch .dot { background: #363b43; }
+  .topbar { background: rgba(20,22,26,.95); }
+  .topbar label.burger { background: #1a1d22; color: #b9c0c8; }
+}
+</style></head><body class="shell">
+<input type="checkbox" id="navtoggle">
+<div class="app">
+<label class="scrim" for="navtoggle"></label>
+<aside class="side">
+<p class="brand"><b>PaperFeed</b><span>all digests</span></p>
+<p class="when">1 run recorded</p>
+<div class="rail-nav">
+<a class="" href="latest.html"><span class="ico">&#9635;</span>Digest</a>
+<a class="" href="/library" data-needs-server><span class="ico">&#9733;</span>Library</a>
+<a class="" href="dashboard.html"><span class="ico">&#9680;</span>Dashboard</a>
+<a class="on" href="index.html"><span class="ico">&#9776;</span>All digests</a>
+</div>
+<p class="rail-h">At a glance</p><div class="rail-stats">
+<div class="rail-stat"><b>1</b><span>runs recorded</span></div>
+<div class="rail-stat"><b>8</b><span>papers alerted</span></div>
+</div>
+<p class="rail-h">Filter</p><input class="filterbox" type="search" placeholder="Find a run" aria-label="Find a run"><div class="viewopts" style="margin-top:8px"></div><p class="hitcount"></p>
+</aside>
+<main class="main">
+<div class="topbar"><label class="burger" for="navtoggle">&#9776;</label><span class="here">All digests</span></div>
+<div class="wrap">
+<h1>All digests</h1>
+<p class="meta">1 digest, newest first</p>
+<div class="paper"><div class="head"><a class="title" href="2026-09-24-1835.html">Thursday 24 September 2026, 18:35</a></div><div class="tags">8 new &middot; 8 Preprint, 13 PubMed</div></div>
+<p class="footer"><a href="latest.html">Latest digest</a></p>
+</div>
+</main></div>
+<script>
+(function () {
+  // Only `paperfeed serve` can answer /library, and it only ever listens on
+  // this Mac. Opened anywhere else - straight off disk, or on a website such
+  // as GitHub Pages - there is nothing behind the link. Testing for file:
+  // alone left it live on https, where it went to the web host's 404 page.
+  var served = location.hostname === '127.0.0.1' || location.hostname === 'localhost';
+  if (!served) {
+    document.querySelectorAll('a[data-needs-server]').forEach(function (link) {
+      link.removeAttribute('href');
+      link.classList.add('off');
+      link.title = 'Only on your Mac: python3 paperfeed.py serve';
+    });
+  }
+
+  // Which topic is on screen. '' means all of them. The tabs do not hide
+  // anything themselves - they declare what they want and let the one
+  // filter decide, the same arrangement the library's status pills use, so
+  // a tab and a search term combine instead of overwriting each other.
+  var topic = '';
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs .tab'));
+
+  var box = document.querySelector('.filterbox');
+  var opts = document.querySelectorAll('.viewopts input');
+  var count = document.querySelector('.hitcount');
+  // Re-queried on every pass, not snapshotted once: removing a saved paper
+  // detached its card while this list kept counting it, so the sidebar read
+  // "23 papers" with 21 on screen. The searchable text is cached on the
+  // element itself rather than in a parallel array that can fall out of
+  // step with it.
+  function liveCards() {
+    return Array.prototype.slice.call(document.querySelectorAll('.paper'));
+  }
+  function textOf(card) {
+    if (card.__pfText === undefined) {
+      card.__pfText = (card.textContent || '').toLowerCase();
+    }
+    return card.__pfText;
+  }
+  if (!liveCards().length) { return; }
+
+  function wanted(card, needle) {
+    if (needle && textOf(card).indexOf(needle) === -1) { return false; }
+    if (topic) {
+      var section = card.closest('details.set');
+      if (!section || section.id !== topic) { return false; }
+    }
+    // Pages with their own filter (the library's status pills) hand it in
+    // here rather than setting display themselves. Two scripts both hiding
+    // and showing the same cards would take it in turns to undo each other.
+    if (window.pfExtraFilter && !window.pfExtraFilter(card)) { return false; }
+    for (var i = 0; i < opts.length; i++) {
+      if (!opts[i].checked) { continue; }
+      var rule = opts[i].getAttribute('data-rule');
+      if (rule === 'oa' && !card.querySelector('.badge.oa')) { return false; }
+      if (rule === 'primary' && card.dataset.secondary) { return false; }
+      if (rule === 'nonew' && card.querySelector('.metric.quiet')) { return false; }
+      if (rule === 'new' && !card.querySelector('.badge.new')) { return false; }
+    }
+    return true;
+  }
+
+  function apply() {
+    var needle = box ? box.value.trim().toLowerCase() : '';
+    var cards = liveCards();
+    var shown = 0;
+    cards.forEach(function (card) {
+      var keep = wanted(card, needle);
+      card.style.display = keep ? '' : 'none';
+      if (keep) { shown++; }
+    });
+    // A section whose papers are all hidden is just a confusing empty
+    // heading, so it goes too. A section the active tab excludes goes
+    // whatever its contents.
+    document.querySelectorAll('details.set').forEach(function (block) {
+      var wrongTopic = topic && block.id !== topic;
+      var any = block.querySelector('.paper:not([style*="none"])');
+      block.style.display = (any && !wrongTopic) ? '' : 'none';
+    });
+    if (count) {
+      count.textContent = (shown === cards.length)
+        ? (cards.length + ' papers')
+        : ('showing ' + shown + ' of ' + cards.length);
+    }
+  }
+
+  if (box) { box.addEventListener('input', apply); }
+  opts.forEach(function (option) { option.addEventListener('change', apply); });
+
+  tabs.forEach(function (tab) {
+    tab.addEventListener('click', function (event) {
+      event.preventDefault();          // it is an anchor only without JS
+      topic = tab.getAttribute('data-topic') || '';
+      tabs.forEach(function (other) {
+        other.classList.toggle('on', other === tab);
+      });
+      apply();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  });
+
+  window.pfApplyFilters = apply;
+  apply();
+})();
+</script>
+</body></html>

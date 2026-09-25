@@ -1,0 +1,18 @@
+[
+  {
+    "file": "2026-09-24-1835.html",
+    "date_label": "Thursday 24 September 2026, 18:35",
+    "total": 8,
+    "sources": {
+      "PubMed": 13,
+      "Preprint": 8
+    },
+    "sets": {
+      "de novo protein design": 5,
+      "protein language models": 12,
+      "IDH1 glioblastoma": 3,
+      "de novo nanobody design": 1
+    },
+    "hidden": 2
+  }
+]

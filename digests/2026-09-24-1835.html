@@ -1,0 +1,781 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PaperFeed &mdash; Thursday 24 September 2026, 18:35</title>
+<style>
+:root { color-scheme: light dark; }
+* { box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  line-height: 1.55; margin: 0; padding: 24px 16px 64px;
+  background: #f6f7f9; color: #1a1a1a;
+}
+.wrap { max-width: 820px; margin: 0 auto; }
+
+/* jump-nav (A3) */
+.jump {
+  position: sticky; top: 0; z-index: 20; margin: 0 -16px 18px;
+  padding: 9px 16px; background: rgba(246,247,249,.94);
+  backdrop-filter: blur(6px); border-bottom: 1px solid #e0e3e8;
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  font-size: 12.5px;
+}
+.jump a { color: #33507a; text-decoration: none; padding: 3px 9px;
+          border-radius: 11px; background: #eceff3; }
+.jump a:hover { background: #dfe5ee; }
+.jump a b { color: #6a727c; font-weight: 600; }
+.jump .spacer { margin-left: auto; }
+.jump a.pf-page {
+  background: none; color: #6a727c; text-decoration: underline;
+  text-underline-offset: 3px; padding: 3px 4px; font-weight: 500;
+}
+.jump a.pf-page:hover { background: none; color: #11467f; }
+.jump .sep { color: #c3c8cf; }
+.jump label { cursor: pointer; user-select: none; color: #55606d; }
+
+/* compact mode (A1) - pure CSS, driven by a checkbox, so the file still
+   needs no JavaScript to work */
+#compact { position: absolute; opacity: 0; pointer-events: none; }
+#compact:checked ~ .wrap .paper,
+#compact:checked ~ .app .paper {
+  padding: 6px 12px; margin-bottom: 5px; border-radius: 5px;
+}
+#compact:checked ~ .wrap .paper .byline,
+#compact:checked ~ .wrap .paper .why,
+#compact:checked ~ .wrap .paper .chips,
+#compact:checked ~ .wrap .paper details,
+#compact:checked ~ .wrap .paper .ai-why,
+#compact:checked ~ .app .paper .byline,
+#compact:checked ~ .app .paper .why,
+#compact:checked ~ .app .paper .chips,
+#compact:checked ~ .app .paper .metrics,
+#compact:checked ~ .app .paper details,
+#compact:checked ~ .app .paper .ai-why { display: none; }
+#compact:checked ~ .wrap .paper .head,
+#compact:checked ~ .app .paper .head { align-items: center; }
+#compact:checked ~ .wrap .paper a.title,
+#compact:checked ~ .app .paper a.title { font-size: 14px; font-weight: 500; }
+#compact:checked ~ .wrap .paper .tags,
+#compact:checked ~ .app .paper .tags {
+  margin: 2px 0 0 48px; font-size: 11px; opacity: .8;
+}
+#compact:checked ~ .wrap .showing,
+#compact:checked ~ .app .showing { margin-bottom: 6px; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+.meta { color: #666; font-size: 13px; margin-bottom: 6px; }
+.counts { color: #666; font-size: 13px; margin: 0 0 24px; }
+.counts b { color: #333; }
+h2 {
+  font-size: 15px; text-transform: uppercase; letter-spacing: .06em;
+  color: #444; border-bottom: 2px solid #d8dadd;
+  padding-bottom: 6px; margin: 34px 0 12px;
+}
+h2 .count { color: #888; font-weight: normal; text-transform: none; letter-spacing: 0; }
+.highlights { border-bottom-color: #b98b3a; color: #8a6420; }
+details.set { margin: 0 0 18px; }
+details.set > summary {
+  list-style: none; cursor: pointer; user-select: none;
+  /* no `display` here: in WebKit it stops <summary> toggling at all */
+  padding: 11px 14px; border-radius: 8px;
+  background: #e9edf2; border: 1px solid #d6dbe2;
+  font-size: 15px; font-weight: 600; color: #26456f;
+}
+details.set > summary::-webkit-details-marker { display: none; }
+.setbar { display: flex; align-items: baseline; gap: 10px; }
+.setbar::before { content: "▸"; font-size: 12px; color: #7d8894;
+  transition: transform .15s ease; display: inline-block; }
+
+details.set[open] > summary .setbar::before { transform: rotate(90deg); }
+details.set > summary:hover { background: #dfe5ee; }
+.setcount {
+  margin-left: auto; font-weight: 600; font-size: 12px; color: #55606d;
+  background: #fff; border-radius: 10px; padding: 1px 9px;
+}
+.setbody { padding: 14px 0 0; }
+.showing { font-size: 12px; color: #7d8894; margin: 0 0 10px 2px; }
+details.rest > summary {
+  cursor: pointer; font-size: 13px; color: #11467f; padding: 8px 2px;
+  width: fit-content;
+}
+details.rest { margin-top: 4px; }
+.paper {
+  background: #fff; border: 1px solid #e2e4e8; border-radius: 8px;
+  padding: 14px 16px; margin-bottom: 12px;
+}
+.head { display: flex; gap: 10px; align-items: baseline; }
+.score {
+  flex: 0 0 auto; font-size: 12px; font-weight: 700; padding: 2px 8px;
+  border-radius: 10px; background: #eceff3; color: #63696f;
+}
+.score.strong { background: #d9ead3; color: #2c5d1e; }
+.score.ai { background: #ece3f5; color: #573a78; }
+.score.medium { background: #e8edf4; color: #33507a; }
+.paper a.title { font-size: 16.5px; font-weight: 600; color: #11467f;
+                 text-decoration: none; line-height: 1.35; }
+.paper a.title:hover { text-decoration: underline; }
+.byline { font-size: 13px; color: #555; margin: 5px 0 0; line-height: 1.45; }
+.affil { color: #777; font-style: italic; }
+.why { font-size: 12px; color: #6b7a52; margin: 5px 0 0; }
+.ai-why { font-size: 13px; color: #573a78; margin: 6px 0 0; }
+.theme { background: #fff; border: 1px solid #e2e4e8; border-radius: 8px;
+         padding: 18px 20px; margin-bottom: 16px; border-left: 4px solid #6f86a8; }
+.theme h3 { margin: 0 0 10px; font-size: 18px; color: #11467f;
+            line-height: 1.3; letter-spacing: -.01em; }
+.theme .num { display: inline-block; width: 26px; height: 26px; margin-right: 9px;
+              border-radius: 50%; background: #e8edf4; color: #33507a;
+              font-size: 13px; line-height: 26px; text-align: center;
+              font-weight: 700; vertical-align: 2px; }
+.theme p { line-height: 1.6; }
+.theme ol { margin: 0; padding-left: 20px; font-size: 13px; }
+.theme ol li { margin-bottom: 5px; }
+.theme .reflabel { font-size: 11.5px; text-transform: uppercase;
+                   letter-spacing: .05em; color: #77818d; margin: 12px 0 5px; }
+.theme p { margin: 0 0 10px; font-size: 14px; }
+.theme ol { margin: 0; padding-left: 20px; font-size: 13px; }
+.theme li { margin-bottom: 4px; }
+.cooling { font-size: 13px; color: #7a5a1e; border-left: 3px solid #d7b377;
+           padding-left: 10px; margin-top: 10px; }
+.tags { font-size: 12px; color: #777; margin-top: 6px; }
+.badge {
+  display: inline-block; padding: 1px 7px; border-radius: 10px;
+  background: #e8edf4; color: #33507a; font-weight: 600; margin-right: 6px;
+}
+.badge.preprint { background: #f4ecdf; color: #7a5a1e; }
+.badge.oa { background: #d9ead3; color: #2c5d1e; }
+.badge.kind { background: #efe7f4; color: #5c3f73; }
+.badge.new { background: #2c5d1e; color: #ffffff; letter-spacing: .04em; }
+.metrics { margin-top: 7px; display: flex; flex-wrap: wrap; gap: 5px; }
+.metric {
+  display: inline-block; font-size: 11.5px; padding: 2px 8px;
+  border-radius: 4px; background: #f2f5f9; color: #46505e;
+  border: 1px solid #e2e8f0; cursor: help;
+}
+.metric .src {
+  display: inline-block; margin-left: 6px; font-size: 10px;
+  color: #8a929c; text-transform: uppercase; letter-spacing: 0.02em;
+}
+.metric.quiet { background: #fafafa; color: #8a929c; font-style: italic; }
+.metric.bad { background: #fbe4e4; color: #8f2020; border-color: #f0c4c4;
+              font-weight: 600; }
+.metric.own { background: #fff6e5; border-color: #f0e0c0; color: #6b5320; }
+.sourced {
+  font-size: 12px; color: #6b727b; margin: 10px 0 0; line-height: 1.55;
+  border-left: 3px solid #dfe3e8; padding-left: 10px;
+}
+.score.ai .tag {
+  font-size: 8.5px; font-weight: 700; letter-spacing: .06em;
+  opacity: .8; margin-right: 3px; vertical-align: 1px;
+}
+.chips { margin-top: 8px; }
+.chip {
+  display: inline-block; font-size: 11px; padding: 1px 7px; margin: 0 4px 4px 0;
+  border-radius: 4px; background: #f0f1f3; color: #5a6068;
+}
+details { margin-top: 9px; }
+summary {
+  cursor: pointer; font-size: 13px; color: #11467f; outline: none;
+  width: fit-content;
+}
+details p { font-size: 13.5px; color: #333; margin: 8px 0 0; }
+.empty, .errors, .hidden-note {
+  background: #fff; border: 1px solid #e2e4e8; border-left: 4px solid #9aa3ad;
+  border-radius: 6px; padding: 14px 16px; font-size: 14px;
+}
+.errors { border-left-color: #c2703a; margin-bottom: 20px; }
+.hidden-note { border-left-color: #9aa3ad; margin-top: 24px; font-size: 13px; color: #555; }
+.footer { margin-top: 40px; font-size: 12px; color: #888; }
+.footer a { color: #11467f; }
+@media (max-width: 480px) {
+  body { padding: 16px 12px 48px; }
+  .paper { padding: 12px; }
+  .paper a.title { font-size: 17px; }
+  summary { padding: 6px 0; }
+}
+@media print {
+  body { background: #fff; color: #000; padding: 0; }
+  .jump, .pf-bar, .pf-save { display: none !important; }
+  .paper { break-inside: avoid; border-color: #ccc; box-shadow: none; }
+  details { display: block; }
+  details > summary { display: none; }
+  a { color: #000; text-decoration: none; }
+  .paper a.title::after { content: " (" attr(href) ")"; font-size: 10px;
+                          font-weight: 400; color: #555; word-break: break-all; }
+}
+@media (prefers-color-scheme: dark) {
+  body { background: #16181c; color: #e6e6e6; }
+  .jump { background: rgba(22,24,28,.94); border-bottom-color: #2e333a; }
+  .jump a { background: #282c33; color: #9dbbe4; }
+  .jump a:hover { background: #333941; }
+  .jump label { color: #98a0a8; }
+  h2 { color: #b9bec6; border-bottom-color: #33373d; }
+  .highlights { color: #d8ab63; border-bottom-color: #7a5a1e; }
+  .paper, .empty, .errors, .hidden-note { background: #1f2228; border-color: #33373d; }
+  .paper a.title { color: #86b3ec; }
+  .byline { color: #a8aeb6; }
+  .affil { color: #8d949c; }
+  .why { color: #9fb07f; }
+  details p { color: #c9ced5; }
+  .badge { background: #2a3547; color: #9dbbe4; }
+  .badge.preprint { background: #3b3325; color: #d7b377; }
+  .badge.oa { background: #26381f; color: #a6cf92; }
+  .badge.kind { background: #322a3d; color: #c0a6dd; }
+  .badge.new { background: #3f7a2c; color: #ffffff; }
+  .metric { background: #23272e; color: #a8b0ba; border-color: #32373f; }
+  .metric .src { color: #767d87; }
+  .metric.quiet { background: #1e2126; color: #767d87; }
+  .metric.bad { background: #3a2222; color: #e8a0a0; border-color: #543030; }
+  .metric.own { background: #332c1e; border-color: #4a4130; color: #d7b377; }
+  .sourced { color: #8d949c; border-left-color: #353a42; }
+  .chip { background: #282c33; color: #9aa1aa; }
+  .score { background: #282c33; color: #9aa1aa; }
+  .score.strong { background: #26381f; color: #a6cf92; }
+  .score.ai { background: #322a3d; color: #c0a6dd; }
+  details.set > summary { background: #23272e; border-color: #353a42; color: #a8c4e8; }
+  details.set > summary:hover { background: #2a2f37; }
+  .setcount { background: #16181c; color: #98a0a8; }
+  .showing { color: #79828d; }
+  .ai-why { color: #c0a6dd; }
+  .theme { background: #1f2228; border-color: #33373d; }
+  .theme h3 { color: #86b3ec; }
+  .score.medium { background: #2a3547; color: #9dbbe4; }
+  .counts b { color: #d8dce1; }
+  .meta, .counts, .hidden-note { color: #98a0a8; }
+}
+
+:root {
+  --rail: 248px; --ink: #1a1a1a; --dim: #6a727c; --line: #e2e5ea;
+  --panel: #ffffff; --page: #f6f7f9; --accent: #11467f; --accent-soft: #eaf0f8;
+}
+body.shell { padding: 0; }
+.app { display: flex; align-items: flex-start; min-height: 100vh; }
+.side {
+  width: var(--rail); flex: 0 0 var(--rail); align-self: stretch;
+  background: var(--panel); border-right: 1px solid var(--line);
+  padding: 20px 16px 40px; position: sticky; top: 0; height: 100vh;
+  overflow-y: auto; box-sizing: border-box;
+}
+.main { flex: 1 1 auto; min-width: 0; padding: 22px 18px 64px; }
+.main > .wrap { max-width: 860px; margin: 0 auto; }
+
+.brand { display: flex; align-items: baseline; gap: 8px; margin: 0 0 2px; }
+.brand b { font-size: 17px; letter-spacing: -0.01em; color: var(--ink); }
+.brand span { font-size: 11px; color: var(--dim); }
+.side .when { font-size: 11.5px; color: var(--dim); margin: 0 0 18px; }
+
+.rail-h {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em;
+  color: #9aa1aa; margin: 20px 0 7px; font-weight: 600;
+}
+.rail-nav { display: flex; flex-direction: column; gap: 1px; }
+.rail-nav a {
+  display: flex; align-items: center; gap: 9px; padding: 7px 9px;
+  border-radius: 7px; text-decoration: none; font-size: 13.5px;
+  color: #3d4550;
+}
+.rail-nav a:hover { background: #f1f3f6; }
+.rail-nav a.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.rail-nav a .ico { width: 15px; text-align: center; opacity: .75; font-size: 13px; }
+.rail-nav a .n {
+  margin-left: auto; font-size: 11px; color: var(--dim);
+  background: #f0f2f5; border-radius: 9px; padding: 0 6px; font-weight: 600;
+}
+.rail-nav a.on .n { background: #ffffff; color: var(--accent); }
+.rail-nav a.off { opacity: .45; cursor: help; }
+
+.rail-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.rail-stat {
+  background: #f7f8fa; border: 1px solid var(--line); border-radius: 7px;
+  padding: 7px 8px;
+}
+.rail-stat b { display: block; font-size: 16px; line-height: 1.2; color: var(--ink); }
+.rail-stat span { font-size: 10.5px; color: var(--dim); }
+
+.key { font-size: 11.5px; color: var(--dim); line-height: 1.5; }
+.key .row { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
+.key .row > :first-child { flex: 0 0 auto; margin-top: 1px; }
+
+.filterbox {
+  width: 100%; box-sizing: border-box; font: inherit; font-size: 13px;
+  padding: 7px 10px; border: 1px solid var(--line); border-radius: 7px;
+  background: #fbfbfc; color: var(--ink);
+}
+.filterbox:focus { outline: none; border-color: #b9c8dd; background: #fff; }
+.viewopts { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; }
+.viewopts label {
+  display: flex; align-items: center; gap: 7px; cursor: pointer;
+  color: #46505e; user-select: none;
+}
+.switch .dot {
+  width: 26px; height: 15px; border-radius: 8px; background: #d8dde4;
+  position: relative; transition: background .15s; flex: 0 0 auto;
+}
+.switch .dot::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 11px;
+  height: 11px; border-radius: 50%; background: #fff; transition: left .15s;
+}
+#compact:checked ~ .app .switch .dot { background: #5b87c4; }
+#compact:checked ~ .app .switch .dot::after { left: 13px; }
+.hitcount { font-size: 11.5px; color: var(--dim); margin: 8px 0 0; }
+
+/* topic tabs */
+.tabs {
+  display: flex; gap: 6px; margin: 0 0 16px; padding-bottom: 2px;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin; border-bottom: 1px solid var(--line);
+}
+.tabs .tab {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 13px; border-radius: 7px 7px 0 0; font-size: 13px;
+  color: #46505e; text-decoration: none; white-space: nowrap;
+  border: 1px solid transparent; border-bottom: none; margin-bottom: -1px;
+}
+.tabs .tab:hover { background: #eef1f5; }
+.tabs .tab b {
+  font-size: 10.5px; font-weight: 600; color: var(--dim);
+  background: #eef1f5; border-radius: 9px; padding: 1px 6px;
+}
+.tabs .tab.on {
+  background: var(--panel); color: var(--accent); font-weight: 600;
+  border-color: var(--line); border-bottom: 1px solid var(--panel);
+}
+.tabs .tab.on b { background: var(--accent-soft); color: var(--accent); }
+@media (prefers-color-scheme: dark) {
+  .tabs .tab { color: #b9c0c8; }
+  .tabs .tab:hover { background: #22262c; }
+  .tabs .tab b { background: #23272e; }
+}
+
+/* The drawer button and scrim exist only on narrow screens. */
+#navtoggle { position: absolute; opacity: 0; pointer-events: none; }
+.topbar { display: none; }
+.scrim { display: none; }
+
+@media (max-width: 899px) {
+  .side {
+    position: fixed; z-index: 60; top: 0; left: 0; bottom: 0; height: 100%;
+    transform: translateX(-100%); transition: transform .18s ease-out;
+    box-shadow: 0 0 24px rgba(0,0,0,.14);
+  }
+  #navtoggle:checked ~ .app .side { transform: none; }
+  #navtoggle:checked ~ .app .scrim {
+    display: block; position: fixed; inset: 0; z-index: 50;
+    background: rgba(20,24,30,.34);
+  }
+  .main { padding-top: 8px; }
+  .topbar {
+    display: flex; align-items: center; gap: 10px; position: sticky; top: 0;
+    z-index: 30; margin: -8px -18px 12px; padding: 9px 14px;
+    background: rgba(246,247,249,.95); backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar label.burger {
+    cursor: pointer; font-size: 17px; line-height: 1; padding: 3px 9px;
+    border: 1px solid var(--line); border-radius: 7px; background: #fff;
+    color: #3d4550;
+  }
+  .topbar .here { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e7e9ec; --dim: #8d949c; --line: #2c3037; --panel: #1a1d22;
+    --page: #14161a; --accent: #9dbbe4; --accent-soft: #23303f;
+  }
+  .rail-nav a { color: #b9c0c8; }
+  .rail-nav a:hover { background: #22262c; }
+  .rail-nav a .n { background: #23272e; color: #8d949c; }
+  .rail-nav a.on .n { background: #14161a; color: var(--accent); }
+  .rail-stat { background: #1e2126; border-color: #2c3037; }
+  .filterbox { background: #1e2126; border-color: #2c3037; color: #e7e9ec; }
+  .filterbox:focus { background: #23272e; border-color: #3d4550; }
+  .viewopts label { color: #b9c0c8; }
+  .switch .dot { background: #363b43; }
+  .topbar { background: rgba(20,22,26,.95); }
+  .topbar label.burger { background: #1a1d22; color: #b9c0c8; }
+}
+</style></head><body class="shell">
+<input type="checkbox" id="compact">
+<input type="checkbox" id="navtoggle">
+<div class="app">
+<label class="scrim" for="navtoggle"></label>
+<aside class="side">
+<p class="brand"><b>PaperFeed</b><span>PubMed and Preprints</span></p>
+<p class="when">Thursday 24 September 2026, 18:35</p>
+<div class="rail-nav">
+<a class="on" href="latest.html"><span class="ico">&#9635;</span>Digest<span class="n">8</span></a>
+<a class="" href="/library" data-needs-server><span class="ico">&#9733;</span>Library<span class="n">0</span></a>
+<a class="" href="dashboard.html"><span class="ico">&#9680;</span>Dashboard</a>
+<a class="" href="index.html"><span class="ico">&#9776;</span>All digests</a>
+</div>
+<p class="rail-h">At a glance</p><div class="rail-stats">
+<div class="rail-stat"><b>21</b><span>in the last 3 days</span></div>
+<div class="rail-stat"><b>8</b><span>new to you</span></div>
+<div class="rail-stat"><b>8</b><span>from Preprint</span></div>
+<div class="rail-stat"><b>13</b><span>from PubMed</span></div>
+<div class="rail-stat"><b>2</b><span>hidden by filters</span></div>
+</div>
+<p class="rail-h">Topics</p><div class="rail-nav">
+<a class="" href="#s-de-novo-protein-design"><span class="ico">&#8226;</span>de novo protein design<span class="n">5</span></a>
+<a class="" href="#s-protein-language-models"><span class="ico">&#8226;</span>protein language models<span class="n">12</span></a>
+<a class="" href="#s-idh1-glioblastoma"><span class="ico">&#8226;</span>IDH1 glioblastoma<span class="n">3</span></a>
+<a class="" href="#s-de-novo-nanobody-design"><span class="ico">&#8226;</span>de novo nanobody design<span class="n">1</span></a>
+</div>
+<p class="rail-h">Filter</p><input class="filterbox" type="search" placeholder="Filter these papers" aria-label="Filter these papers"><div class="viewopts" style="margin-top:8px"><label><input type="checkbox" data-rule="new">only papers new to me</label><label><input type="checkbox" data-rule="oa">free full text only</label><label><input type="checkbox" data-rule="primary">hide reviews and comments</label><label><input type="checkbox" data-rule="nonew">hide papers too new to be cited</label></div><p class="hitcount"></p><p class="rail-h">View</p><div class="viewopts"><label class="switch" for="compact"><span class="dot"></span>compact list</label></div>
+<p class="rail-h">Relevance scoring</p>
+<div class="key"><div class="row"><span></span><span>Both numbers estimate how closely a paper matches <b>what you asked for</b>. Neither is a judgement of the paper itself &mdash; for that, look at the citation and journal figures on each card.</span></div><div class="row"><span class="score ai"><span class="tag">AI</span>9</span><span><b>Relevance judged by Gemini (gemini-3-flash-preview)</b>, 0&ndash;10, against the <b>interests</b> you wrote for this topic. It reads the title and abstract, so it can tell a paper that is about your question from one that merely mentions it.</span></div><div class="row"><span class="score strong" style="--fill:80%">8.0</span><span><b>Relevance measured by PaperFeed</b>, 0&ndash;10, by where your query's terms appear: a concept in the <b>title</b> scores 4, a <b>MeSH heading</b> 2, a mention in the <b>abstract</b> 1, an <b>author you follow</b> 3. No judgement, no model &mdash; just arithmetic you can check, and the reasons are printed under every title.</span></div><div class="row"><span></span><span>Papers are ordered by the AI score where there is one, and by PaperFeed's own score otherwise.</span></div></div>
+</aside>
+<main class="main">
+<div class="topbar"><label class="burger" for="navtoggle">&#9776;</label><span class="here">Digest</span></div>
+<div class="wrap">
+<h1>PaperFeed</h1>
+<p class="meta">Thursday 24 September 2026, 18:35 &middot; 21 papers from the last 3 days, 8 new to you</p>
+<p class="counts"><b>8</b> from Preprint &middot; <b>13</b> from PubMed &middot; <b>2</b> hidden by your filters</p>
+<nav class="tabs"><a class="tab on" href="#" data-topic="">All topics<b>21</b></a><a class="tab" href="#s-de-novo-protein-design" data-topic="s-de-novo-protein-design">de novo protein design<b>5&middot;2 new</b></a><a class="tab" href="#s-protein-language-models" data-topic="s-protein-language-models">protein language models<b>12&middot;5 new</b></a><a class="tab" href="#s-idh1-glioblastoma" data-topic="s-idh1-glioblastoma">IDH1 glioblastoma<b>3</b></a><a class="tab" href="#s-de-novo-nanobody-design" data-topic="s-de-novo-nanobody-design">de novo nanobody design<b>1&middot;1 new</b></a></nav>
+<p class="sourced">Citation and journal figures for 15 of the 21 papers below are read from OpenAlex (CC0) on 2026-09-24. The rest are not in OpenAlex or could not be looked up.<br><em>These are triage signals, not verdicts. A journal-level number says nothing about any single paper, and OpenAlex&#x27;s mean citedness counts every meeting abstract a journal prints, so journals with large abstract supplements read far below their reputation.</em></p>
+<div class="errors">Part of the AI scoring did not complete: the service was busy (HTTP 503) after 3 attempts; the service was busy (HTTP 503) after 3 attempts</div>
+<details class="set" id="s-de-novo-protein-design" open><summary><div class="setbar">
+<span>de novo protein design</span>
+<span class="setcount">5 &middot; 2 new</span></div></summary><div class="setbody">
+<div class="paper" data-doi="10.1038/s41467-026-77963-6">
+<div class="head"><span class="score" style="--fill:20%" title="PaperFeed&#x27;s own score out of 10 - &#x27;ProteinMPNN&#x27; in abstract; published yesterday">2.0</span><a class="title" href="https://doi.org/10.1038/s41467-026-77963-6">Generative AI designs functional thiolation domains for reprogramming non-ribosomal peptide synthetases.</a></div>
+<p class="byline">Bülbül EF, Bang S, George K, Bianchi G, Raj P, Chung S, Pauline V, Hochstrasser R, et al. <span class="affil">&mdash; Helmholtz Institute for Pharmaceutical Research Saarland (HIPS)</span></p>
+<p class="why">&#x27;ProteinMPNN&#x27; in abstract; published yesterday</p>
+<div class="tags"><span class="badge">PubMed</span> <a class="badge oa" href="https://doi.org/10.1038/s41467-026-77963-6">free full text</a>Nature communications &middot; 2026-09-23 &middot; doi:10.1038/s41467-026-77963-6</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span><span class="metric" title="OpenAlex 2-year mean citedness for Nature Communications. It counts EVERY item the journal publishes, meeting abstracts and errata included, so journals with large abstract supplements read far below their reputation. Not an Impact Factor.">journal citedness 17.8 over 92,887 works<span class="src">OpenAlex</span></span><span class="metric" title="Listed in the Directory of Open Access Journals.">in DOAJ<span class="src">OpenAlex</span></span></div>
+<div class="chips"><span class="chip">Peptide Synthases</span><span class="chip">Generative Artificial Intelligence</span><span class="chip">Protein Engineering</span><span class="chip">Protein Domains</span><span class="chip">Large Language Models</span></div>
+<details><summary>Abstract</summary><p>Large language models and generative protein design promise to accelerate biotechnology, but it remains unclear whether they can engineer dynamic megasynth(et)ases whose activity depends on transient, context-specific domain interfaces. Non-ribosomal peptide synthetases (NRPSs) exemplify this challenge and produce many clinically used therapeutics. Here we integrate pretrained generative models (ESM3, ProteinMPNN and EvoDiff) with design-build-test-learn cycles and data-guided prioritization to generate 76 de novo thiolation (T) domains. We build and test 578 recombinant NRPS variants in vivo spanning minimal, full-length, and hybrid assembly lines. AI-designed T-domains support product…</p></details>
+<script type="application/json" class="pf-paper">{"title": "Generative AI designs functional thiolation domains for reprogramming non-ribosomal peptide synthetases.", "authors": ["B\u00fclb\u00fcl EF", "Bang S", "George K", "Bianchi G", "Raj P", "Chung S", "Pauline V", "Hochstrasser R", "Minas HA", "Elgaher WAM", "Kany AM", "Hirsch AKH", "Schmitt S", "Heinz DW", "Kalinina OV", "Klakow D", "Bozh\u00fcy\u00fck KAJ"], "abstract": "Large language models and generative protein design promise to accelerate biotechnology, but it remains unclear whether they can engineer dynamic megasynth(et)ases whose activity depends on transient, context-specific domain interfaces. Non-ribosomal peptide synthetases (NRPSs) exemplify this challenge and produce many clinically used therapeutics. Here we integrate pretrained generative models (ESM3, ProteinMPNN and EvoDiff) with design-build-test-learn cycles and data-guided prioritization to generate 76 de novo thiolation (T) domains. We build and test 578 recombinant NRPS variants in vivo spanning minimal, full-length, and hybrid assembly lines. AI-designed T-domains support product formation across architectures, enable catalytically active hybrids at recombined junctions, and increase yields by up to ~3-fold relative to NRPSs carrying the native T-domain. A representative design shows improved soluble expression, refolding, and a 12 \u00b0C higher melting temperature, while molecular dynamics simulations indicate preserved global stability but reshaped, state-dependent interdomain contact networks. Together, these results establish generative design as an effective route to context-conditioned engineering and reprogramming of biosynthetic assembly lines.", "doi": "10.1038/s41467-026-77963-6", "url": "https://doi.org/10.1038/s41467-026-77963-6", "published": "2026-09-23", "venue": "Nature communications", "source": "PubMed", "set_name": "de novo protein design", "score": 2.0}</script>
+</div>
+<div class="paper" data-doi="10.64898/2026.09.22.753604">
+<div class="head"><span class="score" style="--fill:20%" title="PaperFeed&#x27;s own score out of 10 - &#x27;de novo protein design&#x27; in abstract; published yesterday">2.0</span><a class="title" href="https://doi.org/10.64898/2026.09.22.753604">Agentic campaign control for high-throughput de novo binder design</a></div>
+<p class="byline">Jeon M, Song J, Kim J, Zhong ED</p>
+<p class="why">&#x27;de novo protein design&#x27; in abstract; published yesterday</p>
+<div class="tags"><span class="badge new">new</span> <span class="badge preprint">Preprint</span> <a class="badge oa" href="https://doi.org/10.64898/2026.09.22.753604">free full text</a>bioRxiv &middot; 2026-09-23 &middot; doi:10.64898/2026.09.22.753604</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span></div>
+
+<details><summary>Abstract</summary><p>Progress in artificial intelligence has produced a rapidly growing ecosystem of methods for de novo protein design. With access to many specialized and often complementary tools, how does one use them effectively, especially with a finite compute budget? Here, we introduce Target-adaptive Rescue-Explore-eXploit (T-REX), an agentic protein binder design framework that orchestrates multiple state-of-the-art protein generative models and structure evaluators. Over the course of a design campaign, T-REX leverages large language model (LLM) agents to reason over accumulating outcomes and decide whether to rescue promising candidates, explore alternative settings, or exploit productive routes,…</p></details>
+<script type="application/json" class="pf-paper">{"title": "Agentic campaign control for high-throughput de novo binder design", "authors": ["Jeon M", "Song J", "Kim J", "Zhong ED"], "abstract": "Progress in artificial intelligence has produced a rapidly growing ecosystem of methods for de novo protein design. With access to many specialized and often complementary tools, how does one use them effectively, especially with a finite compute budget? Here, we introduce Target-adaptive Rescue-Explore-eXploit (T-REX), an agentic protein binder design framework that orchestrates multiple state-of-the-art protein generative models and structure evaluators. Over the course of a design campaign, T-REX leverages large language model (LLM) agents to reason over accumulating outcomes and decide whether to rescue promising candidates, explore alternative settings, or exploit productive routes, while a deterministic controller validates and schedules proposed actions.", "doi": "10.64898/2026.09.22.753604", "url": "https://doi.org/10.64898/2026.09.22.753604", "published": "2026-09-23", "venue": "bioRxiv", "source": "Preprint", "set_name": "de novo protein design", "score": 2.0}</script>
+</div>
+<div class="paper" data-doi="10.20944/preprints202609.1947.v1">
+<div class="head"><span class="score" style="--fill:20%" title="PaperFeed&#x27;s own score out of 10 - &#x27;RFdiffusion&#x27; in abstract; published 2 days ago">2.0</span><a class="title" href="https://doi.org/10.20944/preprints202609.1947.v1">Two-Stage Solubility Optimization of an Anti-VirB4 Nanobody: From Rational Mutagenesis to AI-Driven De Novo Design of a Single-Domain Antibody Macromolecule</a></div>
+<p class="byline">Pan G, Zhang Y, Zhou H, Yang F, Hou L, Gong P, Wan F</p>
+<p class="why">&#x27;RFdiffusion&#x27; in abstract; published 2 days ago</p>
+<div class="tags"><span class="badge new">new</span> <span class="badge preprint">Preprint</span> <a class="badge oa" href="https://doi.org/10.20944/preprints202609.1947.v1">free full text</a>Preprints.org &middot; 2026-09-22 &middot; doi:10.20944/preprints202609.1947.v1</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span></div>
+
+<details><summary>Abstract</summary><p>Nanobodies (VHHs, ~12-15 kDa) are single-domain antibody fragments valued for diagnostic applications, yet their engineering is frequently limited by poor solubility and aggregation. This study used the aggregation-prone anti-VirB4 nanobody a_b5 as a model to establish a two-stage solubility optimization strategy: rational single-point mutagenesis, then AI-driven de novo design. Consensus sequence analysis and CamSol prediction converged on glycine 54; G54A and G54D mutations reduced the Z-average hydrodynamic diameter by ~31% and ~32%, respectively, but particle sizes remained in the hundreds of nanometers, revealing an inherent ceiling for single-point mutagenesis. To surpass this limit,…</p></details>
+<script type="application/json" class="pf-paper">{"title": "Two-Stage Solubility Optimization of an Anti-VirB4 Nanobody: From Rational Mutagenesis to AI-Driven De Novo Design of a Single-Domain Antibody Macromolecule", "authors": ["Pan G", "Zhang Y", "Zhou H", "Yang F", "Hou L", "Gong P", "Wan F"], "abstract": "Nanobodies (VHHs, ~12-15 kDa) are single-domain antibody fragments valued for diagnostic applications, yet their engineering is frequently limited by poor solubility and aggregation. This study used the aggregation-prone anti-VirB4 nanobody a_b5 as a model to establish a two-stage solubility optimization strategy: rational single-point mutagenesis, then AI-driven de novo design. Consensus sequence analysis and CamSol prediction converged on glycine 54; G54A and G54D mutations reduced the Z-average hydrodynamic diameter by ~31% and ~32%, respectively, but particle sizes remained in the hundreds of nanometers, revealing an inherent ceiling for single-point mutagenesis. To surpass this limit, a modular AI pipeline integrating AlphaFold3 hotspot analysis, RFdiffusion backbone generation, dual-pathway ProteinMPNN sequence design (Vanilla and Soluble), AlphaFold3 ipTM screening, and 100-ns molecular dynamics was constructed. Among 780 designed sequences across 10 nanobody-antigen pairs, B5S achieved a CamSol solubility score of 3.007 (480% increase over wild-type 0.518). DLS confirmed a Z-average diameter of 6.084 nm with 43.4% monomer peak; B5S was solubly expressed in E. coli while the Vanilla counterpart B5V precipitated. Direct ELISA confirmed dose-dependent binding of B5S to VirB4 with apparent K_D ~856.2 nmol/L. These results demonstrate that AI-driven holistic redesign can simultaneously optimize binding interface quality and macromolecular solubility.", "doi": "10.20944/preprints202609.1947.v1", "url": "https://doi.org/10.20944/preprints202609.1947.v1", "published": "2026-09-22", "venue": "Preprints.org", "source": "Preprint", "set_name": "de novo protein design", "score": 2.0}</script>
+</div>
+<div class="paper" data-doi="10.21203/rs.3.rs-11108822/v1">
+<div class="head"><span class="score" style="--fill:20%" title="PaperFeed&#x27;s own score out of 10 - &#x27;RFdiffusion&#x27; in abstract; published 2 days ago">2.0</span><a class="title" href="https://doi.org/10.21203/rs.3.rs-11108822/v1">Polymorph-Independent Resistance to Generative Protein Design Across Five Tau Fibril Folds: A Cross-Tauopathy Benchmark</a></div>
+<p class="byline">Nanda S</p>
+<p class="why">&#x27;RFdiffusion&#x27; in abstract; published 2 days ago</p>
+<div class="tags"><span class="badge preprint">Preprint</span> <a class="badge oa" href="https://doi.org/10.21203/rs.3.rs-11108822/v1">free full text</a>Research Square &middot; 2026-09-22 &middot; doi:10.21203/rs.3.rs-11108822/v1</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span></div>
+
+<details><summary>Abstract</summary><p>Generative protein-binder-design tools such as diffusion-based backbone generators have recently been benchmarked against amyloid fibril targets, where success was found to depend on the specific structural polymorph rather than the disease of origin: some fibril folds are tractable, others uniformly resistant. Whether this polymorph-dependence generalizes to tau, the aggregating protein in Alzheimer&#x27;s disease and a family of non-Alzheimer&#x27;s tauopathies, is untested. We benchmarked RFdiffusion3 with mandatory ProteinMPNN sequence redesign against five distinct cryo-EM tau fibril folds spanning five tauopathies: Alzheimer&#x27;s disease (paired helical filament), chronic traumatic encephalopathy,…</p></details>
+<script type="application/json" class="pf-paper">{"title": "Polymorph-Independent Resistance to Generative Protein Design Across Five Tau Fibril Folds: A Cross-Tauopathy Benchmark", "authors": ["Nanda S"], "abstract": "Generative protein-binder-design tools such as diffusion-based backbone generators have recently been benchmarked against amyloid fibril targets, where success was found to depend on the specific structural polymorph rather than the disease of origin: some fibril folds are tractable, others uniformly resistant. Whether this polymorph-dependence generalizes to tau, the aggregating protein in Alzheimer's disease and a family of non-Alzheimer's tauopathies, is untested. We benchmarked RFdiffusion3 with mandatory ProteinMPNN sequence redesign against five distinct cryo-EM tau fibril folds spanning five tauopathies: Alzheimer's disease (paired helical filament), chronic traumatic encephalopathy, Pick's disease, corticobasal degeneration, and progressive supranuclear palsy, scoring all candidates through a common AlphaFold2-Multimer oracle. In contrast to the polymorph-dependent pattern reported for AL amyloidosis and alpha-synuclein, all five tau folds proved resistant to binder design (best interface predicted template modeling score, i_pTM, 0.116-0.401 across folds), with even the most tractable fold (progressive supranuclear palsy) falling short of the tractable range reported for other amyloid classes. Unlike those classes, where binder beta-sheet-forming amino acid propensity correlated strongly with predicted binding success, no such relationship was detected for tau (Pearson r=-0.19, p=0.50; n=15 designs), and the highest-scoring tau design is an alpha-helical bundle rather than a beta-sheet, suggesting a mechanistically distinct interaction mode. This is, to our knowledge, the first application of a modern diffusion-based generative design tool to tau fibrils, and the first evidence that resistance to generative binder design is not a universal property of amyloid geometry but varies by protein family independent of structural polymorph within that family.", "doi": "10.21203/rs.3.rs-11108822/v1", "url": "https://doi.org/10.21203/rs.3.rs-11108822/v1", "published": "2026-09-22", "venue": "Research Square", "source": "Preprint", "set_name": "de novo protein design", "score": 2.0}</script>
+</div>
+<div class="paper" data-doi="10.21203/rs.3.rs-11106209/v1">
+<div class="head"><span class="score" style="--fill:20%" title="PaperFeed&#x27;s own score out of 10 - &#x27;RFdiffusion&#x27; in abstract; published 2 days ago">2.0</span><a class="title" href="https://doi.org/10.21203/rs.3.rs-11106209/v1">Polymorph-Dependent Success of Generative Protein Design Against Amyloid Fibrils: A Cross-Method Benchmark Including AL Amyloidosis</a></div>
+<p class="byline">Nanda S</p>
+<p class="why">&#x27;RFdiffusion&#x27; in abstract; published 2 days ago</p>
+<div class="tags"><span class="badge preprint">Preprint</span> <a class="badge oa" href="https://doi.org/10.21203/rs.3.rs-11106209/v1">free full text</a>Research Square &middot; 2026-09-22 &middot; doi:10.21203/rs.3.rs-11106209/v1</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span></div>
+
+<details><summary>Abstract</summary><p>Generative protein design tools such as diffusion-based backbone generators and AlphaFold2-hallucination pipelines have been validated almost exclusively on globular receptor and signaling-protein targets. Whether these methods generalize to amyloid fibrils - flat, pocket-less, cross-beta surfaces that are structurally unlike any benchmark target used to date - is unknown. We benchmarked three generative design tools (RFdiffusion3, BindCraft, and BindEnergyCraft) for their ability to design binders against eight cryo-EM fibril structures spanning three amyloid diseases: AL (immunoglobulin light-chain) amyloidosis, Parkinson&#x27;s disease (alpha-synuclein), and Alzheimer&#x27;s disease…</p></details>
+<script type="application/json" class="pf-paper">{"title": "Polymorph-Dependent Success of Generative Protein Design Against Amyloid Fibrils: A Cross-Method Benchmark Including AL Amyloidosis", "authors": ["Nanda S"], "abstract": "Generative protein design tools such as diffusion-based backbone generators and AlphaFold2-hallucination pipelines have been validated almost exclusively on globular receptor and signaling-protein targets. Whether these methods generalize to amyloid fibrils - flat, pocket-less, cross-beta surfaces that are structurally unlike any benchmark target used to date - is unknown. We benchmarked three generative design tools (RFdiffusion3, BindCraft, and BindEnergyCraft) for their ability to design binders against eight cryo-EM fibril structures spanning three amyloid diseases: AL (immunoglobulin light-chain) amyloidosis, Parkinson's disease (alpha-synuclein), and Alzheimer's disease (amyloid-beta). AL amyloid has not previously been attempted with any of these tools. Using a common AlphaFold2-Multimer scoring oracle and a mandatory ProteinMPNN sequence-redesign step for diffusion-generated backbones, we found that design success is polymorph-dependent rather than disease-dependent: amyloid-beta fibrils resisted all three methods (interface predicted template modeling score, i_pTM, 0.09-0.15 across both polymorphs tested, and zero accepted designs across 83 combined AF2-hallucination trajectories), alpha-synuclein was largely tractable (three of four polymorphs reaching i_pTM >= 0.70), and AL amyloid split evenly between the two extremes (i_pTM 0.235 for one polymorph, 0.585 for another). Diffusion-based backbone generation (RFdiffusion3) produced confident designs on several targets where AF2-hallucination-based methods (BindCraft, BindEnergyCraft) produced none. Across all RFdiffusion3 designs, binder beta-sheet-forming amino acid propensity correlated strongly with predicted interface confidence (Pearson r = 0.80, p \u003c 0.001; n = 24), suggesting a compositional basis for engaging the fibrils' cross-beta surface. We additionally document a hardware-access barrier: a fourth candidate tool, ESMFold2, could not be run at all on our compute infrastructure (three NVIDIA TITAN RTX GPUs) because its bfloat16 Triton kernels require Ampere-generation (compute capability >= 8.0) hardware, excluding Turing-generation GPUs entirely. This is, to our knowledge, the first computational feasibility assessment of generative binder design against AL amyloid, and the first systematic comparison of these tools on any amyloid fibril target.", "doi": "10.21203/rs.3.rs-11106209/v1", "url": "https://doi.org/10.21203/rs.3.rs-11106209/v1", "published": "2026-09-22", "venue": "Research Square", "source": "Preprint", "set_name": "de novo protein design", "score": 2.0}</script>
+</div>
+</div></details>
+<details class="set" id="s-protein-language-models" open><summary><div class="setbar">
+<span>protein language models</span>
+<span class="setcount">12 &middot; 5 new</span></div></summary><div class="setbody">
+<p class="showing">Top 5 of 12, best first</p>
+<div class="paper" data-doi="10.20944/preprints202609.1742.v1">
+<div class="head"><span class="score ai" title="Gemini (gemini-3-flash-preview)"><span class="tag">AI</span>9</span><span class="score" style="--fill:20%" title="PaperFeed&#x27;s own score out of 10 - &#x27;protein language model&#x27; in abstract; published 3 days ago">2.0</span><a class="title" href="https://doi.org/10.20944/preprints202609.1742.v1">AF-RECAL: Multi-Modal Structural Recalibration of AlphaFold 3 Hallucinations in Intrinsically Disordered Human Disease Targets</a></div>
+<p class="byline">Sharma M</p>
+<p class="ai-why">Directly addresses architecture failures (AF3 hallucinations) and provides a concrete meta-evaluator tool for honest confidence recalibration.</p>
+<p class="why">&#x27;protein language model&#x27; in abstract; published 3 days ago</p>
+<div class="tags"><span class="badge preprint">Preprint</span> <a class="badge oa" href="https://doi.org/10.20944/preprints202609.1742.v1">free full text</a>Preprints.org &middot; 2026-09-21 &middot; doi:10.20944/preprints202609.1742.v1</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span></div>
+
+<details><summary>Abstract</summary><p>AlphaFold 3 (AF3) has transformed structural bioinformatics through generative diffusion modeling of biomolecular assemblies. However, intrinsically disordered regions (IDRs)—which comprise over 30% of the human proteome and mediate essential cell signaling, oncogenesis, and phase separation—violate the classic thermodynamic energyminimization assumptions inherent to static structure prediction. In the absence of explicit solvent and physiological binding partners, AF3&#x27;s diffusion trunk exhibits a pronounced compaction bias, collapsing unconstrained polypeptide chains into artificial, rigid secondary structures (α-helices) with spuriously elevated confidence (pLDDT ≥ 70–90).Here, we present…</p></details>
+<script type="application/json" class="pf-paper">{"title": "AF-RECAL: Multi-Modal Structural Recalibration of AlphaFold 3 Hallucinations in Intrinsically Disordered Human Disease Targets", "authors": ["Sharma M"], "abstract": "AlphaFold 3 (AF3) has transformed structural bioinformatics through generative diffusion modeling of biomolecular assemblies. However, intrinsically disordered regions (IDRs)\u2014which comprise over 30% of the human proteome and mediate essential cell signaling, oncogenesis, and phase separation\u2014violate the classic thermodynamic energyminimization assumptions inherent to static structure prediction. In the absence of explicit solvent and physiological binding partners, AF3's diffusion trunk exhibits a pronounced compaction bias, collapsing unconstrained polypeptide chains into artificial, rigid secondary structures (\u03b1-helices) with spuriously elevated confidence (pLDDT \u2265 70\u201390).Here, we present AF-RECAL, an automated multi-modal machine learning meta-evaluator designed to audit and recalibrate AlphaFold 3 confidence metrics. Evaluating 53,035 residues across 118 full-length human disease proteins against experimental DisProt ground truth, we observe that AF3 assigns confident structure (pLDDT \u2265 70) to 29.86% of all verified disordered residues (2,649 / 8,871), consistent with independent literature reporting structural mismatches in 22% of IDR residues at pLDDT \u2265 80 (23.47% in our cohort). AF-RECAL addresses these errors by cross-examining three complementary information streams: (1) AF3 internal spatial geometry via Predicted Aligned Error (PAE) multi-scale matrices and a local-to-long-range contact density ratio; (2) evolutionary sequence representations and masked-languagemodel Shannon entropy from Meta's ESM-2 (650M parameter) protein language model; and (3) windowed biophysical polymer chemistry.Under strict \u2264 30% sequence identity clustering (114 independent clusters, eliminating homology leakage across isoforms and paralogs), AF-RECAL achieves an out-of-fold AUROC of 0.7721 and a Precision-Recall AUC (PR-AUC) of 0.4063, improving under full Leave-One-Cluster-Out (LOCO) cross-validation across all 114 clusters to 0.7888 AUROC and 0.4205 PR-AUC (mean per-cluster PR-AUC: 0.5131 \u00b1 0.3437). Adding 3D spatial geometry to an identical ESM-2 650M + chemistry baseline yields an empirical +27.6% relative gain in PR-AUC (0.3183 \u2192 0.4063, reaching0.4205 under LOCO-CV); under cluster-level paired bootstrap testing across 114 clusters, this difference exhibits p = 0.1380 (95% CI: [-0.0246, 0.2083]), establishing a strong positive empirical trend. AF-RECAL achieves an uncorrected nominal PR-AUC gain over metapredict v3 (0.3014, p = 0.0520) and native AF3 (0.2889, p = 0.0320). A verified 100iteration Y-randomization permutation test confirms biological learning over chance (z = +75.11\u03c3 AUROC, z = +130.83\u03c3 PR-AUC, p = 0.0000), and probability reliability analysis demonstrates a Brier calibration score of 0.1653, outperforming metapredict v3 (0.2253). Across operational high-confidence regimes (70.6% of residues), AF-RECAL achieves 84.58% accuracy, providing structural biologists a practical, post-hoc quality filter to flag spurious structural features before downstream virtual screening and experimental validation.", "doi": "10.20944/preprints202609.1742.v1", "url": "https://doi.org/10.20944/preprints202609.1742.v1", "published": "2026-09-21", "venue": "Preprints.org", "source": "Preprint", "set_name": "protein language models", "score": 2.0}</script>
+</div>
+<div class="paper" data-doi="10.64898/2026.09.21.752781">
+<div class="head"><span class="score ai" title="Gemini (gemini-3-flash-preview)"><span class="tag">AI</span>7</span><span class="score" style="--fill:20%" title="PaperFeed&#x27;s own score out of 10 - &#x27;protein language model&#x27; in abstract; published 2 days ago">2.0</span><a class="title" href="https://doi.org/10.64898/2026.09.21.752781">A World Model of Molecular Organization Detects Cryptic Pockets from Apo Structure</a></div>
+<p class="byline">Shihabi R, Taraman S, Vaughan B</p>
+<p class="ai-why">Presents a novel latent-space architecture for cryptic pocket detection and identifies where static structural methods fail.</p>
+<p class="why">&#x27;protein language model&#x27; in abstract; published 2 days ago</p>
+<div class="tags"><span class="badge preprint">Preprint</span> <a class="badge oa" href="https://doi.org/10.64898/2026.09.21.752781">free full text</a>bioRxiv &middot; 2026-09-22 &middot; doi:10.64898/2026.09.21.752781</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span></div>
+
+<details><summary>Abstract</summary><p>A cryptic pocket is a druggable site that is absent from a protein&#x27;s resting structure and appears only once the backbone moves. It is the reason a target dismissed as undruggable from its crystal structure can still turn out to be druggable, and it is exactly what any method that reads a single static conformation will miss. The problem this paper takes on is finding these sites from an apo structure alone, on any protein rather than only the handful that come with a solved open-state or ligand-bound companion. Every established way of detecting a site that is visible only in the open state builds that state first, whether by sampling conformations or by predicting a bound complex. We do…</p></details>
+<script type="application/json" class="pf-paper">{"title": "A World Model of Molecular Organization Detects Cryptic Pockets from Apo Structure", "authors": ["Shihabi R", "Taraman S", "Vaughan B"], "abstract": "A cryptic pocket is a druggable site that is absent from a protein's resting structure and appears only once the backbone moves. It is the reason a target dismissed as undruggable from its crystal structure can still turn out to be druggable, and it is exactly what any method that reads a single static conformation will miss. The problem this paper takes on is finding these sites from an apo structure alone, on any protein rather than only the handful that come with a solved open-state or ligand-bound companion. Every established way of detecting a site that is visible only in the open state builds that state first, whether by sampling conformations or by predicting a bound complex. We do not build it. Our world model of molecular organization has already learned it and carries it in its latent, so we read cryptic pockets straight from that latent, per residue, from a single static apo structure, with no conformational sampling and no protein language model. The representation is never chained onto the output of a separate pocket finder, and a candidate pocket is a grown, disjoint set of residues rather than a ball of fixed radius. On CryptoBench, a set of 231 held-out apo chains, the detector localizes the cryptic site at top-1 0.848, top-3 0.931, and top-5 0.952 under a pocket-level overlap rule, using only the apo structure; on a 286-chain subset of CryptoBank it reads 0.846, 0.933, and 0.990. Scored residue by residue on CryptoBench, it reaches an AUC of 0.8465. On WRN helicase, held out of training entirely, it recovers at rank 1 the allosteric pocket bound by the clinical inhibitor HRO761, across three independent apo crystal forms and from the apo backbone alone; on the best-resolved form the rank-1 pocket covers 18 of the 22 annotated residues, including the C727 the drug contacts. Set against OpenDDE, the detector is complementary: on 190 targets held out of both training sets it recovers 119 sites OpenDDE misses, against 2 in the other direction, and at top-5 it misses none of the sites OpenDDE finds. It runs on any structure from the apo coordinates alone, including the mmCIF-only entries all recent depositions carry, and its accuracy keeps climbing as the training corpus grows. The intended use is prospective cryptic-site nomination on the targets that sequence and static structure leave without a starting point.", "doi": "10.64898/2026.09.21.752781", "url": "https://doi.org/10.64898/2026.09.21.752781", "published": "2026-09-22", "venue": "bioRxiv", "source": "Preprint", "set_name": "protein language models", "score": 2.0}</script>
+</div>
+<div class="paper" data-doi="10.1007/s10930-026-10354-4">
+<div class="head"><span class="score medium" style="--fill:50%" title="PaperFeed&#x27;s own score out of 10 - &#x27;protein language model&#x27; in title; published yesterday">5.0</span><a class="title" href="https://doi.org/10.1007/s10930-026-10354-4">NRB-FusePS: A Protein Language Model-Based Multimodal Framework for Predicting Ligand-Binding Residues in Nuclear Receptors.</a></div>
+<p class="byline">Qiao T, Feng Y <span class="affil">&mdash; College of Science</span></p>
+<p class="why">&#x27;protein language model&#x27; in title; published yesterday</p>
+<div class="tags"><span class="badge new">new</span> <span class="badge">PubMed</span>The protein journal &middot; 2026-09-23 &middot; doi:10.1007/s10930-026-10354-4</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span><span class="metric" title="OpenAlex 2-year mean citedness for The Protein Journal. It counts EVERY item the journal publishes, meeting abstracts and errata included, so journals with large abstract supplements read far below their reputation. Not an Impact Factor.">journal citedness 2.8 over 1,476 works<span class="src">OpenAlex</span></span></div>
+<div class="chips"><span class="chip">ESM2</span><span class="chip">Ligand-binding residue</span><span class="chip">Multimodal feature fusion</span><span class="chip">Nuclear receptor</span><span class="chip">Protein-level probability smoothing</span></div>
+<details><summary>Abstract</summary><p>Nuclear receptors (NRs) are ligand-dependent transcriptional regulators whose ligand-binding residues are crucial for receptor activation and drug-target analysis. In this study, we developed NRB-FusePS, a protein language model-based multimodal framework for predicting BioLiP-defined ligand-binding residues in NRs. Nuclear receptor ligand-binding information was collected from the BioLiP database, and residue-level samples were generated using 21-residue sliding windows. A protein-level independent test strategy was used to reduce information leakage caused by overlapping windows from the same protein. Sequence composition, amino acid pair, structural, evolutionary, and ESM2 protein…</p></details>
+<script type="application/json" class="pf-paper">{"title": "NRB-FusePS: A Protein Language Model-Based Multimodal Framework for Predicting Ligand-Binding Residues in Nuclear Receptors.", "authors": ["Qiao T", "Feng Y"], "abstract": "Nuclear receptors (NRs) are ligand-dependent transcriptional regulators whose ligand-binding residues are crucial for receptor activation and drug-target analysis. In this study, we developed NRB-FusePS, a protein language model-based multimodal framework for predicting BioLiP-defined ligand-binding residues in NRs. Nuclear receptor ligand-binding information was collected from the BioLiP database, and residue-level samples were generated using 21-residue sliding windows. A protein-level independent test strategy was used to reduce information leakage caused by overlapping windows from the same protein. Sequence composition, amino acid pair, structural, evolutionary, and ESM2 protein language model descriptors were extracted and evaluated using conventional machine learning models. Based on these results, a three-branch deep learning model called NRB-Fuse was constructed to integrate sequence statistical descriptors, structural descriptors, and ESM2 embeddings, and protein-level probability smoothing was introduced to obtain NRB-FusePS. On the independent test set, NRB-FusePS-Full achieved an area under the receiver operating characteristic curve (AUC) of 0.814, a Matthews correlation coefficient (MCC) of 0.406, and a sensitivity of 0.964. Shapley additive explanations (SHAP) analysis showed that ESM2 was the main information source, and the structural case of O00482 supported the predictive utility. The NRBsite web server provides three prediction modes for different levels of input information and is freely available at http://47.95.115.29:8501/ .", "doi": "10.1007/s10930-026-10354-4", "url": "https://doi.org/10.1007/s10930-026-10354-4", "published": "2026-09-23", "venue": "The protein journal", "source": "PubMed", "set_name": "protein language models", "score": 5.0}</script>
+</div>
+<div class="paper" data-doi="10.1093/bioinformatics/btag685">
+<div class="head"><span class="score medium" style="--fill:50%" title="PaperFeed&#x27;s own score out of 10 - &#x27;protein language model&#x27; in title; published 3 days ago">5.0</span><a class="title" href="https://doi.org/10.1093/bioinformatics/btag685">Mechanistic Interpretability of Fine-Tuned Protein Language Models for Nanobody Thermostability Prediction.</a></div>
+<p class="byline">Murakami T, Hashidate Y, Matsunaga Y <span class="affil">&mdash; Graduate School of Science and Engineering</span></p>
+<p class="why">&#x27;protein language model&#x27; in title; published 3 days ago</p>
+<div class="tags"><span class="badge">PubMed</span> <a class="badge oa" href="https://doi.org/10.1093/bioinformatics/btag685">free full text</a>Bioinformatics (Oxford, England) &middot; 2026-09-21 &middot; doi:10.1093/bioinformatics/btag685</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span><span class="metric" title="OpenAlex 2-year mean citedness for Bioinformatics. It counts EVERY item the journal publishes, meeting abstracts and errata included, so journals with large abstract supplements read far below their reputation. Not an Impact Factor.">journal citedness 6.2 over 19,827 works<span class="src">OpenAlex</span></span><span class="metric" title="Listed in the Directory of Open Access Journals.">in DOAJ<span class="src">OpenAlex</span></span></div>
+
+<details><summary>Abstract</summary><p>While Protein Language Models (PLMs) fine-tuned on biophysical data achieve high predictive accuracy, the physical principles underlying their predictions remain obscure. Deciphering these representations offers a unique opportunity to not only interpret model decisions but also to discover novel biophysical insights governing protein properties. Here, we present a framework using Sparse Autoencoders (SAEs) to extract mechanistic knowledge from PLMs fine-tuned for nanobody thermostability. We fine-tuned the ESM-2 model on the nanobody thermostability dataset, achieving superior performance compared to significantly larger state-of-the-art models. SAE analysis successfully decomposed the…</p></details>
+<script type="application/json" class="pf-paper">{"title": "Mechanistic Interpretability of Fine-Tuned Protein Language Models for Nanobody Thermostability Prediction.", "authors": ["Murakami T", "Hashidate Y", "Matsunaga Y"], "abstract": "While Protein Language Models (PLMs) fine-tuned on biophysical data achieve high predictive accuracy, the physical principles underlying their predictions remain obscure. Deciphering these representations offers a unique opportunity to not only interpret model decisions but also to discover novel biophysical insights governing protein properties. Here, we present a framework using Sparse Autoencoders (SAEs) to extract mechanistic knowledge from PLMs fine-tuned for nanobody thermostability. We fine-tuned the ESM-2 model on the nanobody thermostability dataset, achieving superior performance compared to significantly larger state-of-the-art models. SAE analysis successfully decomposed the model's dense embeddings into sparse, interpretable features without loss of predictive accuracy. We characterized these features through both global and local analyses. Global analysis provided an aggregate map of position-dependent feature contributions, whereas local analysis identified specific residue-level patterns, including known determinants such as the VHH-tetrad and critical disulfide bonds, as well as candidate stabilizing residues. Free Energy Perturbation calculations supported the structural plausibility of selected residue-level hypotheses. These results show that SAE-based interpretation can generate testable, structurally grounded hypotheses for rational protein engineering. The data and source code of the proposed method are available at GitHub (https://github.com/matsunagalab/paper_nanobody-thermostability-sae) and Zenodo (DOI: 10.5281/zenodo.18012027). Supplementary data are available at Bioinformatics online.", "doi": "10.1093/bioinformatics/btag685", "url": "https://doi.org/10.1093/bioinformatics/btag685", "published": "2026-09-21", "venue": "Bioinformatics (Oxford, England)", "source": "PubMed", "set_name": "protein language models", "score": 5.0}</script>
+</div>
+<div class="paper" data-doi="10.1038/s41467-026-77112-z">
+<div class="head"><span class="score" style="--fill:20%" title="PaperFeed&#x27;s own score out of 10 - &#x27;protein structure prediction&#x27; in abstract; published today">2.0</span><a class="title" href="https://doi.org/10.1038/s41467-026-77112-z">The predicted interactome of the human mitochondrial proteome.</a></div>
+<p class="byline">Swaminathan AB, Zulkifli M, Guerra RM, Calabrese SM, Kalafatis DT, Pagliarini DJ, Gohil VM <span class="affil">&mdash; Texas A&amp;M University</span></p>
+<p class="why">&#x27;protein structure prediction&#x27; in abstract; published today</p>
+<div class="tags"><span class="badge new">new</span> <span class="badge">PubMed</span> <a class="badge oa" href="https://www.nature.com/articles/s41467-026-77112-z_reference.pdf">free full text</a>Nature communications &middot; 2026-09-24 &middot; doi:10.1038/s41467-026-77112-z</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span><span class="metric" title="OpenAlex 2-year mean citedness for Nature Communications. It counts EVERY item the journal publishes, meeting abstracts and errata included, so journals with large abstract supplements read far below their reputation. Not an Impact Factor.">journal citedness 17.8 over 92,887 works<span class="src">OpenAlex</span></span><span class="metric" title="Listed in the Directory of Open Access Journals.">in DOAJ<span class="src">OpenAlex</span></span></div>
+<div class="chips"><span class="chip">Humans</span><span class="chip">Mitochondrial Proteins</span><span class="chip">Proteome</span><span class="chip">Mitochondria</span><span class="chip">Protein Interaction Mapping</span></div>
+<details><summary>Abstract</summary><p>Despite the fundamental importance of mitochondria in cellular metabolism, the molecular function(s) of many mitochondrial proteins remain unknown. Since protein function can be inferred from their interacting partners, we repurpose the protein structure prediction algorithm AlphaFold Multimer (AFM) as a classification model to predict protein-protein interactions of the entire human mitochondrial proteome. By screening 630,003 protein pairs, we create a compendium of 2,895 previously known and newly observed interactions, which include the interacting partner(s) of 85 uncharacterized mitochondrial proteins, thereby linking them to a known biochemical pathway. Extending the AFM-based…</p></details>
+<script type="application/json" class="pf-paper">{"title": "The predicted interactome of the human mitochondrial proteome.", "authors": ["Swaminathan AB", "Zulkifli M", "Guerra RM", "Calabrese SM", "Kalafatis DT", "Pagliarini DJ", "Gohil VM"], "abstract": "Despite the fundamental importance of mitochondria in cellular metabolism, the molecular function(s) of many mitochondrial proteins remain unknown. Since protein function can be inferred from their interacting partners, we repurpose the protein structure prediction algorithm AlphaFold Multimer (AFM) as a classification model to predict protein-protein interactions of the entire human mitochondrial proteome. By screening 630,003 protein pairs, we create a compendium of 2,895 previously known and newly observed interactions, which include the interacting partner(s) of 85 uncharacterized mitochondrial proteins, thereby linking them to a known biochemical pathway. Extending the AFM-based analysis to 11 diverse eukaryotes identifies evolutionarily conserved interactions among human hits, including regulators of core bioenergetic pathways. Our experiments, guided by these predictions, nominate protein interactions that form the coenzyme Q metabolon and define the mitochondrial copper delivery pathway to cytochrome c oxidase. Our compendium represents a powerful resource for the systematic, structure-based functionalization of the human mitochondrial proteome.", "doi": "10.1038/s41467-026-77112-z", "url": "https://doi.org/10.1038/s41467-026-77112-z", "published": "2026-09-24", "venue": "Nature communications", "source": "PubMed", "set_name": "protein language models", "score": 2.0}</script>
+</div>
+<details class="rest"><summary>Show the other 7</summary>
+<div class="paper" data-doi="10.1371/journal.pcbi.1014778">
+<div class="head"><span class="score" style="--fill:20%" title="PaperFeed&#x27;s own score out of 10 - &#x27;protein structure prediction&#x27; in abstract; published yesterday">2.0</span><a class="title" href="https://doi.org/10.1371/journal.pcbi.1014778">A spectral framework for measuring diversity in multiple sequence alignments.</a></div>
+<p class="byline">Opuu V <span class="affil">&mdash; Laboratoire de Biophysique et Evolution</span></p>
+<p class="why">&#x27;protein structure prediction&#x27; in abstract; published yesterday</p>
+<div class="tags"><span class="badge new">new</span> <span class="badge">PubMed</span>PLoS computational biology &middot; 2026-09-23 &middot; doi:10.1371/journal.pcbi.1014778</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span><span class="metric" title="OpenAlex 2-year mean citedness for PLoS Computational Biology. It counts EVERY item the journal publishes, meeting abstracts and errata included, so journals with large abstract supplements read far below their reputation. Not an Impact Factor.">journal citedness 4.3 over 13,067 works<span class="src">OpenAlex</span></span><span class="metric" title="Listed in the Directory of Open Access Journals.">in DOAJ<span class="src">OpenAlex</span></span></div>
+
+<details><summary>Abstract</summary><p>Machine learning (ML) methods for proteins and RNAs rely on multiple sequence alignments (MSAs) and related datasets such as experimental mutagenesis libraries, yet the amount of usable information they contain remains unclear. Here, a spectral measure of information is recast into an interpretable quantity for MSAs, denoted Leff, defined as the number of fully independent alignment positions that reproduce the observed sequence diversity. Applied to RNA MSAs, this measure shows that evolutionary constraints nearly halve diversity relative to the secondary structure alone, quantifying functional and phylogenetic restrictions beyond base pairing. The same analysis indicates even lower…</p></details>
+<script type="application/json" class="pf-paper">{"title": "A spectral framework for measuring diversity in multiple sequence alignments.", "authors": ["Opuu V"], "abstract": "Machine learning (ML) methods for proteins and RNAs rely on multiple sequence alignments (MSAs) and related datasets such as experimental mutagenesis libraries, yet the amount of usable information they contain remains unclear. Here, a spectral measure of information is recast into an interpretable quantity for MSAs, denoted Leff, defined as the number of fully independent alignment positions that reproduce the observed sequence diversity. Applied to RNA MSAs, this measure shows that evolutionary constraints nearly halve diversity relative to the secondary structure alone, quantifying functional and phylogenetic restrictions beyond base pairing. The same analysis indicates even lower effective diversity in proteins, reflecting tighter packing and coevolutionary constraints. Leff further correlates with protein structure prediction accuracy, anticipating cases with insufficient evolutionary signal. When applied to experimentally and computationally generated libraries, it measures both produced diversity and cross-library overlap, quantifying novelty rather than redundant sampling. Together, these results establish Leff as an operational tool to estimate effective information in MSAs, anticipate modeling difficulties, and guide protein and RNA design.", "doi": "10.1371/journal.pcbi.1014778", "url": "https://doi.org/10.1371/journal.pcbi.1014778", "published": "2026-09-23", "venue": "PLoS computational biology", "source": "PubMed", "set_name": "protein language models", "score": 2.0}</script>
+</div>
+<div class="paper" data-doi="10.1007/s00239-026-10348-x">
+<div class="head"><span class="score" style="--fill:20%" title="PaperFeed&#x27;s own score out of 10 - &#x27;protein structure prediction&#x27; in abstract; published yesterday">2.0</span><a class="title" href="https://doi.org/10.1007/s00239-026-10348-x">Selection for Folding Stability Predicts Observed Covariation Between Protein Positions in the PDB.</a></div>
+<p class="byline">Saebi F, Minning J, Bastolla U <span class="affil">&mdash; Centro de Biologia Molecular Severo Ochoa (CSIC and Universidad Autóno</span></p>
+<p class="why">&#x27;protein structure prediction&#x27; in abstract; published yesterday</p>
+<div class="tags"><span class="badge new">new</span> <span class="badge">PubMed</span>Journal of molecular evolution &middot; 2026-09-23 &middot; doi:10.1007/s00239-026-10348-x</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span><span class="metric" title="OpenAlex 2-year mean citedness for Journal of Molecular Evolution. It counts EVERY item the journal publishes, meeting abstracts and errata included, so journals with large abstract supplements read far below their reputation. Not an Impact Factor.">journal citedness 3.2 over 5,355 works<span class="src">OpenAlex</span></span></div>
+<div class="chips"><span class="chip">Direct couplings analysis (DCA)</span><span class="chip">Global phylogenetic couplings between amino acids</span><span class="chip">Negative design</span><span class="chip">Stability constrained protein evolution (SCPE)</span></div>
+<details><summary>Abstract</summary><p>Statistical couplings between protein sites have been enormously useful for protein structure prediction, but there is still debate on the selective forces that generate them. Here we explicitly predict the couplings considering selection for protein folding stability, both against unfolding and misfolding, which we model through the Stability constrained model of protein evolution (SCPE). The SCPE is based on contact interactions, and it predicts stability against misfolding through the Random Energy Model in the space of contact matrices. We adopt the minimum selection principle, assuming that the multivariate amino acid distribution has minimum Kullback-Leibler divergence with respect to…</p></details>
+<script type="application/json" class="pf-paper">{"title": "Selection for Folding Stability Predicts Observed Covariation Between Protein Positions in the PDB.", "authors": ["Saebi F", "Minning J", "Bastolla U"], "abstract": "Statistical couplings between protein sites have been enormously useful for protein structure prediction, but there is still debate on the selective forces that generate them. Here we explicitly predict the couplings considering selection for protein folding stability, both against unfolding and misfolding, which we model through the Stability constrained model of protein evolution (SCPE). The SCPE is based on contact interactions, and it predicts stability against misfolding through the Random Energy Model in the space of contact matrices. We adopt the minimum selection principle, assuming that the multivariate amino acid distribution has minimum Kullback-Leibler divergence with respect to a site-unspecific distribution that is not influenced by protein folding stability. We predict the couplings at first order, assuming that they are small (small coupling approximation, SCA), and obtain an explicit formula that relates them with the contact interaction matrix and with the structural properties of the pairs of sites: presence of native contact, distance along the sequence and buriedness of the sites. We test these predictions on a representative set of the Protein Data Bank. For pairs of sites in contact, both predicted and observed couplings are inversely related with the contact energies of the amino acid pairs, while for pairs not in contact this relation is positive, i.e. negative design destabilizes pairs of amino acids for short-range pairs of sites that can form wrong contacts with high probability. Our results suggest that the strongest couplings correspond to native contacts, but an even larger number of couplings are influenced by negative design. Intriguingly, the most informative pairs are formed by surface sites, suggesting a role for protein-protein interactions and functional motions. We interpret the site-unspecific couplings, which are not influenced by selection for protein folding stability, as the result of variations of global mutational or selective forces across the lineages where the proteins evolve. Consistently, the strongest global couplings are self-couplings between equal amino acids. Cys-Cys, which form disulfide bridges, show the strongest global coupling, followed by pairs of metabolically costly amino acids (Trp-Trp, Tyr-Tyr, Trp-Tyr) and positively charged amino acids that tend to interact with nucleic acids (Lys-Lys, Arg-Arg). Ser, Thr, Asn and Gln form a cluster of globally correlated polar amino acids.", "doi": "10.1007/s00239-026-10348-x", "url": "https://doi.org/10.1007/s00239-026-10348-x", "published": "2026-09-23", "venue": "Journal of molecular evolution", "source": "PubMed", "set_name": "protein language models", "score": 2.0}</script>
+</div>
+<div class="paper" data-doi="10.3389/fbinf.2026.1925740">
+<div class="head"><span class="score" style="--fill:20%" title="PaperFeed&#x27;s own score out of 10 - &#x27;protein language model&#x27; in abstract; published yesterday">2.0</span><a class="title" href="https://doi.org/10.3389/fbinf.2026.1925740">Architectural good practices for reproducible benchmarking in protein machine learning.</a></div>
+<p class="byline">García-Vinuesa J, Fernández-Villegas D, Soto-García M, Cadet X, Davari MD, Cadet F, Asenjo JA, Uribe-Paredes R, et al. <span class="affil">&mdash; Departamento de Ingeniería En Computación</span></p>
+<p class="why">&#x27;protein language model&#x27; in abstract; published yesterday</p>
+<div class="tags"><span class="badge new">new</span> <span class="badge">PubMed</span> <a class="badge oa" href="https://www.ncbi.nlm.nih.gov/pmc/articles/PMC13593872/">free full text</a>Frontiers in bioinformatics &middot; 2026-09-23 &middot; doi:10.3389/fbinf.2026.1925740</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span><span class="metric" title="OpenAlex 2-year mean citedness for Frontiers in Bioinformatics. It counts EVERY item the journal publishes, meeting abstracts and errata included, so journals with large abstract supplements read far below their reputation. Not an Impact Factor.">journal citedness 2.3 over 826 works<span class="src">OpenAlex</span></span><span class="metric" title="Listed in the Directory of Open Access Journals.">in DOAJ<span class="src">OpenAlex</span></span></div>
+<div class="chips"><span class="chip">FAIR workflows</span><span class="chip">computational infrastructure</span><span class="chip">good practices</span><span class="chip">interoperability</span><span class="chip">protein machine learning</span></div>
+<details><summary>Abstract</summary><p>Reliable benchmarking in protein machine learning requires biological tasks, datasets, representations, execution conditions, and evaluation regimes to be explicitly defined and traceable. Protein-specific dependencies, including label semantics, negative-class construction, evolutionary relationships, similarity control, inferred structures, protein language model configurations, and potential pretraining contamination, can alter benchmark interpretation. This Perspective provides an operational, protein-specific synthesis of established reproducibility practices through an artefact-linked architecture. We define five core requirements for verifiable benchmarking, including deterministic…</p></details>
+<script type="application/json" class="pf-paper">{"title": "Architectural good practices for reproducible benchmarking in protein machine learning.", "authors": ["Garc\u00eda-Vinuesa J", "Fern\u00e1ndez-Villegas D", "Soto-Garc\u00eda M", "Cadet X", "Davari MD", "Cadet F", "Asenjo JA", "Uribe-Paredes R", "Medina-Ortiz D"], "abstract": "Reliable benchmarking in protein machine learning requires biological tasks, datasets, representations, execution conditions, and evaluation regimes to be explicitly defined and traceable. Protein-specific dependencies, including label semantics, negative-class construction, evolutionary relationships, similarity control, inferred structures, protein language model configurations, and potential pretraining contamination, can alter benchmark interpretation. This Perspective provides an operational, protein-specific synthesis of established reproducibility practices through an artefact-linked architecture. We define five core requirements for verifiable benchmarking, including deterministic curation, persistent and versioned artefacts, explicit interface contracts, reproducible execution, and transparent evaluation. Prediction provenance, uncertainty, calibration, and explainability are treated as an additional decision-readiness layer. These requirements are translated into minimum records, provenance links, and verification checks. An antimicrobial peptide classification case study demonstrates their application to alternative task formulations, negative-class definitions, dataset compositions, and partitioning strategies within a controlled workflow.", "doi": "10.3389/fbinf.2026.1925740", "url": "https://doi.org/10.3389/fbinf.2026.1925740", "published": "2026-09-23", "venue": "Frontiers in bioinformatics", "source": "PubMed", "set_name": "protein language models", "score": 2.0}</script>
+</div>
+<div class="paper" data-doi="10.1371/journal.pbio.3004002">
+<div class="head"><span class="score" style="--fill:20%" title="PaperFeed&#x27;s own score out of 10 - &#x27;protein structure prediction&#x27; in abstract; published 3 days ago">2.0</span><a class="title" href="https://doi.org/10.1371/journal.pbio.3004002">AlloPool is a deep learning framework that infers protein allostery from molecular dynamics simulations.</a></div>
+<p class="byline">Marfoglia M, Pedraza-Joya MA, Guirardel L, Chatzi Souleiman A, Barth P <span class="affil">&mdash; Interfaculty Institute of Bioengineering</span></p>
+<p class="why">&#x27;protein structure prediction&#x27; in abstract; published 3 days ago</p>
+<div class="tags"><span class="badge">PubMed</span> <a class="badge oa" href="https://www.ncbi.nlm.nih.gov/pmc/articles/PMC13592721/">free full text</a>PLoS biology &middot; 2026-09-21 &middot; doi:10.1371/journal.pbio.3004002</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span><span class="metric" title="OpenAlex 2-year mean citedness for PLoS Biology. It counts EVERY item the journal publishes, meeting abstracts and errata included, so journals with large abstract supplements read far below their reputation. Not an Impact Factor.">journal citedness 7.1 over 8,761 works<span class="src">OpenAlex</span></span><span class="metric" title="Listed in the Directory of Open Access Journals.">in DOAJ<span class="src">OpenAlex</span></span></div>
+<div class="chips"><span class="chip">Molecular Dynamics Simulation</span><span class="chip">Allosteric Regulation</span><span class="chip">Graph Neural Networks</span><span class="chip">Deep Learning</span><span class="chip">Protein Conformation</span></div>
+<details><summary>Abstract</summary><p>Recent advances in artificial intelligence have transformed protein structure prediction and design. However, protein function is governed not only by static structures but also by the conformational dynamics that allow proteins to access distinct functional states. Predicting these dynamic transitions, central to many biological processes, remains challenging due to the scarcity of high-resolution experimental data, which limits the training of machine-learning models for dynamic and energetic property prediction. Here, we present AlloPool, a graph neural network (GNN)-based framework that interprets molecular dynamics simulations by iteratively pruning residue-residue interactions to…</p></details>
+<script type="application/json" class="pf-paper">{"title": "AlloPool is a deep learning framework that infers protein allostery from molecular dynamics simulations.", "authors": ["Marfoglia M", "Pedraza-Joya MA", "Guirardel L", "Chatzi Souleiman A", "Barth P"], "abstract": "Recent advances in artificial intelligence have transformed protein structure prediction and design. However, protein function is governed not only by static structures but also by the conformational dynamics that allow proteins to access distinct functional states. Predicting these dynamic transitions, central to many biological processes, remains challenging due to the scarcity of high-resolution experimental data, which limits the training of machine-learning models for dynamic and energetic property prediction. Here, we present AlloPool, a graph neural network (GNN)-based framework that interprets molecular dynamics simulations by iteratively pruning residue-residue interactions to uncover minimal, time-resolved interaction networks that govern protein conformational dynamics and structural responses to chemical or mechanical perturbations, collectively known as allostery. By integrating temporal attention with graph aggregation, AlloPool learns evolving interaction graphs from equilibrium and non-equilibrium molecular dynamics simulations, enabling accurate reconstruction of dynamic trajectories and the interaction networks that drive conformational transitions. Validated across diverse dynamic protein systems, including binding domains, mechanosensors, signaling receptors, and enzymes, AlloPool maps allosteric communication pathways, predicts the effects of ligand binding, mechanical forces, and mutations, discovers transient dynamic states and outperforms existing machine-learning approaches in dynamic trajectory reconstruction. This advance provides a general framework for interpreting protein dynamics with broad implications for drug discovery, synthetic biology, and protein engineering.", "doi": "10.1371/journal.pbio.3004002", "url": "https://doi.org/10.1371/journal.pbio.3004002", "published": "2026-09-21", "venue": "PLoS biology", "source": "PubMed", "set_name": "protein language models", "score": 2.0}</script>
+</div>
+<div class="paper" data-doi="10.1093/bioinformatics/btag697">
+<div class="head"><span class="score" style="--fill:20%" title="PaperFeed&#x27;s own score out of 10 - &#x27;protein language model&#x27; in abstract; published 3 days ago">2.0</span><a class="title" href="https://doi.org/10.1093/bioinformatics/btag697">HD-AIP: A Heterogeneous Dual-Stream Alignment-Free Framework for Anti-Inflammatory Peptide Prediction Based on Language Models and CT-Net.</a></div>
+<p class="byline">Li J, Zou Q, Wang Y, Bai Y, Zhou H, Niu M <span class="affil">&mdash; School of Electronic and Communication Engineering</span></p>
+<p class="why">&#x27;protein language model&#x27; in abstract; published 3 days ago</p>
+<div class="tags"><span class="badge">PubMed</span> <a class="badge oa" href="https://doi.org/10.1093/bioinformatics/btag697">free full text</a>Bioinformatics (Oxford, England) &middot; 2026-09-21 &middot; doi:10.1093/bioinformatics/btag697</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span><span class="metric" title="OpenAlex 2-year mean citedness for Bioinformatics. It counts EVERY item the journal publishes, meeting abstracts and errata included, so journals with large abstract supplements read far below their reputation. Not an Impact Factor.">journal citedness 6.2 over 19,827 works<span class="src">OpenAlex</span></span><span class="metric" title="Listed in the Directory of Open Access Journals.">in DOAJ<span class="src">OpenAlex</span></span></div>
+
+<details><summary>Abstract</summary><p>Anti-inflammatory peptides (AIPs) show therapeutic potential for treating chronic and autoimmune diseases. Computational screening of these peptides remains challenging because their typically short sequences limit traditional feature extraction effectiveness, while homology-based methods incur high computational costs. This study proposes HD-AIP, an alignment-free heterogeneous dual-stream prediction architecture. This framework extracts peptide features in parallel from both macroscopic and microscopic perspectives. Macroscopically, HD-AIP integrates global semantic features extracted by two large protein language models, ProtT5 and ESM-2 3B, with sequence-level physicochemical…</p></details>
+<script type="application/json" class="pf-paper">{"title": "HD-AIP: A Heterogeneous Dual-Stream Alignment-Free Framework for Anti-Inflammatory Peptide Prediction Based on Language Models and CT-Net.", "authors": ["Li J", "Zou Q", "Wang Y", "Bai Y", "Zhou H", "Niu M"], "abstract": "Anti-inflammatory peptides (AIPs) show therapeutic potential for treating chronic and autoimmune diseases. Computational screening of these peptides remains challenging because their typically short sequences limit traditional feature extraction effectiveness, while homology-based methods incur high computational costs. This study proposes HD-AIP, an alignment-free heterogeneous dual-stream prediction architecture. This framework extracts peptide features in parallel from both macroscopic and microscopic perspectives. Macroscopically, HD-AIP integrates global semantic features extracted by two large protein language models, ProtT5 and ESM-2 3B, with sequence-level physicochemical properties, followed by feature selection and LightGBM classification. Microscopically, an asymmetric parallel network named CT-Net utilizes BioVec embeddings and residue-level physicochemical features, using a CNN branch to capture local motifs and a Transformer branch to model long-range dependencies. The two streams are adaptively fused via a dynamic soft ensemble strategy. On an independent test set, HD-AIP outperforms baseline models across multiple metrics including accuracy, area under the receiver operating characteristic curve, and the Matthews correlation coefficient. These results indicate that HD-AIP improves AIP prediction performance without sequence alignment. This architecture serves as an effective computational tool for the high-throughput virtual screening and candidate discovery of AIPs. You can find the source code and dataset needed on GitHub(https://github.com/Zerofly0/HD-AIP). The required package files have been listed in the readme. Supplementary data are available at Bioinformatics online.", "doi": "10.1093/bioinformatics/btag697", "url": "https://doi.org/10.1093/bioinformatics/btag697", "published": "2026-09-21", "venue": "Bioinformatics (Oxford, England)", "source": "PubMed", "set_name": "protein language models", "score": 2.0}</script>
+</div>
+<div class="paper" data-doi="10.21769/bioprotoc.5785">
+<div class="head"><span class="score" style="--fill:20%" title="PaperFeed&#x27;s own score out of 10 - &#x27;protein language model&#x27; in abstract; published 3 days ago">2.0</span><a class="title" href="https://doi.org/10.21769/bioprotoc.5785">A Step-by-Step Protocol for Efficient Global Accuracy Estimation of Protein Complex Structural Models with MViewEMA.</a></div>
+<p class="byline">Xie L, Ye E, Liu D, Zhang G <span class="affil">&mdash; College of Information Engineering</span></p>
+<p class="why">&#x27;protein language model&#x27; in abstract; published 3 days ago</p>
+<div class="tags"><span class="badge">PubMed</span> <a class="badge oa" href="https://www.ncbi.nlm.nih.gov/pmc/articles/PMC13589690/">free full text</a>Bio-protocol &middot; 2026-09-21 &middot; doi:10.21769/bioprotoc.5785</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span><span class="metric" title="OpenAlex 2-year mean citedness for BIO-PROTOCOL. It counts EVERY item the journal publishes, meeting abstracts and errata included, so journals with large abstract supplements read far below their reputation. Not an Impact Factor.">journal citedness 0.9 over 6,845 works<span class="src">OpenAlex</span></span><span class="metric" title="Listed in the Directory of Open Access Journals.">in DOAJ<span class="src">OpenAlex</span></span></div>
+<div class="chips"><span class="chip">Deep learning</span><span class="chip">Estimation of model accuracy</span><span class="chip">MViewEMA</span><span class="chip">Multi-view representation learning</span><span class="chip">Single-model method</span></div>
+<details><summary>Abstract</summary><p>Estimation of model accuracy (EMA) is a critical step in protein structure prediction, enabling the ranking and selection of models in the absence of experimental structures. EMA methods aim to function independently of modeling approaches, ensuring broad applicability across diverse prediction workflows. Recent state-of-the-art EMA methods often improve estimation accuracy by incorporating consensus information from model pools, multiple sequence alignments (MSAs), structural templates, or protein language model representations. However, these strategies typically incur substantial computational cost or rely on information derived from the modeling process itself, which may introduce bias…</p></details>
+<script type="application/json" class="pf-paper">{"title": "A Step-by-Step Protocol for Efficient Global Accuracy Estimation of Protein Complex Structural Models with MViewEMA.", "authors": ["Xie L", "Ye E", "Liu D", "Zhang G"], "abstract": "Estimation of model accuracy (EMA) is a critical step in protein structure prediction, enabling the ranking and selection of models in the absence of experimental structures. EMA methods aim to function independently of modeling approaches, ensuring broad applicability across diverse prediction workflows. Recent state-of-the-art EMA methods often improve estimation accuracy by incorporating consensus information from model pools, multiple sequence alignments (MSAs), structural templates, or protein language model representations. However, these strategies typically incur substantial computational cost or rely on information derived from the modeling process itself, which may introduce bias and compromise the independence of the assessment. This protocol describes the use of MViewEMA for global accuracy estimation of protein complex models from a single input structure. MViewEMA extracts residue-residue interaction features from complementary micro-, meso-, and macro-environmental perspectives and integrates multi-scale structural representations through a multi-view representation learning framework to predict global confidence scores. The protocol provides detailed procedures for input structure preparation, feature extraction, model inference, and global confidence score output, together with a tutorial for using the MViewEMA web server. The protocol provides a workflow based solely on structural information from the input model, achieving a balance between computational efficiency and estimation accuracy. It enables large-scale evaluation and selection of predicted models for protein structure prediction and downstream structural analysis applications. Key features \u2022 Provides an efficient and accurate single-model EMA framework for protein complex accuracy estimation. \u2022 Integrates residue-residue interaction features across micro-, meso-, and macro-environmental views through multi-view representation learning. \u2022 Performs independent protein structural model assessment without requiring MSAs, templates, protein language models, or consensus information from model ensembles. \u2022 Supports large-scale protein complex model ranking and selection for downstream structural analysis applications.", "doi": "10.21769/bioprotoc.5785", "url": "https://doi.org/10.21769/bioprotoc.5785", "published": "2026-09-21", "venue": "Bio-protocol", "source": "PubMed", "set_name": "protein language models", "score": 2.0}</script>
+</div>
+<div class="paper" data-doi="10.64898/2026.09.15.751749">
+<div class="head"><span class="score" style="--fill:20%" title="PaperFeed&#x27;s own score out of 10 - &#x27;protein language model&#x27; in abstract; published 3 days ago">2.0</span><a class="title" href="https://doi.org/10.64898/2026.09.15.751749">PREpiBind: Protein Representation-integrated Epitope--MHC Class II Binding Prediction</a></div>
+<p class="byline">Jang DH, Kim D, Park B, Hwang U, Choi Y, Lee J</p>
+<p class="why">&#x27;protein language model&#x27; in abstract; published 3 days ago</p>
+<div class="tags"><span class="badge preprint">Preprint</span> <a class="badge oa" href="https://doi.org/10.64898/2026.09.15.751749">free full text</a>bioRxiv &middot; 2026-09-21 &middot; doi:10.64898/2026.09.15.751749</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span></div>
+
+<details><summary>Abstract</summary><p>Accurate prediction of peptide-MHC class II (pMHC-II) binding remains challenging because of extensive MHC polymorphism and context-dependent peptide recognition, and it is unclear which protein representation best captures these determinants when the downstream model is held fixed. Here, we present PREpiBind, a pMHC-II prediction method based on a dual-stream, joint-attention framework that integrates MHC and epitope representations. We integrated ten protein representations spanning substitution-matrix, structure-prediction-derived, and protein language model (PLM) families and evaluated them under a common downstream architecture and identical splits across Qualitative, mass spectrometry…</p></details>
+<script type="application/json" class="pf-paper">{"title": "PREpiBind: Protein Representation-integrated Epitope--MHC Class II Binding Prediction", "authors": ["Jang DH", "Kim D", "Park B", "Hwang U", "Choi Y", "Lee J"], "abstract": "Accurate prediction of peptide-MHC class II (pMHC-II) binding remains challenging because of extensive MHC polymorphism and context-dependent peptide recognition, and it is unclear which protein representation best captures these determinants when the downstream model is held fixed. Here, we present PREpiBind, a pMHC-II prediction method based on a dual-stream, joint-attention framework that integrates MHC and epitope representations. We integrated ten protein representations spanning substitution-matrix, structure-prediction-derived, and protein language model (PLM) families and evaluated them under a common downstream architecture and identical splits across Qualitative, mass spectrometry (MS), and thresholded IC50 datasets. Overall, PREpiBind with PLM representations yielded higher performance than the evaluated reference methods in the Qualitative and MS datasets, whereas NetMHCIIpan-4.3 was higher on the thresholded IC50 datasets using its binding-affinity head. In pooled evaluations, PLM representations yielded the highest ROC-AUC values among the tested representations. ESM3 Large led the Qualitative dataset with an AUC value of 0.927 +/- 0.002, and PLMs also led on the MS and thresholded IC50 datasets. This advantage remained, but narrowed in allele-wise and leave-one-molecule-out evaluations, where structure-prediction-derived Chai-1 was competitive with the leading PLM representations. Under cross-species H2-out transfer, PLMs led when all H2 rows were pooled, whereas Chai-1 led when the eight H2 molecules were weighted equally. The small H2 panel did not support a stable ordering among these leading representations. The results indicate that protein representation choice should depend on the intended prediction scenario rather than on a single global ranking. PREpiBind is an openly available pMHC-II prediction framework with modular and flexible protein representations.", "doi": "10.64898/2026.09.15.751749", "url": "https://doi.org/10.64898/2026.09.15.751749", "published": "2026-09-21", "venue": "bioRxiv", "source": "Preprint", "set_name": "protein language models", "score": 2.0}</script>
+</div>
+</details>
+</div></details>
+<details class="set" id="s-idh1-glioblastoma" open><summary><div class="setbar">
+<span>IDH1 glioblastoma</span>
+<span class="setcount">3</span></div></summary><div class="setbody">
+<div class="paper" data-doi="10.64898/2026.09.18.752798">
+<div class="head"><span class="score ai" title="Gemini (gemini-3-flash-preview)"><span class="tag">AI</span>9</span><span class="score strong" style="--fill:90%" title="PaperFeed&#x27;s own score out of 10 - &#x27;IDH-mutant&#x27; in title; &#x27;glioma&#x27; in title; 2 of 2 concepts in the title; published 2 days ago">9.0</span><a class="title" href="https://doi.org/10.64898/2026.09.18.752798">SWELL1 channel-mediated D-2HG export promotes immune evasion and metabolic fitness in IDH-mutant gliomas</a></div>
+<p class="byline">Cheng HY, Ma L, Chen J, Huang J, Chen L, Liu W, Liu Y, Zhao R, et al.</p>
+<p class="ai-why">Directly addresses IDH1-mutant glioma biology, metabolic fitness, and the mechanisms of D-2HG export in the tumor microenvironment.</p>
+<p class="why">&#x27;IDH-mutant&#x27; in title; &#x27;glioma&#x27; in title; 2 of 2 concepts in the title; published 2 days ago</p>
+<div class="tags"><span class="badge preprint">Preprint</span> <a class="badge oa" href="https://doi.org/10.64898/2026.09.18.752798">free full text</a>bioRxiv &middot; 2026-09-22 &middot; doi:10.64898/2026.09.18.752798</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span></div>
+
+<details><summary>Abstract</summary><p>Isocitrate dehydrogenase (IDH) is the most frequently mutated metabolic enzyme in human cancers. Mutant IDH produces the oncometabolite D-2-hydroxyglutarate (D-2HG), which promotes tumorigenesis in part through epigenetic alterations. Beyond its cell-autonomous effects, tumor-derived D-2HG acts as a potent immunosuppressant that establishes an immune-cold tumor microenvironment. However, the mechanism by which D-2HG is released from tumors remains largely unknown. Here, we identify the SWELL1 (LRRC8A)/LRRC8C-containing volume-regulated anion channel (VRAC) as a principal pathway for D-2HG efflux from IDH-mutant cells. Genetic deletion of SWELL1, the essential VRAC subunit, markedly reduces…</p></details>
+<script type="application/json" class="pf-paper">{"title": "SWELL1 channel-mediated D-2HG export promotes immune evasion and metabolic fitness in IDH-mutant gliomas", "authors": ["Cheng HY", "Ma L", "Chen J", "Huang J", "Chen L", "Liu W", "Liu Y", "Zhao R", "Ye Y", "Zheng W", "Kratz L", "Castro M", "Sun S", "Zhu J", "Han L", "Qiu Z"], "abstract": "Isocitrate dehydrogenase (IDH) is the most frequently mutated metabolic enzyme in human cancers. Mutant IDH produces the oncometabolite D-2-hydroxyglutarate (D-2HG), which promotes tumorigenesis in part through epigenetic alterations. Beyond its cell-autonomous effects, tumor-derived D-2HG acts as a potent immunosuppressant that establishes an immune-cold tumor microenvironment. However, the mechanism by which D-2HG is released from tumors remains largely unknown. Here, we identify the SWELL1 (LRRC8A)/LRRC8C-containing volume-regulated anion channel (VRAC) as a principal pathway for D-2HG efflux from IDH-mutant cells. Genetic deletion of SWELL1, the essential VRAC subunit, markedly reduces D-2HG release and reverses associated immunosuppression in an orthotopic mouse model of IDH-mutant glioma. Strikingly, loss of VRAC causes intracellular accumulation of D-2HG, which paradoxically limits tumor cell proliferation by driving epigenetic remodeling and mitochondrial metabolic stress. Pharmacological inhibition of VRAC with dicumarol suppresses IDH-mutant glioma growth, enhances intratumoral T cell activation, synergizes with immune checkpoint blockade, and prolongs survival in tumor-bearing mice. In human IDH-mutant lower-grade gliomas, elevated LRRC8C expression correlates with DNA hypermethylation and an immunosuppressive tumor microenvironment (TME), and predicts poor overall survival. Together, these findings establish VRAC-mediated D-2HG export as a central mechanism regulating both immune evasion and tumor cell fitness, uncovering new therapeutic opportunities across IDH-mutant cancers.", "doi": "10.64898/2026.09.18.752798", "url": "https://doi.org/10.64898/2026.09.18.752798", "published": "2026-09-22", "venue": "bioRxiv", "source": "Preprint", "set_name": "IDH1 glioblastoma", "score": 9.0}</script>
+</div>
+<div class="paper" data-doi="10.1186/s41181-026-00502-7">
+<div class="head"><span class="score ai" title="Gemini (gemini-3-flash-preview)"><span class="tag">AI</span>3</span><span class="score medium" style="--fill:60%" title="PaperFeed&#x27;s own score out of 10 - &#x27;isocitrate dehydrogenase 1&#x27; in title; &#x27;glioma&#x27; in abstract; 1 of 2 concepts in the title; published 2 days ago">6.0</span><a class="title" href="https://doi.org/10.1186/s41181-026-00502-7">Methods for assessing binding of a small-molecule radioligand to soluble enzyme isocitrate dehydrogenase 1 variants.</a></div>
+<p class="byline">Deuther-Conrad W, Lai TH, Maurer A, Wenzel B <span class="affil">&mdash; Institute of Radiopharmaceutical Cancer Research</span></p>
+<p class="ai-why">Focuses on radioligand binding methodology and PET imaging tracers rather than IDH1 biology or multi-omics.</p>
+<p class="why">&#x27;isocitrate dehydrogenase 1&#x27; in title; &#x27;glioma&#x27; in abstract; 1 of 2 concepts in the title; published 2 days ago</p>
+<div class="tags"><span class="badge">PubMed</span> <a class="badge oa" href="https://www.ncbi.nlm.nih.gov/pmc/articles/PMC13598053/">free full text</a>EJNMMI radiopharmacy and chemistry &middot; 2026-09-22 &middot; doi:10.1186/s41181-026-00502-7</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span><span class="metric" title="OpenAlex 2-year mean citedness for EJNMMI Radiopharmacy and Chemistry. It counts EVERY item the journal publishes, meeting abstracts and errata included, so journals with large abstract supplements read far below their reputation. Not an Impact Factor.">journal citedness 3.9 over 492 works<span class="src">OpenAlex</span></span><span class="metric" title="Listed in the Directory of Open Access Journals.">in DOAJ<span class="src">OpenAlex</span></span></div>
+
+<details><summary>Abstract</summary><p>Isocitrate dehydrogenase 1 (IDH1) is a cytosolic NADP+-dependent enzyme involved in cellular redox homeostasis and 2-oxoglutarate (2-OG) metabolism. Glioma-associated mutations in IDH1 confer a neomorphic enzymatic activity, resulting in the production and accumulation of the oncometabolite D-2-hydroxyglutarate (2-HG), which contributes to metabolic and epigenetic alterations in IDH-mutant tumors. Small-molecule inhibitors of mutant IDH1 have emerged as promising therapeutic agents. In parallel, radiolabeled derivatives of these inhibitors are being investigated as potential positron emission tomography (PET) tracers for non-invasive imaging of mutant IDH1. Characterizing the binding of…</p></details>
+<script type="application/json" class="pf-paper">{"title": "Methods for assessing binding of a small-molecule radioligand to soluble enzyme isocitrate dehydrogenase 1 variants.", "authors": ["Deuther-Conrad W", "Lai TH", "Maurer A", "Wenzel B"], "abstract": "Isocitrate dehydrogenase 1 (IDH1) is a cytosolic NADP+-dependent enzyme involved in cellular redox homeostasis and 2-oxoglutarate (2-OG) metabolism. Glioma-associated mutations in IDH1 confer a neomorphic enzymatic activity, resulting in the production and accumulation of the oncometabolite D-2-hydroxyglutarate (2-HG), which contributes to metabolic and epigenetic alterations in IDH-mutant tumors. Small-molecule inhibitors of mutant IDH1 have emerged as promising therapeutic agents. In parallel, radiolabeled derivatives of these inhibitors are being investigated as potential positron emission tomography (PET) tracers for non-invasive imaging of mutant IDH1. Characterizing the binding of small-molecule radioligands to soluble intracellular proteins such as IDH1, however, presents specific methodological challenges. Appropriate experimental approaches are therefore needed to characterize radioligand binding to IDH1 enzymes. Using several established biochemical and biophysical approaches, we found that the radiofluorinated inhibitor ivosidenib ([\u00b9\u2078F]AG-120) binds specifically to both IDH1 and IDH1R132H at nanomolar radioligand concentrations. However, the investigated approaches yielded method-dependent apparent affinity estimates. The findings support the use of radioligand-based approaches for characterizing soluble intracellular protein targets, while highlighting the need for assay-specific optimization and careful interpretation of quantitative binding parameters.", "doi": "10.1186/s41181-026-00502-7", "url": "https://doi.org/10.1186/s41181-026-00502-7", "published": "2026-09-22", "venue": "EJNMMI radiopharmacy and chemistry", "source": "PubMed", "set_name": "IDH1 glioblastoma", "score": 6.0}</script>
+</div>
+<div class="paper" data-doi="10.2174/0115701638486071260907064647">
+<div class="head"><span class="score ai" title="Gemini (gemini-3-flash-preview)"><span class="tag">AI</span>2</span><span class="score strong" style="--fill:90%" title="PaperFeed&#x27;s own score out of 10 - &#x27;IDH1&#x27; in title; &#x27;glioblastoma&#x27; in title; 2 of 2 concepts in the title; published 3 days ago">9.0</span><a class="title" href="https://doi.org/10.2174/0115701638486071260907064647">Exploration of Bacopa monnieri-derived Green Ligands for Targeted IDH1 Inhibition in Glioblastoma.</a></div>
+<p class="byline">Sikenis M, Saxena A, Nair A, Saha B, Kar S <span class="affil">&mdash; Sharda School of Bio-Science &amp; Technology</span></p>
+<p class="ai-why">Purely computational screening of plant compounds; lacks the deep biological insight or multi-omics data you requested.</p>
+<p class="why">&#x27;IDH1&#x27; in title; &#x27;glioblastoma&#x27; in title; 2 of 2 concepts in the title; published 3 days ago</p>
+<div class="tags"><span class="badge">PubMed</span>Current drug discovery technologies &middot; 2026-09-21 &middot; doi:10.2174/0115701638486071260907064647</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span><span class="metric" title="OpenAlex 2-year mean citedness for Current Drug Discovery Technologies. It counts EVERY item the journal publishes, meeting abstracts and errata included, so journals with large abstract supplements read far below their reputation. Not an Impact Factor.">journal citedness 1.8 over 959 works<span class="src">OpenAlex</span></span></div>
+<div class="chips"><span class="chip">Bacopa monnieri</span><span class="chip">IDH1 inhibition</span><span class="chip">Sustainable drug discovery</span><span class="chip">computational biology</span><span class="chip">glioblastoma</span></div>
+<details><summary>Abstract</summary><p>Sustainable drug discovery is an emerging paradigm in biomedicine driven by green chemistry principles, which allow mindful utilization of favorable renewable biological scaffolds and energy-efficient computational strategies. Plant-derived phytochemicals represent an ecologically reliable alternative to conventional synthetic drug libraries, consistent with the principles of low-carbon use and resource-effective innovation. In this study, phytocompounds from Bacopa monnieri were screened against wild-type and mutant Isocitrate Dehydrogenase 1 (IDH1), which is a key enzyme involved in glioblastoma pathogenesis. This study employed a comprehensive, multi-layered computational approach…</p></details>
+<script type="application/json" class="pf-paper">{"title": "Exploration of Bacopa monnieri-derived Green Ligands for Targeted IDH1 Inhibition in Glioblastoma.", "authors": ["Sikenis M", "Saxena A", "Nair A", "Saha B", "Kar S"], "abstract": "Sustainable drug discovery is an emerging paradigm in biomedicine driven by green chemistry principles, which allow mindful utilization of favorable renewable biological scaffolds and energy-efficient computational strategies. Plant-derived phytochemicals represent an ecologically reliable alternative to conventional synthetic drug libraries, consistent with the principles of low-carbon use and resource-effective innovation. In this study, phytocompounds from Bacopa monnieri were screened against wild-type and mutant Isocitrate Dehydrogenase 1 (IDH1), which is a key enzyme involved in glioblastoma pathogenesis. This study employed a comprehensive, multi-layered computational approach comprising Protein-Protein Interaction (PPI) networks and Gene Ontology (GO) annotations, KEGG pathway enrichment, molecular docking, ADME profiling, and Molecular Dynamics (MD) simulations. The network analysis revealed that IDH1, IDH3A, IDH3B, CS, and OGDH were identified as major regulators of oncogenic metabolic pathways. Further, enrichment analysis associated these proteins with key processes involved in tumor metabolism and redox regulation. Molecular docking identified Bacoside A2 as the most favorable compound with high affinity for wild-type and mutant IDH1's catalytic residues, followed by Bacopaside VII. MD simulation studies confirmed that Bacoside A2 forms a stable, energetically favorable complex within the catalytic pocket, which remained consistent throughout the simulation. In addition to its potential medical applications, this computational based phytochemical study reflects the principles of green energy and green chemistry by combining renewable plant-based scaffolds with energy-efficient in silico techniques, thereby greatly reducing laboratory resource consumption. The integrated system-level network analysis, combined with computational docking and molecular dynamics studies, supported the feasibility of using the renewable phytochemical scaffold, Bacoside A2, as a potential dual inhibitor of IDH1 in central nervous system tumors. Bacoside A2 emerges as a strong, nanotechnologically versatile phytocompound and a dual IDH1 inhibitor, with potential for use in the development of next-generation, natural product-based therapies against glioblastoma and other malignancies associated with IDH1.", "doi": "10.2174/0115701638486071260907064647", "url": "https://doi.org/10.2174/0115701638486071260907064647", "published": "2026-09-21", "venue": "Current drug discovery technologies", "source": "PubMed", "set_name": "IDH1 glioblastoma", "score": 9.0}</script>
+</div>
+</div></details>
+<details class="set" id="s-de-novo-nanobody-design" open><summary><div class="setbar">
+<span>de novo nanobody design</span>
+<span class="setcount">1 &middot; 1 new</span></div></summary><div class="setbody">
+<div class="paper" data-doi="10.1002/1873-3468.70466">
+<div class="head"><span class="score ai" title="Gemini (gemini-3-flash-preview)"><span class="tag">AI</span>3</span><span class="score medium" style="--fill:50%" title="PaperFeed&#x27;s own score out of 10 - &#x27;nanobodies&#x27; in title; 1 of 2 concepts in the title; published today">5.0</span><a class="title" href="https://doi.org/10.1002/1873-3468.70466">Characterizing two nanobodies for SMAD4.</a></div>
+<p class="byline">Condeminas M, Torner C, Pluta R, Ruiz L, R de Régil M, Khan RJ, Pous J, Pardon E, et al. <span class="affil">&mdash; Institute for Research in Biomedicine (IRB Barcelona)</span></p>
+<p class="ai-why">These are high-quality validated binders with structures, but the abstract describes them as discovered, not computationally designed.</p>
+<p class="why">&#x27;nanobodies&#x27; in title; 1 of 2 concepts in the title; published today</p>
+<div class="tags"><span class="badge new">new</span> <span class="badge">PubMed</span>FEBS letters &middot; 2026-09-24 &middot; doi:10.1002/1873-3468.70466</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span><span class="metric" title="OpenAlex 2-year mean citedness for FEBS Letters. It counts EVERY item the journal publishes, meeting abstracts and errata included, so journals with large abstract supplements read far below their reputation. Not an Impact Factor.">journal citedness 2.9 over 59,621 works<span class="src">OpenAlex</span></span></div>
+<div class="chips"><span class="chip">Alphafold prediction</span><span class="chip">MH2 domain</span><span class="chip">X‐ray structures</span><span class="chip">nanobodies for SMAD4</span><span class="chip">nanobody discovery</span></div>
+<details><summary>Abstract</summary><p>In metazoans, TGF-β signaling regulates essential cellular processes via the SMAD proteins. Many biophysical and cellular assays of SMAD-driven signaling require molecular tools that can recognize them in their native folded state. In this context, we report two nanobodies (Nbs), NbS4A1 and NbS4A7, which target the 3D structure of the human SMAD4-MH2 domain with high affinity and specificity. X-ray structures of the Nb-SMAD4 complexes reveal that each nanobody recognizes the SMAD4-MH2 domain through distinct but overlapping sites, precluding their simultaneous binding. Furthermore, NbS4A1 impedes SMAD4 binding with R-SMADs while NbS4A7 recognizes SMAD4 even when bound to R-SMADs. These…</p></details>
+<script type="application/json" class="pf-paper">{"title": "Characterizing two nanobodies for SMAD4.", "authors": ["Condeminas M", "Torner C", "Pluta R", "Ruiz L", "R de R\u00e9gil M", "Khan RJ", "Pous J", "Pardon E", "Steyaert J", "Fromm S", "Martin-Malpartida P", "Macias MJ"], "abstract": "In metazoans, TGF-\u03b2 signaling regulates essential cellular processes via the SMAD proteins. Many biophysical and cellular assays of SMAD-driven signaling require molecular tools that can recognize them in their native folded state. In this context, we report two nanobodies (Nbs), NbS4A1 and NbS4A7, which target the 3D structure of the human SMAD4-MH2 domain with high affinity and specificity. X-ray structures of the Nb-SMAD4 complexes reveal that each nanobody recognizes the SMAD4-MH2 domain through distinct but overlapping sites, precluding their simultaneous binding. Furthermore, NbS4A1 impedes SMAD4 binding with R-SMADs while NbS4A7 recognizes SMAD4 even when bound to R-SMADs. These distinct interaction modes will enable the study of folded SMAD complexes with cofactors and/or DNA in different experimental contexts.", "doi": "10.1002/1873-3468.70466", "url": "https://doi.org/10.1002/1873-3468.70466", "published": "2026-09-24", "venue": "FEBS letters", "source": "PubMed", "set_name": "de novo nanobody design", "score": 5.0}</script>
+</div>
+</div></details>
+<div class="hidden-note">Preprints / IDH1 glioblastoma: mesh:Isocitrate Dehydrogenase was left out of the preprint search - preprints are not MeSH-indexed</div>
+<div class="hidden-note">2 papers hidden by your filters: only 0 of your 2 concepts are in its title, and &#x27;de novo nanobody design&#x27; asks for 1 (2). Nothing hidden is marked as seen, so loosening a filter brings it back.</div>
+<p class="footer">Generated by PaperFeed from PubMed and Preprints. Edit config.json to change keywords, filters or the schedule. <a href="index.html">All digests</a>.</p>
+</div>
+</main></div>
+<script>
+(function () {
+  // Only `paperfeed serve` can answer /library, and it only ever listens on
+  // this Mac. Opened anywhere else - straight off disk, or on a website such
+  // as GitHub Pages - there is nothing behind the link. Testing for file:
+  // alone left it live on https, where it went to the web host's 404 page.
+  var served = location.hostname === '127.0.0.1' || location.hostname === 'localhost';
+  if (!served) {
+    document.querySelectorAll('a[data-needs-server]').forEach(function (link) {
+      link.removeAttribute('href');
+      link.classList.add('off');
+      link.title = 'Only on your Mac: python3 paperfeed.py serve';
+    });
+  }
+
+  // Which topic is on screen. '' means all of them. The tabs do not hide
+  // anything themselves - they declare what they want and let the one
+  // filter decide, the same arrangement the library's status pills use, so
+  // a tab and a search term combine instead of overwriting each other.
+  var topic = '';
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs .tab'));
+
+  var box = document.querySelector('.filterbox');
+  var opts = document.querySelectorAll('.viewopts input');
+  var count = document.querySelector('.hitcount');
+  // Re-queried on every pass, not snapshotted once: removing a saved paper
+  // detached its card while this list kept counting it, so the sidebar read
+  // "23 papers" with 21 on screen. The searchable text is cached on the
+  // element itself rather than in a parallel array that can fall out of
+  // step with it.
+  function liveCards() {
+    return Array.prototype.slice.call(document.querySelectorAll('.paper'));
+  }
+  function textOf(card) {
+    if (card.__pfText === undefined) {
+      card.__pfText = (card.textContent || '').toLowerCase();
+    }
+    return card.__pfText;
+  }
+  if (!liveCards().length) { return; }
+
+  function wanted(card, needle) {
+    if (needle && textOf(card).indexOf(needle) === -1) { return false; }
+    if (topic) {
+      var section = card.closest('details.set');
+      if (!section || section.id !== topic) { return false; }
+    }
+    // Pages with their own filter (the library's status pills) hand it in
+    // here rather than setting display themselves. Two scripts both hiding
+    // and showing the same cards would take it in turns to undo each other.
+    if (window.pfExtraFilter && !window.pfExtraFilter(card)) { return false; }
+    for (var i = 0; i < opts.length; i++) {
+      if (!opts[i].checked) { continue; }
+      var rule = opts[i].getAttribute('data-rule');
+      if (rule === 'oa' && !card.querySelector('.badge.oa')) { return false; }
+      if (rule === 'primary' && card.dataset.secondary) { return false; }
+      if (rule === 'nonew' && card.querySelector('.metric.quiet')) { return false; }
+      if (rule === 'new' && !card.querySelector('.badge.new')) { return false; }
+    }
+    return true;
+  }
+
+  function apply() {
+    var needle = box ? box.value.trim().toLowerCase() : '';
+    var cards = liveCards();
+    var shown = 0;
+    cards.forEach(function (card) {
+      var keep = wanted(card, needle);
+      card.style.display = keep ? '' : 'none';
+      if (keep) { shown++; }
+    });
+    // A section whose papers are all hidden is just a confusing empty
+    // heading, so it goes too. A section the active tab excludes goes
+    // whatever its contents.
+    document.querySelectorAll('details.set').forEach(function (block) {
+      var wrongTopic = topic && block.id !== topic;
+      var any = block.querySelector('.paper:not([style*="none"])');
+      block.style.display = (any && !wrongTopic) ? '' : 'none';
+    });
+    if (count) {
+      count.textContent = (shown === cards.length)
+        ? (cards.length + ' papers')
+        : ('showing ' + shown + ' of ' + cards.length);
+    }
+  }
+
+  if (box) { box.addEventListener('input', apply); }
+  opts.forEach(function (option) { option.addEventListener('change', apply); });
+
+  tabs.forEach(function (tab) {
+    tab.addEventListener('click', function (event) {
+      event.preventDefault();          // it is an anchor only without JS
+      topic = tab.getAttribute('data-topic') || '';
+      tabs.forEach(function (other) {
+        other.classList.toggle('on', other === tab);
+      });
+      apply();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  });
+
+  window.pfApplyFilters = apply;
+  apply();
+})();
+</script>
+</body></html>
