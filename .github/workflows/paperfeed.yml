@@ -35,6 +35,7 @@ on:
 permissions:
   contents: write          # to save what has been sent to paperfeed-state
   pages: read              # to ask whether the website is switched on
+  actions: write           # to keep this schedule switched on (see the last step)
 
 concurrency:
   group: paperfeed         # never two runs at once over the same memory
@@ -195,6 +196,18 @@ jobs:
       - name: Note a partial run
         if: steps.run.outputs.code != '0' && steps.run.outputs.email_failed != 'true'
         run: echo "::warning::A source had a problem this run. The email says which; the rest of the run completed."
+
+      # In a public repository GitHub switches scheduled workflows off after 60
+      # days without "repository activity", and does not say what counts. The
+      # runs commit to paperfeed-state every few days, which probably does -
+      # but a schedule that stops quietly means alerts that stop quietly. So
+      # every run also tells GitHub, through its own API, that this workflow
+      # is wanted. Harmless if it turns out to be unnecessary.
+      - name: Keep the schedule switched on
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/paperfeed.yml/enable" --silent
 
   publish:
     needs: run
