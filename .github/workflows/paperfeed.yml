@@ -6,7 +6,7 @@ name: PaperFeed
 # config sets the cadence and this file never needs editing to change it.
 #
 # What it needs, all under Settings -> Secrets and variables -> Actions:
-#   variable  PAPERFEED_CONFIG         the whole of paperfeed/config.json
+#   secret    PAPERFEED_CONFIG         paperfeed/config.json, base64 on one line
 #   secret    PAPERFEED_SMTP_PASSWORD  the Gmail app password (required)
 #   secret    PAPERFEED_AI_KEY         the AI key (optional; ranks locally without)
 #
@@ -72,21 +72,26 @@ jobs:
 
       - name: Write config and restore memory
         working-directory: app/paperfeed
+        # A secret, not a variable: GitHub prints every variable a step uses at
+        # the top of that step's log, which put the whole config - address,
+        # topics, interest lines - into every run's log. Secrets are hidden.
+        # Base64 on one line because a multi-line JSON secret is masked line by
+        # line, "{" and "}" included, which garbles the rest of the log.
         env:
-          PAPERFEED_CONFIG: ${{ vars.PAPERFEED_CONFIG }}
+          PAPERFEED_CONFIG: ${{ secrets.PAPERFEED_CONFIG }}
         run: |
           if [ -z "$PAPERFEED_CONFIG" ]; then
-            echo "::error::The PAPERFEED_CONFIG variable is empty. Set it from your laptop: gh variable set PAPERFEED_CONFIG < paperfeed/config.json"
+            echo "::error::The PAPERFEED_CONFIG secret is empty. Set it from your laptop: base64 -i paperfeed/config.json | tr -d '\\n' | gh secret set PAPERFEED_CONFIG"
             exit 1
           fi
           if [ -z "$PAPERFEED_SMTP_PASSWORD" ]; then
             echo "::error::The PAPERFEED_SMTP_PASSWORD secret is not set, so no email could be sent. Nothing was run and nothing was marked as seen."
             exit 1
           fi
-          printf '%s' "$PAPERFEED_CONFIG" > config.json
+          printf '%s' "$PAPERFEED_CONFIG" | base64 -d > config.json
           # Your address appears in the log ("Email sent to ..."). Masked, so
           # it stays out of the log even if this repository is ever public.
-          for address in $(python -c "import json; e = json.load(open('config.json'))['email']; to = e.get('to_addresses') or []; to = [to] if isinstance(to, str) else to; print(' '.join({a for a in to + [e.get('username', ''), e.get('from_address', '')] if a}))"); do
+          for address in $(python -c "import json; e = json.load(open('config.json'))['email']; to = e.get('to_addresses') or []; to = [to] if isinstance(to, str) else to; c = json.load(open('config.json')); print(' '.join({a for a in to + [e.get('username', ''), e.get('from_address', ''), c.get('contact_email', '')] if a}))"); do
             echo "::add-mask::$address"
           done
           # Two differences from the laptop, both deliberate:

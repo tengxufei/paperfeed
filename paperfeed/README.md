@@ -403,7 +403,7 @@ It needs three things, under **Settings → Secrets and variables → Actions**:
 
 | Name | Kind | What |
 |---|---|---|
-| `PAPERFEED_CONFIG` | variable | the whole of your `config.json` |
+| `PAPERFEED_CONFIG` | secret | your `config.json`, encoded onto one line (command below) |
 | `PAPERFEED_SMTP_PASSWORD` | secret | your Gmail app password |
 | `PAPERFEED_AI_KEY` | secret | optional - without it, papers are ranked locally |
 
@@ -423,8 +423,13 @@ needs the repository itself to be public too.
 using the old one:
 
 ```bash
-gh variable set PAPERFEED_CONFIG < config.json
+base64 -i config.json | tr -d '\n' | gh secret set PAPERFEED_CONFIG
 ```
+
+It is a secret rather than a variable because GitHub prints every variable a
+job uses into that job's log, and the config holds your address and your
+interest lines. The encoding keeps it on one line, which is the only shape of
+secret GitHub reliably hides.
 
 If an email fails, the run is marked failed (so GitHub emails you), nothing is
 marked as seen, and the next morning's run tries again with the same papers.
