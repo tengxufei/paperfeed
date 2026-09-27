@@ -808,6 +808,13 @@ def command_run(args):
     stamped, latest = write_digest(cfg, html_text, moment)
     log.info("Digest written: %s", stamped)
     log.info("Also at:        %s", latest)
+    # Where this digest can be read online, when there is a website: the email
+    # links there instead of telling the reader to go and find a Mac.
+    site = os.environ.get("PAPERFEED_SITE_URL", "").strip()
+    if site:
+        site = site.rstrip("/") + "/"
+        meta["digest_url"] = site + os.path.basename(stamped)
+        meta["library_url"] = site + "library.html"
 
     # Everything that passed the filters is marked seen. Papers a filter
     # removed are deliberately left unmarked, so relaxing that filter later

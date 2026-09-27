@@ -456,6 +456,15 @@ def _heading(name, count):
     )
 
 
+def _full_digest_at(meta):
+    """Where the whole digest can be read: the website if there is one, with
+    a link, or the Mac's own `serve` if not."""
+    if meta.get("digest_url"):
+        return ('the <a href="%s" style="color:%s">online digest</a>'
+                % (_escape(meta["digest_url"]), ACCENT))
+    return "the digest on your Mac"
+
+
 def _footer(meta):
     bits = []
     library = meta.get("library") or {}
@@ -463,10 +472,20 @@ def _footer(meta):
         line = "%d kept in your library, %d unread" % (
             library["total"], library.get("untouched", 0))
         bits.append(line + ".")
-    bits.append(
-        "The full digest, with every paper and the dashboards, is on your Mac: "
-        "run <b>python3 paperfeed.py serve</b> in the paperfeed folder."
-    )
+    if meta.get("digest_url"):
+        bits.append(
+            '<a href="%s" style="color:%s;font-weight:bold">Open the full digest</a> '
+            "&mdash; every paper, <b>+ Save</b>, and the dashboards. "
+            '<a href="%s" style="color:%s">Your library</a> has Explain and the '
+            "research tools."
+            % (_escape(meta["digest_url"]), ACCENT,
+               _escape(meta.get("library_url") or meta["digest_url"]), ACCENT)
+        )
+    else:
+        bits.append(
+            "The full digest, with every paper and the dashboards, is on your Mac: "
+            "run <b>python3 paperfeed.py serve</b> in the paperfeed folder."
+        )
     bits.append(
         "Change how often this arrives, or what it searches for, in "
         "config.json."
@@ -531,15 +550,15 @@ def _body(groups, meta, cards_per_topic, tail_limit):
             parts.append(_notice(
                 "Only the paper above." if held_back <= 0 else
                 "The paper above, plus %d more that would not fit in an "
-                "email - they are all in the digest on your Mac." % held_back,
+                "email - they are all in %s." % (held_back, _full_digest_at(meta)),
                 colour="#5b87c4"))
 
     if trimmed:
         # The email trimming itself still has to say so, same rule as a filter.
         parts.append(_notice(
             "%d more paper%s would not fit in an email without it being cut "
-            "short by your mail client. They are all in the digest on your "
-            "Mac." % (trimmed, "" if trimmed == 1 else "s")))
+            "short by your mail client. They are all in %s."
+            % (trimmed, "" if trimmed == 1 else "s", _full_digest_at(meta))))
 
     parts.append(_footer(meta))
     return "".join(parts)
@@ -661,5 +680,10 @@ def render_text(groups, meta):
     if library.get("total"):
         out.append("%d kept in your library, %d unread."
                    % (library["total"], library.get("untouched", 0)))
-    out.append("Full digest on your Mac: python3 paperfeed.py serve")
+    if meta.get("digest_url"):
+        out.append("Full digest, with + Save: %s" % meta["digest_url"])
+        if meta.get("library_url"):
+            out.append("Your library: %s" % meta["library_url"])
+    else:
+        out.append("Full digest on your Mac: python3 paperfeed.py serve")
     return "\n".join(out) + "\n"

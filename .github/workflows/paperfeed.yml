@@ -24,9 +24,10 @@ name: PaperFeed
 
 on:
   schedule:
-    # 23:37 UTC is 07:37 in Singapore. GitHub starts scheduled jobs late when
-    # it is busy, worst on the hour, so this sits early and off the hour.
-    - cron: "37 23 * * *"
+    # 21:37 UTC is 05:37 in Singapore. GitHub starts scheduled jobs late when
+    # it is busy - measured: both of the first two ran about 2 hours after
+    # their slot - so this sits well before breakfast, and off the hour.
+    - cron: "37 21 * * *"
   workflow_dispatch:
     inputs:
       force:
@@ -140,8 +141,16 @@ jobs:
         working-directory: app/paperfeed
         env:
           FORCE_FLAG: ${{ inputs.force && '--force' || '' }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set +e
+          # With the website on, the email links to this digest's page there,
+          # asking GitHub for the address rather than guessing it. Published
+          # about 40 seconds after the email is sent (measured on 27 Sep).
+          if SITE=$(gh api "repos/${{ github.repository }}/pages" --jq .html_url 2>/dev/null) && [ -n "$SITE" ]; then
+            export PAPERFEED_SITE_URL="$SITE"
+            echo "The email will link to $SITE"
+          fi
           python paperfeed.py run $FORCE_FLAG 2>&1 | tee run.out
           code=${PIPESTATUS[0]}
           echo "code=$code" >> "$GITHUB_OUTPUT"
