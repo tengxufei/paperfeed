@@ -436,6 +436,41 @@ marked as seen, and the next morning's run tries again with the same papers.
 To run it now from a browser or phone: the repository's **Actions** tab →
 PaperFeed → **Run workflow**, and tick *force*.
 
+**The full library on the website.** With one more key, the website does
+everything `paperfeed serve` does on the Mac - Save on the digest, the
+library with unread/reading/read, remove, Explain, Suggest research
+directions, Stuck on something - from any phone or computer. The library
+then lives as `library.json` in a second, private repository,
+`<you>/paperfeed-library`; the digest pages stay public, the library does
+not. `web/pf-web.js` answers the page's calls in the browser, from that
+repository and the AI service directly (see `website.py`, `webstore.py`).
+
+1. Make a GitHub key: **Settings → Developer settings → Fine-grained
+   tokens → Generate new token**. Repository access: *Only select
+   repositories* → `paperfeed-library`. Permissions: *Contents* → **Read
+   and write**. Nothing else.
+2. Give it to the scheduled run, so it can add the collector's papers and
+   the citation figures for every card:
+
+   ```bash
+   gh secret set PAPERFEED_LIBRARY_TOKEN
+   ```
+
+3. On each phone or computer, open the site's **Library** page and paste
+   it under *Connect this browser*, with your AI key if you want the AI
+   buttons. Both stay in that browser only and go only to GitHub and
+   Google.
+
+Visitors without the key see the digest and nothing of the library - no
+Save buttons, no count. To copy your Mac's library up the first time:
+
+```bash
+PAPERFEED_LIBRARY_TOKEN=... python3 paperfeed.py library-sync push --repo <you>/paperfeed-library
+```
+
+A run only ever adds papers and refreshes figures there; it never deletes,
+and never changes a status or a summary. Removing is done on the page.
+
 Run it in one place only. If GitHub sends the email, take the password out
 of the LaunchAgent on the Mac, or you will get every alert twice.
 

@@ -275,3 +275,38 @@ def search(path, text, limit=100):
             (pattern, pattern, pattern, pattern, pattern, pattern, limit),
         ).fetchall()
     return [_as_dict(row) for row in rows]
+
+
+# The website keeps the library as JSON in a private repository (webstore.py).
+# These two carry it in and out of this SQLite file, so that everything that
+# reads the library - the collector, the email footer, the dashboards - works
+# unchanged whichever of the two it came from.
+FIELDS = ("key", "alt_key", "doi", "title", "authors", "abstract", "venue",
+          "published", "source", "url", "set_name", "score", "note", "tags",
+          "status", "origin", "ai_summary", "saved_at")
+
+
+def export_records(path):
+    """Every saved paper, newest first, as plain dicts."""
+    return all_saved(path, limit=10 ** 9)
+
+
+def import_records(path, records):
+    """Replace the whole library with these records."""
+    with connect(path) as connection:
+        connection.execute("DELETE FROM saved")
+        for record in records:
+            if not record.get("key") or not record.get("title"):
+                continue
+            row = dict(record)
+            row["authors"] = json.dumps(record.get("authors") or [])
+            row["score"] = float(record.get("score") or 0)
+            row["status"] = record.get("status") if record.get("status") in STATUSES else "unread"
+            for field in ("alt_key", "note", "tags", "ai_summary"):
+                row[field] = row.get(field) or ""
+            row["origin"] = row.get("origin") or "you"
+            connection.execute(
+                "INSERT OR REPLACE INTO saved (%s) VALUES (%s)"
+                % (", ".join(FIELDS), ", ".join("?" for _ in FIELDS)),
+                [row.get(field) for field in FIELDS],
+            )

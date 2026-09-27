@@ -9,6 +9,8 @@ name: PaperFeed
 #   secret    PAPERFEED_CONFIG         paperfeed/config.json, base64 on one line
 #   secret    PAPERFEED_SMTP_PASSWORD  the Gmail app password (required)
 #   secret    PAPERFEED_AI_KEY         the AI key (optional; ranks locally without)
+#   secret    PAPERFEED_LIBRARY_TOKEN  a GitHub key for <owner>/paperfeed-library
+#                                      (optional; without it there is no library)
 #
 # What it remembers between runs lives on the paperfeed-state branch: which
 # papers you have already been sent, when the last digest went out, and every
@@ -53,6 +55,12 @@ jobs:
       TZ: Asia/Singapore
       PAPERFEED_SMTP_PASSWORD: ${{ secrets.PAPERFEED_SMTP_PASSWORD }}
       PAPERFEED_AI_KEY: ${{ secrets.PAPERFEED_AI_KEY }}
+      # The library: a private repository, written by the website and by this
+      # run (see webstore.py). Pages built here go on a public website, so
+      # they are built as if there were no library - it is private.
+      PAPERFEED_LIBRARY_REPO: ${{ github.repository_owner }}/paperfeed-library
+      PAPERFEED_LIBRARY_TOKEN: ${{ secrets.PAPERFEED_LIBRARY_TOKEN }}
+      PAPERFEED_PUBLIC_PAGES: "1"
 
     steps:
       - uses: actions/checkout@v7
@@ -95,22 +103,37 @@ jobs:
           for address in $(python -c "import json; e = json.load(open('config.json'))['email']; to = e.get('to_addresses') or []; to = [to] if isinstance(to, str) else to; c = json.load(open('config.json')); print(' '.join({a for a in to + [e.get('username', ''), e.get('from_address', ''), c.get('contact_email', '')] if a}))"); do
             echo "::add-mask::$address"
           done
-          # Two differences from the laptop, both deliberate:
-          #  - email is forced on: sending it is this job's whole purpose.
-          #  - the collector is off: your library lives on the laptop, where
-          #    you read and mark papers. A throwaway copy here would put
-          #    "13 kept, 13 unread" in the email footer, which is untrue.
+          # Email is forced on: sending it is this job's whole purpose. Without
+          # a library token the collector is forced off too, because a
+          # throwaway library here would put "13 kept, 13 unread" in the
+          # email footer, which would be untrue.
           python - <<'EOF'
-          import json
+          import json, os
           cfg = json.load(open("config.json", encoding="utf-8"))
           cfg.setdefault("email", {})["enabled"] = True
-          cfg.setdefault("collect", {})["enabled"] = False
+          if not os.environ.get("PAPERFEED_LIBRARY_TOKEN"):
+              cfg.setdefault("collect", {})["enabled"] = False
           json.dump(cfg, open("config.json", "w", encoding="utf-8"), indent=2)
           EOF
           mkdir -p state digests
           cp ../../saved/state/*.json state/
           if [ -d ../../saved/digests ]; then cp -R ../../saved/digests/. digests/; fi
           python paperfeed.py check
+
+      # Before the run, so the collector, the email footer and "already in
+      # your library" all see the real thing.
+      - name: Read the library
+        id: pull
+        if: env.PAPERFEED_LIBRARY_TOKEN != ''
+        working-directory: app/paperfeed
+        run: |
+          if python paperfeed.py library-sync pull; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            # The email still matters more than the library: carry on without
+            # it, collector off, and fail loudly at the end.
+            python -c "import json; c = json.load(open('config.json')); c.setdefault('collect', {})['enabled'] = False; json.dump(c, open('config.json', 'w'), indent=2)"
+          fi
 
       - name: Run PaperFeed
         id: run
@@ -155,6 +178,17 @@ jobs:
           git commit --quiet -m "PaperFeed run $(date '+%Y-%m-%d %H:%M %Z')"
           git push --quiet
 
+      # Sends back only what this run added (the collector's papers) plus the
+      # badges and citation figures for every card, which the website cannot
+      # compute itself. Never deletes, never changes a status or a summary.
+      # Runs on quiet days too, so a paper saved on the website gets its
+      # figures the next morning.
+      - name: Save the library
+        id: push
+        if: steps.pull.outputs.ok == 'true' && steps.run.outcome == 'success'
+        working-directory: app/paperfeed
+        run: python paperfeed.py library-sync push
+
       - name: Keep the digest for 30 days
         if: steps.run.outputs.wrote == 'true'
         uses: actions/upload-artifact@v7
@@ -179,11 +213,18 @@ jobs:
             echo "ready=true" >> "$GITHUB_OUTPUT"
           fi
 
+      # Digest pages plus library.html and the browser script that stands in
+      # for `paperfeed serve` - see website.py.
+      - name: Build the website
+        if: steps.site.outputs.ready == 'true'
+        working-directory: app/paperfeed
+        run: python paperfeed.py build-site ../../site
+
       - name: Package the website
         if: steps.site.outputs.ready == 'true'
         uses: actions/upload-pages-artifact@v5
         with:
-          path: app/paperfeed/digests
+          path: site
 
       # A failed job is what makes GitHub email you about it. The email
       # failing is the one thing that must never be quiet.
@@ -191,6 +232,14 @@ jobs:
         if: steps.run.outputs.email_failed == 'true'
         run: |
           echo "::error::The email was not sent. Nothing was marked as seen, so tomorrow's run will try again with the same papers. This run's digest is attached above."
+          exit 1
+
+      - name: Fail loudly if the library could not be read or saved
+        if: >-
+          env.PAPERFEED_LIBRARY_TOKEN != '' && steps.run.outcome == 'success' &&
+          (steps.pull.outputs.ok != 'true' || steps.push.outcome == 'failure')
+        run: |
+          echo "::error::The library in $PAPERFEED_LIBRARY_REPO could not be read or saved - see the step above. The email was not affected. The usual cause is an expired key: make a new one and run  gh secret set PAPERFEED_LIBRARY_TOKEN"
           exit 1
 
       - name: Note a partial run

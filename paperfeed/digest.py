@@ -615,7 +615,7 @@ def sidebar(meta, active, topics=(), extras="", stats=()):
                    meta.get("total_new"), active == "digest"),
         _rail_link(meta.get("library_href", "/library"), "&#9733;", "Library",
                    meta.get("library_total"), active == "library",
-                   needs_server=True),
+                   needs_server=meta.get("library_needs_server", True)),
         _rail_link(meta.get("dashboard_href", "dashboard.html"), "&#9680;",
                    "Dashboard", None, active == "dashboard"),
         _rail_link("index.html", "&#9776;", "All digests", None, active == "index"),

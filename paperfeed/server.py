@@ -94,7 +94,7 @@ INJECTED_JS = r"""
   if (jump && !jump.querySelector('.pf-lib')) {
     var link = document.createElement('a');
     link.className = 'pf-lib pf-page';
-    link.href = '/library';
+    link.href = window.PF_LIBRARY_URL || '/library';
     link.textContent = 'library';
     // after the spacer, with the other page links - these leave the page,
     // the topic chips only jump within it
@@ -436,6 +436,51 @@ document.querySelectorAll('.pill').forEach(function (p) {
 """
 
 
+# One library card, as templates rather than code, so the website can fill in
+# exactly the same markup in the browser (see web/pf-web.js, which receives
+# these through website.py). Two copies of a card drift; one template cannot.
+# Every {field} is filled with text that has already been HTML-escaped, except
+# {extras}, which is the badge and metrics HTML that digest.py renders itself.
+CARD_TEMPLATE = (
+    '<div class="paper" data-key="{key}" data-status="{status}">'
+    '<div class="head"><a class="title" href="{url}">{title}</a></div>'
+    '<p class="byline">{authors}</p><div class="tags">{tail}</div>{extras}'
+    '<div class="statusrow">{buttons}{explain}<button class="sbtn rm">remove</button></div>'
+    '<div class="out"{out_style}>{summary}</div>'
+    "</div>"
+)
+STATUS_BUTTON = '<button class="sbtn{on}" data-status="{value}">{label}</button>'
+EXPLAIN_BUTTON = '<button class="act explain">{label}</button>'
+OUT_HIDDEN = ' style="display:none"'
+STATUS_LABELS = (("unread", "unread"), ("reading", "reading"), ("read", "read"))
+
+
+def library_card(record, extras, has_key):
+    """One saved paper as a card. extras is trusted HTML (badges, metrics)."""
+    status = record.get("status") or "unread"
+    tail = [bit for bit in (record.get("source"), record.get("venue"),
+                            record.get("published")) if bit]
+    summary = record.get("ai_summary") or ""
+    return CARD_TEMPLATE.format(
+        key=html.escape(record["key"]),
+        status=html.escape(status),
+        url=html.escape(record.get("url") or ""),
+        title=html.escape(record.get("title") or ""),
+        authors=html.escape(", ".join((record.get("authors") or [])[:6])),
+        tail=html.escape(" \u00b7 ".join(tail)),
+        extras=extras,
+        buttons="".join(
+            STATUS_BUTTON.format(on=" on" if status == value else "",
+                                 value=value, label=label)
+            for value, label in STATUS_LABELS
+        ),
+        explain=EXPLAIN_BUTTON.format(
+            label="Explain again" if summary else "Explain this") if has_key else "",
+        out_style="" if summary else OUT_HIDDEN,
+        summary=html.escape(summary),
+    )
+
+
 def _metrics_for_library(rows, cfg):
     """Look up citation and journal figures for the saved papers.
 
@@ -471,49 +516,16 @@ def library_page(db_path, has_key, ai_on, key_env="PAPERFEED_AI_KEY", cfg=None):
     total = len(rows)
     enriched, sourcing = _metrics_for_library(rows, cfg)
 
-    cards = []
-    for record in rows:
-        status = record.get("status") or "unread"
-        authors = ", ".join(record["authors"][:6])
-        tail = [
-            bit for bit in (record["source"], record["venue"], record["published"]) if bit
-        ]
-        buttons = "".join(
-            '<button class="sbtn%s" data-status="%s">%s</button>'
-            % (" on" if status == value else "", value, label)
-            for value, label in (
-                ("unread", "unread"), ("reading", "reading"), ("read", "read")
-            )
+    cards = [
+        library_card(
+            record,
+            (digest_module._badges(enriched[record["key"]])
+             + digest_module._metrics_row(enriched[record["key"]]))
+            if record["key"] in enriched else "",
+            has_key,
         )
-        explain = (
-            '<button class="act explain">%s</button>'
-            % ("Explain again" if record.get("ai_summary") else "Explain this")
-            if has_key
-            else ""
-        )
-        cards.append(
-            '<div class="paper" data-key="%s" data-status="%s">'
-            '<div class="head"><a class="title" href="%s">%s</a></div>'
-            '<p class="byline">%s</p><div class="tags">%s</div>%s'
-            '<div class="statusrow">%s%s<button class="sbtn rm">remove</button></div>'
-            '<div class="out"%s>%s</div>'
-            "</div>"
-            % (
-                html.escape(record["key"]),
-                html.escape(status),
-                html.escape(record["url"] or ""),
-                html.escape(record["title"]),
-                html.escape(authors),
-                html.escape(" \u00b7 ".join(tail)),
-                (digest_module._badges(enriched[record["key"]])
-                 + digest_module._metrics_row(enriched[record["key"]]))
-                if record["key"] in enriched else "",
-                buttons,
-                explain,
-                "" if record.get("ai_summary") else ' style="display:none"',
-                html.escape(record.get("ai_summary") or ""),
-            )
-        )
+        for record in rows
+    ]
 
     pills = "".join(
         '<span class="pill%s" data-filter="%s">%s <b class="n">%d</b></span>'
@@ -627,6 +639,80 @@ def library_page(db_path, has_key, ai_on, key_env="PAPERFEED_AI_KEY", cfg=None):
             digest_module.shell_close(),
             "<script>%s</script>" % digest_module.SHELL_JS,
             "<script>%s</script>" % LIBRARY_JS,
+            "</body></html>",
+        ]
+    )
+
+
+WEB_TOOLS = (
+    '<div id="pf-ai" hidden>'
+    '<div class="tools"><h3>Where this collection points</h3>'
+    '<p class="hint">Reads everything you have saved and suggests '
+    "directions these papers open up but do not close.</p>"
+    '<button class="act primary" id="dir-btn">Suggest research directions</button>'
+    '<div id="dir-out"></div></div>'
+    '<div class="tools"><h3>Stuck on something?</h3>'
+    '<p class="hint">Describe a problem in your own work. Every saved '
+    "paper&rsquo;s title and abstract is read, and the answer says "
+    "which ones it drew on and what they do not cover. It has no "
+    "access to full text.</p>"
+    '<textarea class="ask" id="ask-text" placeholder="e.g. My designed '
+    'binders express well but show no binding by BLI. What should I check '
+    'first?"></textarea>'
+    '<div style="margin-top:9px"><button class="act primary" id="ask-btn">Ask</button></div>'
+    '<div id="ask-out"></div></div>'
+    '<p class="meta" style="margin-top:-6px">Using the AI key stored in this '
+    "browser, sent only to the AI service.</p></div>"
+)
+
+
+def library_shell(cfg):
+    """The library page for the website: every part of library_page except
+    the papers, which are private and are filled in by web/pf-web.js from the
+    private library repository once this browser is connected.
+
+    Built from the same helpers as library_page, so the two stay one page.
+    """
+    names = [ks.get("name", "") for ks in (cfg or {}).get("keyword_sets") or []
+             if ks.get("enabled", True)]
+    meta = {
+        "date_label": "your library",
+        "sources_label": "your library",
+        "digest_href": "latest.html",
+        "library_href": "library.html",
+        "library_needs_server": False,
+        "dashboard_href": "dashboard.html",
+        "show_scores": False,
+        "ai_label": ai.describe_model(cfg or {}) if cfg else "",
+    }
+    panel = digest_module.search_panel(
+        "Search your library", (("oa", "free full text only"),),
+    )
+    pills = "".join(
+        '<span class="pill%s" data-filter="%s">%s <b class="n">0</b></span>'
+        % (" on" if value == "all" else "", value, label)
+        for value, label in (("all", "all"),) + STATUS_LABELS
+    )
+    topics = [{"label": name, "href": "#", "count": None} for name in names]
+    return "\n".join(
+        [
+            '<!doctype html><html lang="en"><head><meta charset="utf-8">',
+            '<meta name="viewport" content="width=device-width, initial-scale=1">',
+            "<title>PaperFeed &mdash; library</title>",
+            "<style>%s%s%s%s</style></head><body class=\"shell\">"
+            % (digest_module.STYLE, digest_module.SHELL_CSS, LIBRARY_CSS, INJECTED_CSS),
+            digest_module.sidebar(meta, "library", topics=topics, extras=panel),
+            '<div class="wrap">',
+            "<h1>Your library</h1>",
+            '<p class="meta" id="pf-count-line">Connecting&hellip;</p>',
+            '<div id="pf-connect"></div>',
+            WEB_TOOLS,
+            '<div class="pills" hidden>%s</div>' % pills,
+            '<div id="pf-cards"></div>',
+            "</div>",
+            digest_module.shell_close(),
+            "<script>%s</script>" % digest_module.SHELL_JS,
+            '<script src="pf-web.js"></script>',
             "</body></html>",
         ]
     )

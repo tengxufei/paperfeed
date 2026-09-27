@@ -206,7 +206,7 @@ def build_dashboard(cfg, papers, window_papers, keyword_sets, hidden_count, meta
                  + [(name, land_per_set[name]) for name in names]),
         )
         index_rows = dashboard_module._history(cfg["digest_dir"])
-        summary = library.summary(cfg["library_path"])
+        summary = library.summary(pages_library(cfg))
         metrics_path = cfg.get("metrics", {}).get("path", "")
 
         pages = [(None, overall, land, "dashboard.html")]
@@ -234,7 +234,7 @@ def build_dashboard(cfg, papers, window_papers, keyword_sets, hidden_count, meta
                     "lookback_days": cfg["lookback_days"],
                 },
                 coll=collection.snapshot(
-                    cfg["library_path"], metrics_path, scope=scope
+                    pages_library(cfg), metrics_path, scope=scope
                 ),
                 history=history,
                 subject_cache=subject_cache,
@@ -474,6 +474,54 @@ def command_retro(args):
     log.info("Written: %s", path)
     print("\n%s found. Open %s" % (phrasing.count(len(papers), "paper"), path))
     print("Or with the server running: http://127.0.0.1:8931/%s" % name)
+    return 0
+
+
+def pages_library(cfg):
+    """The library the written pages may describe.
+
+    PAPERFEED_PUBLIC_PAGES is set where the digest and dashboards are
+    published on a public website (the GitHub Actions run). The library there
+    is private - it lives in its own repository - so the pages must carry
+    none of its titles, counts or unread list, and are built as if it were
+    empty. The email still describes it: that goes only to its owner.
+    """
+    return "" if os.environ.get("PAPERFEED_PUBLIC_PAGES") else cfg["library_path"]
+
+
+def command_library_sync(args):
+    """Copy the library between the private repository and library.db."""
+    cfg = load_config_or_exit(args.config)
+    setup_logging(cfg["log_path"], verbose=True)
+    import webstore
+    try:
+        remote = webstore.remote_from_env(args.repo)
+        if args.direction == "pull":
+            count = webstore.pull(cfg, remote)
+            log.info("Library: %s read from %s", phrasing.count(count, "paper"), remote.repo)
+        else:
+            result = webstore.push(cfg, remote)
+            wrote_settings = webstore.push_settings(cfg, remote)
+            log.info(
+                "Library: %s added, %s in all, %s%s",
+                phrasing.count(result["added"], "paper"),
+                phrasing.count(result["total"], "paper"),
+                "written to %s" % remote.repo if result["written"] else "nothing to write",
+                "; website settings updated" if wrote_settings else "",
+            )
+    except webstore.StoreError as error:
+        log.error("Library sync failed: %s", error)
+        return 1
+    return 0
+
+
+def command_build_site(args):
+    """Write the public website: the digests plus the library page shell."""
+    cfg = load_config_or_exit(args.config)
+    setup_logging(cfg["log_path"], verbose=True)
+    import website
+    count = website.build(cfg, args.out)
+    log.info("Website: %s written to %s", phrasing.count(count, "file"), args.out)
     return 0
 
 
@@ -740,7 +788,8 @@ def command_run(args):
         "ai_note": ai_note,
         "metrics_lines": metrics_module.describe(metrics_report),
         "ai_label": ai.describe_model(cfg) if used_ai else "",
-        "library_total": library.count(cfg["library_path"]),
+        "library_total": (library.count(pages_library(cfg))
+                          if pages_library(cfg) else None),
     }
     html_text = digest_module.render_html(groups, meta)
 
@@ -1646,6 +1695,20 @@ def main(argv=None):
     )
     search_parser.add_argument("--limit", type=int, default=25)
     search_parser.set_defaults(handler=command_search)
+
+    sync_parser = subparsers.add_parser(
+        "library-sync",
+        help="copy the library between library.db and its private GitHub repository",
+    )
+    sync_parser.add_argument("direction", choices=("pull", "push"))
+    sync_parser.add_argument("--repo", default=None,
+                             help="owner/name (default: $PAPERFEED_LIBRARY_REPO)")
+    sync_parser.set_defaults(handler=command_library_sync)
+
+    site_parser = subparsers.add_parser(
+        "build-site", help="write the public website into a folder")
+    site_parser.add_argument("out", help="folder to write the site into")
+    site_parser.set_defaults(handler=command_build_site)
 
     trends_parser = subparsers.add_parser(
         "trends", help="summarise the themes of the last few months"
