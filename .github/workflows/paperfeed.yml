@@ -68,10 +68,28 @@ jobs:
         with:
           path: app
 
+      # The memory branch. A new copy of this repository (a colleague's, made
+      # from the template) has none yet: the first run starts it, empty, and
+      # everything from the last lookback_days then counts as new.
       - uses: actions/checkout@v7
+        id: saved
+        continue-on-error: true
         with:
           ref: paperfeed-state
           path: saved
+
+      - uses: actions/checkout@v7
+        if: steps.saved.outcome == 'failure'
+        with:
+          path: saved
+
+      - name: Start the memory branch (first run only)
+        if: steps.saved.outcome == 'failure'
+        working-directory: saved
+        run: |
+          git switch --quiet --orphan paperfeed-state
+          mkdir -p state digests
+          echo "::notice::First run in this repository: starting the paperfeed-state branch. The error on the step above only means it did not exist yet. Everything from the last lookback_days counts as new this once."
 
       - uses: actions/setup-python@v7
         with:
@@ -117,7 +135,7 @@ jobs:
           json.dump(cfg, open("config.json", "w", encoding="utf-8"), indent=2)
           EOF
           mkdir -p state digests
-          cp ../../saved/state/*.json state/
+          cp ../../saved/state/*.json state/ 2>/dev/null || true
           if [ -d ../../saved/digests ]; then cp -R ../../saved/digests/. digests/; fi
           python paperfeed.py check
 
@@ -185,7 +203,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
           git commit --quiet -m "PaperFeed run $(date '+%Y-%m-%d %H:%M %Z')"
-          git push --quiet
+          git push --quiet origin HEAD:paperfeed-state
 
       # Sends back only what this run added (the collector's papers) plus the
       # badges and citation figures for every card, which the website cannot
