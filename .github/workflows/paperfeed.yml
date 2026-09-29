@@ -45,8 +45,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Pinned, not ubuntu-latest: GitHub moves that label to a new Ubuntu on its
+  # own schedule (announced for 19 Oct 2026), and a scheduled job is exactly
+  # where a surprise change of machine fails with nobody watching.
   run:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     outputs:
       site: ${{ steps.site.outputs.ready }}
@@ -89,7 +92,7 @@ jobs:
         run: |
           git switch --quiet --orphan paperfeed-state
           mkdir -p state digests
-          echo "::notice::First run in this repository: starting the paperfeed-state branch. The error on the step above only means it did not exist yet. Everything from the last lookback_days counts as new this once."
+          echo "::notice::First run in this repository: starting the paperfeed-state branch. The git errors in this summary (unknown revision HEAD, exit code 1) only mean it did not exist yet; they appear on this first run only. Everything from the last lookback_days counts as new this once."
 
       - uses: actions/setup-python@v7
         with:
@@ -288,7 +291,7 @@ jobs:
   publish:
     needs: run
     if: needs.run.outputs.site == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       pages: write         # to publish the site
       id-token: write      # GitHub's proof to Pages that this run is allowed to
