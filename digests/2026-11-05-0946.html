@@ -1,0 +1,765 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PaperFeed &mdash; Thursday 05 November 2026, 09:46</title>
+<style>
+:root { color-scheme: light dark; }
+* { box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  line-height: 1.55; margin: 0; padding: 24px 16px 64px;
+  background: #f6f7f9; color: #1a1a1a;
+}
+.wrap { max-width: 820px; margin: 0 auto; }
+
+/* jump-nav (A3) */
+.jump {
+  position: sticky; top: 0; z-index: 20; margin: 0 -16px 18px;
+  padding: 9px 16px; background: rgba(246,247,249,.94);
+  backdrop-filter: blur(6px); border-bottom: 1px solid #e0e3e8;
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  font-size: 12.5px;
+}
+.jump a { color: #33507a; text-decoration: none; padding: 3px 9px;
+          border-radius: 11px; background: #eceff3; }
+.jump a:hover { background: #dfe5ee; }
+.jump a b { color: #6a727c; font-weight: 600; }
+.jump .spacer { margin-left: auto; }
+.jump a.pf-page {
+  background: none; color: #6a727c; text-decoration: underline;
+  text-underline-offset: 3px; padding: 3px 4px; font-weight: 500;
+}
+.jump a.pf-page:hover { background: none; color: #11467f; }
+.jump .sep { color: #c3c8cf; }
+.jump label { cursor: pointer; user-select: none; color: #55606d; }
+
+/* compact mode (A1) - pure CSS, driven by a checkbox, so the file still
+   needs no JavaScript to work */
+#compact { position: absolute; opacity: 0; pointer-events: none; }
+#compact:checked ~ .wrap .paper,
+#compact:checked ~ .app .paper {
+  padding: 6px 12px; margin-bottom: 5px; border-radius: 5px;
+}
+#compact:checked ~ .wrap .paper .byline,
+#compact:checked ~ .wrap .paper .why,
+#compact:checked ~ .wrap .paper .chips,
+#compact:checked ~ .wrap .paper details,
+#compact:checked ~ .wrap .paper .ai-why,
+#compact:checked ~ .app .paper .byline,
+#compact:checked ~ .app .paper .why,
+#compact:checked ~ .app .paper .chips,
+#compact:checked ~ .app .paper .metrics,
+#compact:checked ~ .app .paper details,
+#compact:checked ~ .app .paper .ai-why { display: none; }
+#compact:checked ~ .wrap .paper .head,
+#compact:checked ~ .app .paper .head { align-items: center; }
+#compact:checked ~ .wrap .paper a.title,
+#compact:checked ~ .app .paper a.title { font-size: 14px; font-weight: 500; }
+#compact:checked ~ .wrap .paper .tags,
+#compact:checked ~ .app .paper .tags {
+  margin: 2px 0 0 48px; font-size: 11px; opacity: .8;
+}
+#compact:checked ~ .wrap .showing,
+#compact:checked ~ .app .showing { margin-bottom: 6px; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+.meta { color: #666; font-size: 13px; margin-bottom: 6px; }
+.counts { color: #666; font-size: 13px; margin: 0 0 24px; }
+.counts b { color: #333; }
+h2 {
+  font-size: 15px; text-transform: uppercase; letter-spacing: .06em;
+  color: #444; border-bottom: 2px solid #d8dadd;
+  padding-bottom: 6px; margin: 34px 0 12px;
+}
+h2 .count { color: #888; font-weight: normal; text-transform: none; letter-spacing: 0; }
+.highlights { border-bottom-color: #b98b3a; color: #8a6420; }
+details.set { margin: 0 0 18px; }
+details.set > summary {
+  list-style: none; cursor: pointer; user-select: none;
+  /* no `display` here: in WebKit it stops <summary> toggling at all */
+  padding: 11px 14px; border-radius: 8px;
+  background: #e9edf2; border: 1px solid #d6dbe2;
+  font-size: 15px; font-weight: 600; color: #26456f;
+}
+details.set > summary::-webkit-details-marker { display: none; }
+.setbar { display: flex; align-items: baseline; gap: 10px; }
+.setbar::before { content: "▸"; font-size: 12px; color: #7d8894;
+  transition: transform .15s ease; display: inline-block; }
+
+details.set[open] > summary .setbar::before { transform: rotate(90deg); }
+details.set > summary:hover { background: #dfe5ee; }
+.setcount {
+  margin-left: auto; font-weight: 600; font-size: 12px; color: #55606d;
+  background: #fff; border-radius: 10px; padding: 1px 9px;
+}
+.setbody { padding: 14px 0 0; }
+.showing { font-size: 12px; color: #7d8894; margin: 0 0 10px 2px; }
+details.rest > summary {
+  cursor: pointer; font-size: 13px; color: #11467f; padding: 8px 2px;
+  width: fit-content;
+}
+details.rest { margin-top: 4px; }
+.paper {
+  background: #fff; border: 1px solid #e2e4e8; border-radius: 8px;
+  padding: 14px 16px; margin-bottom: 12px;
+}
+.head { display: flex; gap: 10px; align-items: baseline; }
+.score {
+  flex: 0 0 auto; font-size: 12px; font-weight: 700; padding: 2px 8px;
+  border-radius: 10px; background: #eceff3; color: #63696f;
+}
+.score.strong { background: #d9ead3; color: #2c5d1e; }
+.score.ai { background: #ece3f5; color: #573a78; }
+.score.medium { background: #e8edf4; color: #33507a; }
+.paper a.title { font-size: 16.5px; font-weight: 600; color: #11467f;
+                 text-decoration: none; line-height: 1.35; }
+.paper a.title:hover { text-decoration: underline; }
+.byline { font-size: 13px; color: #555; margin: 5px 0 0; line-height: 1.45; }
+.affil { color: #777; font-style: italic; }
+.why { font-size: 12px; color: #6b7a52; margin: 5px 0 0; }
+.ai-why { font-size: 13px; color: #573a78; margin: 6px 0 0; }
+.theme { background: #fff; border: 1px solid #e2e4e8; border-radius: 8px;
+         padding: 18px 20px; margin-bottom: 16px; border-left: 4px solid #6f86a8; }
+.theme h3 { margin: 0 0 10px; font-size: 18px; color: #11467f;
+            line-height: 1.3; letter-spacing: -.01em; }
+.theme .num { display: inline-block; width: 26px; height: 26px; margin-right: 9px;
+              border-radius: 50%; background: #e8edf4; color: #33507a;
+              font-size: 13px; line-height: 26px; text-align: center;
+              font-weight: 700; vertical-align: 2px; }
+.theme p { line-height: 1.6; }
+.theme ol { margin: 0; padding-left: 20px; font-size: 13px; }
+.theme ol li { margin-bottom: 5px; }
+.theme .reflabel { font-size: 11.5px; text-transform: uppercase;
+                   letter-spacing: .05em; color: #77818d; margin: 12px 0 5px; }
+.theme p { margin: 0 0 10px; font-size: 14px; }
+.theme ol { margin: 0; padding-left: 20px; font-size: 13px; }
+.theme li { margin-bottom: 4px; }
+.cooling { font-size: 13px; color: #7a5a1e; border-left: 3px solid #d7b377;
+           padding-left: 10px; margin-top: 10px; }
+.tags { font-size: 12px; color: #777; margin-top: 6px; }
+.badge {
+  display: inline-block; padding: 1px 7px; border-radius: 10px;
+  background: #e8edf4; color: #33507a; font-weight: 600; margin-right: 6px;
+}
+.badge.preprint { background: #f4ecdf; color: #7a5a1e; }
+.badge.oa { background: #d9ead3; color: #2c5d1e; }
+.badge.kind { background: #efe7f4; color: #5c3f73; }
+.badge.new { background: #2c5d1e; color: #ffffff; letter-spacing: .04em; }
+.metrics { margin-top: 7px; display: flex; flex-wrap: wrap; gap: 5px; }
+.metric {
+  display: inline-block; font-size: 11.5px; padding: 2px 8px;
+  border-radius: 4px; background: #f2f5f9; color: #46505e;
+  border: 1px solid #e2e8f0; cursor: help;
+}
+.metric .src {
+  display: inline-block; margin-left: 6px; font-size: 10px;
+  color: #8a929c; text-transform: uppercase; letter-spacing: 0.02em;
+}
+.metric.quiet { background: #fafafa; color: #8a929c; font-style: italic; }
+.metric.bad { background: #fbe4e4; color: #8f2020; border-color: #f0c4c4;
+              font-weight: 600; }
+.metric.own { background: #fff6e5; border-color: #f0e0c0; color: #6b5320; }
+.sourced {
+  font-size: 12px; color: #6b727b; margin: 10px 0 0; line-height: 1.55;
+  border-left: 3px solid #dfe3e8; padding-left: 10px;
+}
+.score.ai .tag {
+  font-size: 8.5px; font-weight: 700; letter-spacing: .06em;
+  opacity: .8; margin-right: 3px; vertical-align: 1px;
+}
+.chips { margin-top: 8px; }
+.chip {
+  display: inline-block; font-size: 11px; padding: 1px 7px; margin: 0 4px 4px 0;
+  border-radius: 4px; background: #f0f1f3; color: #5a6068;
+}
+details { margin-top: 9px; }
+summary {
+  cursor: pointer; font-size: 13px; color: #11467f; outline: none;
+  width: fit-content;
+}
+details p { font-size: 13.5px; color: #333; margin: 8px 0 0; }
+.empty, .errors, .hidden-note {
+  background: #fff; border: 1px solid #e2e4e8; border-left: 4px solid #9aa3ad;
+  border-radius: 6px; padding: 14px 16px; font-size: 14px;
+}
+.errors { border-left-color: #c2703a; margin-bottom: 20px; }
+.hidden-note { border-left-color: #9aa3ad; margin-top: 24px; font-size: 13px; color: #555; }
+.footer { margin-top: 40px; font-size: 12px; color: #888; }
+.footer a { color: #11467f; }
+@media (max-width: 480px) {
+  body { padding: 16px 12px 48px; }
+  .paper { padding: 12px; }
+  .paper a.title { font-size: 17px; }
+  summary { padding: 6px 0; }
+}
+@media print {
+  body { background: #fff; color: #000; padding: 0; }
+  .jump, .pf-bar, .pf-save { display: none !important; }
+  .paper { break-inside: avoid; border-color: #ccc; box-shadow: none; }
+  details { display: block; }
+  details > summary { display: none; }
+  a { color: #000; text-decoration: none; }
+  .paper a.title::after { content: " (" attr(href) ")"; font-size: 10px;
+                          font-weight: 400; color: #555; word-break: break-all; }
+}
+@media (prefers-color-scheme: dark) {
+  body { background: #16181c; color: #e6e6e6; }
+  .jump { background: rgba(22,24,28,.94); border-bottom-color: #2e333a; }
+  .jump a { background: #282c33; color: #9dbbe4; }
+  .jump a:hover { background: #333941; }
+  .jump label { color: #98a0a8; }
+  h2 { color: #b9bec6; border-bottom-color: #33373d; }
+  .highlights { color: #d8ab63; border-bottom-color: #7a5a1e; }
+  .paper, .empty, .errors, .hidden-note { background: #1f2228; border-color: #33373d; }
+  .paper a.title { color: #86b3ec; }
+  .byline { color: #a8aeb6; }
+  .affil { color: #8d949c; }
+  .why { color: #9fb07f; }
+  details p { color: #c9ced5; }
+  .badge { background: #2a3547; color: #9dbbe4; }
+  .badge.preprint { background: #3b3325; color: #d7b377; }
+  .badge.oa { background: #26381f; color: #a6cf92; }
+  .badge.kind { background: #322a3d; color: #c0a6dd; }
+  .badge.new { background: #3f7a2c; color: #ffffff; }
+  .metric { background: #23272e; color: #a8b0ba; border-color: #32373f; }
+  .metric .src { color: #767d87; }
+  .metric.quiet { background: #1e2126; color: #767d87; }
+  .metric.bad { background: #3a2222; color: #e8a0a0; border-color: #543030; }
+  .metric.own { background: #332c1e; border-color: #4a4130; color: #d7b377; }
+  .sourced { color: #8d949c; border-left-color: #353a42; }
+  .chip { background: #282c33; color: #9aa1aa; }
+  .score { background: #282c33; color: #9aa1aa; }
+  .score.strong { background: #26381f; color: #a6cf92; }
+  .score.ai { background: #322a3d; color: #c0a6dd; }
+  details.set > summary { background: #23272e; border-color: #353a42; color: #a8c4e8; }
+  details.set > summary:hover { background: #2a2f37; }
+  .setcount { background: #16181c; color: #98a0a8; }
+  .showing { color: #79828d; }
+  .ai-why { color: #c0a6dd; }
+  .theme { background: #1f2228; border-color: #33373d; }
+  .theme h3 { color: #86b3ec; }
+  .score.medium { background: #2a3547; color: #9dbbe4; }
+  .counts b { color: #d8dce1; }
+  .meta, .counts, .hidden-note { color: #98a0a8; }
+}
+
+:root {
+  --rail: 248px; --ink: #1a1a1a; --dim: #6a727c; --line: #e2e5ea;
+  --panel: #ffffff; --page: #f6f7f9; --accent: #11467f; --accent-soft: #eaf0f8;
+}
+body.shell { padding: 0; }
+.app { display: flex; align-items: flex-start; min-height: 100vh; }
+.side {
+  width: var(--rail); flex: 0 0 var(--rail); align-self: stretch;
+  background: var(--panel); border-right: 1px solid var(--line);
+  padding: 20px 16px 40px; position: sticky; top: 0; height: 100vh;
+  overflow-y: auto; box-sizing: border-box;
+}
+.main { flex: 1 1 auto; min-width: 0; padding: 22px 18px 64px; }
+.main > .wrap { max-width: 860px; margin: 0 auto; }
+
+.brand { display: flex; align-items: baseline; gap: 8px; margin: 0 0 2px; }
+.brand b { font-size: 17px; letter-spacing: -0.01em; color: var(--ink); }
+.brand span { font-size: 11px; color: var(--dim); }
+.side .when { font-size: 11.5px; color: var(--dim); margin: 0 0 18px; }
+
+.rail-h {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em;
+  color: #9aa1aa; margin: 20px 0 7px; font-weight: 600;
+}
+.rail-nav { display: flex; flex-direction: column; gap: 1px; }
+.rail-nav a {
+  display: flex; align-items: center; gap: 9px; padding: 7px 9px;
+  border-radius: 7px; text-decoration: none; font-size: 13.5px;
+  color: #3d4550;
+}
+.rail-nav a:hover { background: #f1f3f6; }
+.rail-nav a.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.rail-nav a .ico { width: 15px; text-align: center; opacity: .75; font-size: 13px; }
+.rail-nav a .n {
+  margin-left: auto; font-size: 11px; color: var(--dim);
+  background: #f0f2f5; border-radius: 9px; padding: 0 6px; font-weight: 600;
+}
+.rail-nav a.on .n { background: #ffffff; color: var(--accent); }
+.rail-nav a.off { opacity: .45; cursor: help; }
+
+.rail-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.rail-stat {
+  background: #f7f8fa; border: 1px solid var(--line); border-radius: 7px;
+  padding: 7px 8px;
+}
+.rail-stat b { display: block; font-size: 16px; line-height: 1.2; color: var(--ink); }
+.rail-stat span { font-size: 10.5px; color: var(--dim); }
+
+.key { font-size: 11.5px; color: var(--dim); line-height: 1.5; }
+.key .row { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
+.key .row > :first-child { flex: 0 0 auto; margin-top: 1px; }
+
+.filterbox {
+  width: 100%; box-sizing: border-box; font: inherit; font-size: 13px;
+  padding: 7px 10px; border: 1px solid var(--line); border-radius: 7px;
+  background: #fbfbfc; color: var(--ink);
+}
+.filterbox:focus { outline: none; border-color: #b9c8dd; background: #fff; }
+.viewopts { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; }
+.viewopts label {
+  display: flex; align-items: center; gap: 7px; cursor: pointer;
+  color: #46505e; user-select: none;
+}
+.switch .dot {
+  width: 26px; height: 15px; border-radius: 8px; background: #d8dde4;
+  position: relative; transition: background .15s; flex: 0 0 auto;
+}
+.switch .dot::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 11px;
+  height: 11px; border-radius: 50%; background: #fff; transition: left .15s;
+}
+#compact:checked ~ .app .switch .dot { background: #5b87c4; }
+#compact:checked ~ .app .switch .dot::after { left: 13px; }
+.hitcount { font-size: 11.5px; color: var(--dim); margin: 8px 0 0; }
+
+/* topic tabs */
+.tabs {
+  display: flex; gap: 6px; margin: 0 0 16px; padding-bottom: 2px;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin; border-bottom: 1px solid var(--line);
+}
+.tabs .tab {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 13px; border-radius: 7px 7px 0 0; font-size: 13px;
+  color: #46505e; text-decoration: none; white-space: nowrap;
+  border: 1px solid transparent; border-bottom: none; margin-bottom: -1px;
+}
+.tabs .tab:hover { background: #eef1f5; }
+.tabs .tab b {
+  font-size: 10.5px; font-weight: 600; color: var(--dim);
+  background: #eef1f5; border-radius: 9px; padding: 1px 6px;
+}
+.tabs .tab.on {
+  background: var(--panel); color: var(--accent); font-weight: 600;
+  border-color: var(--line); border-bottom: 1px solid var(--panel);
+}
+.tabs .tab.on b { background: var(--accent-soft); color: var(--accent); }
+@media (prefers-color-scheme: dark) {
+  .tabs .tab { color: #b9c0c8; }
+  .tabs .tab:hover { background: #22262c; }
+  .tabs .tab b { background: #23272e; }
+}
+
+/* The drawer button and scrim exist only on narrow screens. */
+#navtoggle { position: absolute; opacity: 0; pointer-events: none; }
+.topbar { display: none; }
+.scrim { display: none; }
+
+@media (max-width: 899px) {
+  .side {
+    position: fixed; z-index: 60; top: 0; left: 0; bottom: 0; height: 100%;
+    transform: translateX(-100%); transition: transform .18s ease-out;
+    box-shadow: 0 0 24px rgba(0,0,0,.14);
+  }
+  #navtoggle:checked ~ .app .side { transform: none; }
+  #navtoggle:checked ~ .app .scrim {
+    display: block; position: fixed; inset: 0; z-index: 50;
+    background: rgba(20,24,30,.34);
+  }
+  .main { padding-top: 8px; }
+  .topbar {
+    display: flex; align-items: center; gap: 10px; position: sticky; top: 0;
+    z-index: 30; margin: -8px -18px 12px; padding: 9px 14px;
+    background: rgba(246,247,249,.95); backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar label.burger {
+    cursor: pointer; font-size: 17px; line-height: 1; padding: 3px 9px;
+    border: 1px solid var(--line); border-radius: 7px; background: #fff;
+    color: #3d4550;
+  }
+  .topbar .here { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e7e9ec; --dim: #8d949c; --line: #2c3037; --panel: #1a1d22;
+    --page: #14161a; --accent: #9dbbe4; --accent-soft: #23303f;
+  }
+  .rail-nav a { color: #b9c0c8; }
+  .rail-nav a:hover { background: #22262c; }
+  .rail-nav a .n { background: #23272e; color: #8d949c; }
+  .rail-nav a.on .n { background: #14161a; color: var(--accent); }
+  .rail-stat { background: #1e2126; border-color: #2c3037; }
+  .filterbox { background: #1e2126; border-color: #2c3037; color: #e7e9ec; }
+  .filterbox:focus { background: #23272e; border-color: #3d4550; }
+  .viewopts label { color: #b9c0c8; }
+  .switch .dot { background: #363b43; }
+  .topbar { background: rgba(20,22,26,.95); }
+  .topbar label.burger { background: #1a1d22; color: #b9c0c8; }
+}
+</style></head><body class="shell">
+<input type="checkbox" id="compact">
+<input type="checkbox" id="navtoggle">
+<div class="app">
+<label class="scrim" for="navtoggle"></label>
+<aside class="side">
+<p class="brand"><b>PaperFeed</b><span>PubMed and Preprints</span></p>
+<p class="when">Thursday 05 November 2026, 09:46</p>
+<div class="rail-nav">
+<a class="on" href="latest.html"><span class="ico">&#9635;</span>Digest<span class="n">18</span></a>
+<a class="" href="/library" data-needs-server><span class="ico">&#9733;</span>Library</a>
+<a class="" href="dashboard.html"><span class="ico">&#9680;</span>Dashboard</a>
+<a class="" href="index.html"><span class="ico">&#9776;</span>All digests</a>
+</div>
+<p class="rail-h">At a glance</p><div class="rail-stats">
+<div class="rail-stat"><b>18</b><span>in the last 3 days</span></div>
+<div class="rail-stat"><b>18</b><span>new to you</span></div>
+<div class="rail-stat"><b>4</b><span>from Preprint</span></div>
+<div class="rail-stat"><b>14</b><span>from PubMed</span></div>
+<div class="rail-stat"><b>5</b><span>hidden by filters</span></div>
+</div>
+<p class="rail-h">Topics</p><div class="rail-nav">
+<a class="" href="#s-de-novo-protein-design"><span class="ico">&#8226;</span>de novo protein design<span class="n">2</span></a>
+<a class="" href="#s-protein-language-models"><span class="ico">&#8226;</span>protein language models<span class="n">8</span></a>
+<a class="" href="#s-idh1-glioblastoma"><span class="ico">&#8226;</span>IDH1 glioblastoma<span class="n">6</span></a>
+<a class="" href="#s-de-novo-nanobody-design"><span class="ico">&#8226;</span>de novo nanobody design<span class="n">2</span></a>
+</div>
+<p class="rail-h">Filter</p><input class="filterbox" type="search" placeholder="Filter these papers" aria-label="Filter these papers"><div class="viewopts" style="margin-top:8px"><label><input type="checkbox" data-rule="oa">free full text only</label><label><input type="checkbox" data-rule="primary">hide reviews and comments</label><label><input type="checkbox" data-rule="nonew">hide papers too new to be cited</label></div><p class="hitcount"></p><p class="rail-h">View</p><div class="viewopts"><label class="switch" for="compact"><span class="dot"></span>compact list</label></div>
+<p class="rail-h">Relevance scoring</p>
+<div class="key"><div class="row"><span></span><span>Both numbers estimate how closely a paper matches <b>what you asked for</b>. Neither is a judgement of the paper itself &mdash; for that, look at the citation and journal figures on each card.</span></div><div class="row"><span class="score ai"><span class="tag">AI</span>9</span><span><b>Relevance judged by Gemini (gemini-3.1-flash-lite)</b>, 0&ndash;10, against the <b>interests</b> you wrote for this topic. It reads the title and abstract, so it can tell a paper that is about your question from one that merely mentions it.</span></div><div class="row"><span class="score strong" style="--fill:80%">8.0</span><span><b>Relevance measured by PaperFeed</b>, 0&ndash;10, by where your query's terms appear: a concept in the <b>title</b> scores 4, a <b>MeSH heading</b> 2, a mention in the <b>abstract</b> 1, an <b>author you follow</b> 3. No judgement, no model &mdash; just arithmetic you can check, and the reasons are printed under every title.</span></div><div class="row"><span></span><span>Papers are ordered by the AI score where there is one, and by PaperFeed's own score otherwise.</span></div></div>
+</aside>
+<main class="main">
+<div class="topbar"><label class="burger" for="navtoggle">&#9776;</label><span class="here">Digest</span></div>
+<div class="wrap">
+<h1>PaperFeed</h1>
+<p class="meta">Thursday 05 November 2026, 09:46 &middot; 18 papers from the last 3 days, all new to you</p>
+<p class="counts"><b>4</b> from Preprint &middot; <b>14</b> from PubMed &middot; <b>5</b> hidden by your filters</p>
+<nav class="tabs"><a class="tab on" href="#" data-topic="">All topics<b>18</b></a><a class="tab" href="#s-de-novo-protein-design" data-topic="s-de-novo-protein-design">de novo protein design<b>2&middot;2 new</b></a><a class="tab" href="#s-protein-language-models" data-topic="s-protein-language-models">protein language models<b>8&middot;8 new</b></a><a class="tab" href="#s-idh1-glioblastoma" data-topic="s-idh1-glioblastoma">IDH1 glioblastoma<b>6&middot;6 new</b></a><a class="tab" href="#s-de-novo-nanobody-design" data-topic="s-de-novo-nanobody-design">de novo nanobody design<b>2&middot;2 new</b></a></nav>
+<p class="sourced">Citation and journal figures for 16 of the 18 papers below are read from OpenAlex (CC0) on 2026-11-05. The rest are not in OpenAlex or could not be looked up.<br><em>These are triage signals, not verdicts. A journal-level number says nothing about any single paper, and OpenAlex&#x27;s mean citedness counts every meeting abstract a journal prints, so journals with large abstract supplements read far below their reputation.</em></p>
+<details class="set" id="s-de-novo-protein-design" open><summary><div class="setbar">
+<span>de novo protein design</span>
+<span class="setcount">2 &middot; 2 new</span></div></summary><div class="setbody">
+<div class="paper" data-doi="10.1371/journal.pcbi.1014931">
+<div class="head"><span class="score ai" title="Gemini (gemini-3.1-flash-lite)"><span class="tag">AI</span>2</span><span class="score" style="--fill:20%" title="PaperFeed&#x27;s own score out of 10 - &#x27;ProteinMPNN&#x27; in abstract; published 2 days ago">2.0</span><a class="title" href="https://doi.org/10.1371/journal.pcbi.1014931">Folding without glutamine: Proteome-scale removal of a canonical amino acid.</a></div>
+<p class="byline">Garciarrubio A, Ramos-Cerrillo B, Morett E, Segovia L <span class="affil">&mdash; Instituto de Biotecnología</span></p>
+<p class="ai-why">Focuses on proteome-scale amino acid removal rather than new binder-design methods or experimental success rates for binding.</p>
+<p class="why">&#x27;ProteinMPNN&#x27; in abstract; published 2 days ago</p>
+<div class="tags"><span class="badge new">new</span> <span class="badge">PubMed</span> <a class="badge oa" href="https://doi.org/10.1371/journal.pcbi.1014931">free full text</a>PLoS computational biology &middot; 2026-11-03 &middot; doi:10.1371/journal.pcbi.1014931</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span><span class="metric" title="OpenAlex 2-year mean citedness for PLoS Computational Biology. It counts EVERY item the journal publishes, meeting abstracts and errata included, so journals with large abstract supplements read far below their reputation. Not an Impact Factor.">journal citedness 5.1 over 12,953 works<span class="src">OpenAlex</span></span><span class="metric" title="Listed in the Directory of Open Access Journals.">in DOAJ<span class="src">OpenAlex</span></span></div>
+
+<details><summary>Abstract</summary><p>All known life uses a canonical alphabet of 20 amino acids, yet which residues are structurally essential remains untested at proteome scale. Isoleucine was recently eliminated from ribosomal proteins in Escherichia coli, establishing that amino acid alphabet reduction is feasible. Here we ask whether an entire amino acid can be eliminated from a proteome, and develop a computational framework to identify the best target. Using two independent approaches - ProteinMPNN structure-based probabilities and multiple sequence alignment conservation - we define &quot;keep-score&quot; as the fraction of positions where the native residue is optimal. Both methods converge on an unexpected candidate: glutamine…</p></details>
+<script type="application/json" class="pf-paper">{"title": "Folding without glutamine: Proteome-scale removal of a canonical amino acid.", "authors": ["Garciarrubio A", "Ramos-Cerrillo B", "Morett E", "Segovia L"], "abstract": "All known life uses a canonical alphabet of 20 amino acids, yet which residues are structurally essential remains untested at proteome scale. Isoleucine was recently eliminated from ribosomal proteins in Escherichia coli, establishing that amino acid alphabet reduction is feasible. Here we ask whether an entire amino acid can be eliminated from a proteome, and develop a computational framework to identify the best target. Using two independent approaches - ProteinMPNN structure-based probabilities and multiple sequence alignment conservation - we define \"keep-score\" as the fraction of positions where the native residue is optimal. Both methods converge on an unexpected candidate: glutamine has the lowest keep-score, with proline and glycine the highest - counter to substitution-matrix intuition. Glutamine's low keep-score is not explained by a single obvious substitute; glutamate is preferred in only 14% of replacements. Removing this target proteome-wide, we replaced every glutamine across 4,148 proteins with ProteinMPNN-optimal alternatives and modeled the resulting sequences with AlphaFold2. The recoded proteome maintained native-like structures: 85.5% of models exceeded a TMscore of 0.8, indistinguishable from the 85.9% baseline for rebuilt native sequences. Orthogonal validation - ESMFold predictions, Rosetta energy calculations, and conformational ensemble comparisons - revealed no evidence of systematic misfolding attributable to glutamine removal. As a consistency check, a glutamine-free TEM-1 \u03b2-lactamase designed with ProteinMPNN conferred ampicillin resistance in E. coli, indicating fold preservation can extend to biological function. Evolutionary evidence further supports these findings: 24% of E. coli proteins have glutamine-free orthologs in prokaryotic genomes, and glutamine ranks lowest in keep-score in Saccharomyces cerevisiae. These results show that an entire amino acid can be removed from a proteome with folds broadly preserved, establishing keep-score as a general framework and glutamine as the primary candidate for recoding. Crucially, this reflects a computational analysis of structural replaceability, not a demonstration of biological dispensability.", "doi": "10.1371/journal.pcbi.1014931", "url": "https://doi.org/10.1371/journal.pcbi.1014931", "published": "2026-11-03", "venue": "PLoS computational biology", "source": "PubMed", "set_name": "de novo protein design", "score": 2.0}</script>
+</div>
+<div class="paper" data-doi="10.3389/fmolb.2026.1930582" data-secondary="1">
+<div class="head"><span class="score ai" title="Gemini (gemini-3.1-flash-lite)"><span class="tag">AI</span>1</span><span class="score" style="--fill:20%" title="PaperFeed&#x27;s own score out of 10 - &#x27;de novo protein design&#x27; in abstract; published yesterday">2.0</span><a class="title" href="https://doi.org/10.3389/fmolb.2026.1930582">Bone morphogenetic protein 4 meets artificial intelligence: a comprehensive review of AI-driven advances in drug discovery, structural modeling, and clinical translation.</a></div>
+<p class="byline">Sun W, Huo T, Ye Z, Wei W, Sun Y, Cai H <span class="affil">&mdash; School of Traditional Chinese and Western Medicine</span></p>
+<p class="ai-why">This is a broad review on a single target; it lacks the methodology or experimental success rates you need.</p>
+<p class="why">&#x27;de novo protein design&#x27; in abstract; published yesterday</p>
+<div class="tags"><span class="badge new">new</span> <span class="badge">PubMed</span> <span class="badge kind">Review</span> <a class="badge oa" href="https://www.ncbi.nlm.nih.gov/pmc/articles/PMC13728478/">free full text</a>Frontiers in molecular biosciences &middot; 2026-11-04 &middot; doi:10.3389/fmolb.2026.1930582</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span><span class="metric" title="OpenAlex 2-year mean citedness for Frontiers in Molecular Biosciences. It counts EVERY item the journal publishes, meeting abstracts and errata included, so journals with large abstract supplements read far below their reputation. Not an Impact Factor.">journal citedness 4.8 over 6,257 works<span class="src">OpenAlex</span></span><span class="metric" title="Listed in the Directory of Open Access Journals.">in DOAJ<span class="src">OpenAlex</span></span></div>
+<div class="chips"><span class="chip">AlphaFold</span><span class="chip">BMP4</span><span class="chip">artificial intelligence</span><span class="chip">drug discovery</span><span class="chip">machine learning</span></div>
+<details><summary>Abstract</summary><p>Bone Morphogenetic Protein 4 (BMP4), a member of the transforming growth factor-beta (TGF-β) superfamily, plays pivotal roles in embryonic development, tissue homeostasis, and disease pathogenesis-including cancer, fibrosis, and fibrodysplasia ossificans progressiva (FOP). The rapid advancement of artificial intelligence (AI) and machine learning (ML) methodologies over the past 5 years has created unprecedented opportunities for understanding and therapeutically targeting BMP4 biology at multiple scales, from atomic-resolution structure prediction to population-level clinical prognostication. This review systematically examines the intersection of BMP4 biology and AI across three core…</p></details>
+<script type="application/json" class="pf-paper">{"title": "Bone morphogenetic protein 4 meets artificial intelligence: a comprehensive review of AI-driven advances in drug discovery, structural modeling, and clinical translation.", "authors": ["Sun W", "Huo T", "Ye Z", "Wei W", "Sun Y", "Cai H"], "abstract": "Bone Morphogenetic Protein 4 (BMP4), a member of the transforming growth factor-beta (TGF-\u03b2) superfamily, plays pivotal roles in embryonic development, tissue homeostasis, and disease pathogenesis-including cancer, fibrosis, and fibrodysplasia ossificans progressiva (FOP). The rapid advancement of artificial intelligence (AI) and machine learning (ML) methodologies over the past 5 years has created unprecedented opportunities for understanding and therapeutically targeting BMP4 biology at multiple scales, from atomic-resolution structure prediction to population-level clinical prognostication. This review systematically examines the intersection of BMP4 biology and AI across three core domains: (1) AI-driven drug discovery targeting BMP4 signaling pathways, (2) deep learning-based protein structure prediction and computational modeling of BMP4 and its receptor complexes, and (3) clinical AI applications for BMP4-associated diseases. A narrative review with systematic search elements was conducted across PubMed, Scopus, Web of Science, bioRxiv, and arXiv for English-language publications from 2020 to 2026, supplemented by targeted searches via Semantic Scholar. Included studies were categorized as BMP4-specific, BMP receptor/BMP-pathway-targeted, or transferable AI methodology not yet applied to BMP4. We find that AI has accelerated BMP4-related research along multiple axes, though with important caveats. AlphaFold3 and related tools have generated high-confidence predicted models of BMP4-receptor complex architecture, aspects of which were previously intractable to experimental structure determination; these predictions remain to be fully validated experimentally. ML-guided virtual screening has identified first-in-class BMP pathway (receptor) modulators for FOP, although BMP4-specific small-molecule modulators have not yet been identified computationally. Single-cell transcriptomics combined with machine learning have revealed BMP4's context-dependent roles in glioblastoma cell state transitions and cancer-associated fibroblast biology; and LASSO-Cox regression models incorporating BMP4 expression have shown promising prognostic value in pancreatic adenocarcinoma and gastric cancer, pending prospective validation. Significant gaps persist-most notably the absence of BMP4-specific de novo protein design efforts, the scarcity of large-scale training datasets for BMP4-targeted drug discovery, and the limited integration of multimodal AI approaches in BMP4 clinical research. The convergence of BMP4 biology and AI represents a fertile research Frontier. While foundational tools are now in place, realizing the full translational potential of AI-augmented BMP4 research will require coordinated efforts in data generation, model development, and rigorous experimental and clinical validation. We outline priority directions for the next 5 years (approximately 2026-2031).", "doi": "10.3389/fmolb.2026.1930582", "url": "https://doi.org/10.3389/fmolb.2026.1930582", "published": "2026-11-04", "venue": "Frontiers in molecular biosciences", "source": "PubMed", "set_name": "de novo protein design", "score": 2.0}</script>
+</div>
+</div></details>
+<details class="set" id="s-protein-language-models" open><summary><div class="setbar">
+<span>protein language models</span>
+<span class="setcount">8 &middot; 8 new</span></div></summary><div class="setbody">
+<p class="showing">Top 5 of 8, best first</p>
+<div class="paper" data-doi="10.64898/2026.10.31.763384">
+<div class="head"><span class="score ai" title="Gemini (gemini-3.1-flash-lite)"><span class="tag">AI</span>8</span><span class="score medium" style="--fill:50%" title="PaperFeed&#x27;s own score out of 10 - &#x27;protein language model&#x27; in title; published 2 days ago">5.0</span><a class="title" href="https://doi.org/10.64898/2026.10.31.763384">Parameter-Efficient Adaptation of Protein Language Models for Dual-Target Antimicrobial Peptide Discovery Under Strict Homology Constraints</a></div>
+<p class="byline">Jat R, Ejaz SR</p>
+<p class="ai-why">Addresses multi-task parameter efficiency and performance failures under homology constraints; directly relevant to your interest in model limitations.</p>
+<p class="why">&#x27;protein language model&#x27; in title; published 2 days ago</p>
+<div class="tags"><span class="badge new">new</span> <span class="badge preprint">Preprint</span> <a class="badge oa" href="https://doi.org/10.64898/2026.10.31.763384">free full text</a>bioRxiv &middot; 2026-11-03 &middot; doi:10.64898/2026.10.31.763384</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span></div>
+
+<details><summary>Abstract</summary><p>The worldwide escalation of antimicrobial resistance (AMR) poses a severe challenge to modern public health, necessitating novel classes of therapeutic agents. Antimicrobial peptides (AMPs) represent highly promising alternatives to small-molecule antibiotics due to their co-evolutionary resilience and rapid membrane disruption dynamics. However, translating computational AMP leads into clinical drug candidates remains bottlenecked by off-target cytotoxicity, predominantly hemolytic activity against mammalian erythrocytes. Although pretrained foundational protein language models (PLMs) have rapidly advanced molecular property prediction, current architectures frequently isolate…</p></details>
+<script type="application/json" class="pf-paper">{"title": "Parameter-Efficient Adaptation of Protein Language Models for Dual-Target Antimicrobial Peptide Discovery Under Strict Homology Constraints", "authors": ["Jat R", "Ejaz SR"], "abstract": "The worldwide escalation of antimicrobial resistance (AMR) poses a severe challenge to modern public health, necessitating novel classes of therapeutic agents. Antimicrobial peptides (AMPs) represent highly promising alternatives to small-molecule antibiotics due to their co-evolutionary resilience and rapid membrane disruption dynamics. However, translating computational AMP leads into clinical drug candidates remains bottlenecked by off-target cytotoxicity, predominantly hemolytic activity against mammalian erythrocytes. Although pretrained foundational protein language models (PLMs) have rapidly advanced molecular property prediction, current architectures frequently isolate antibacterial potency and cytotoxicity into disconnected single-task pipelines or succumb to catastrophic performance drops under strict homology-controlled evaluations. Recently, the Quantitative Mapping of Antimicrobial Peptides (QMAP) benchmark proposed that frozen PLM embeddings show weak linearly accessible features for hemolytic activity (HC50) resulting in poor rank correlation (\u03c1 \u003c 0.25) on out-of-distribution sequence splits. In this work, we introduce an end-to-end multi-task parameter-efficient transfer learning framework designed to simultaneously optimize antibacterial potency and minimize mammalian cytotoxicity without sequence leakage. Built upon ESM-2 (150M), our architecture incorporates Low-Rank Adaptation (LoRA) into self-attention projections, fine-tuning approx 0.70% of model weights. To restore gradient interference originating from disparate membrane lysis mechanisms, we implement an adaptive multi-task loss guided by Kendall homoscedastic uncertainty weighting. Evaluated across predefined QMAP benchmark splits enforcing a 60% maximal sequence identity threshold, our joint architecture remarkably outperforms conventional linear probes, tree-based regressors, and frozen foundational models. The framework achieves an E. coli potency rank correlation of \u03c1 = 0.6132 (r = 0.6816) and successfully elevates hemolytic toxicity correlation to \u03c1 = 0.5374 (r = 0.5541). To establish real world utility, we deploy the optimized joint network to screen a curated in silico library of 749 de-novo designed peptides, successfully isolating selective cationic-amphipathic candidates possessing Therapeutic Indices (TI = HC50/MIC) up to 144.03 while effectively deprioritizing broadly lytic motifs (TI \u003c 2.0). These findings demonstrate that parameter-efficient adaptation unlocks fine-grained bioactive structural semantics in foundational PLMs, providing an accurate, scalable framework for therapeutic peptide engineering.", "doi": "10.64898/2026.10.31.763384", "url": "https://doi.org/10.64898/2026.10.31.763384", "published": "2026-11-03", "venue": "bioRxiv", "source": "Preprint", "set_name": "protein language models", "score": 5.0}</script>
+</div>
+<div class="paper" data-doi="10.1093/bioinformatics/btag804">
+<div class="head"><span class="score ai" title="Gemini (gemini-3.1-flash-lite)"><span class="tag">AI</span>7</span><span class="score" style="--fill:20%" title="PaperFeed&#x27;s own score out of 10 - &#x27;protein language model&#x27; in abstract; published 3 days ago">2.0</span><a class="title" href="https://doi.org/10.1093/bioinformatics/btag804">Domain-Aware Enzyme Classification via Multiple Instance Learning.</a></div>
+<p class="byline">Xiao Q, Ye Y, Tang H <span class="affil">&mdash; Luddy School of Informatics</span></p>
+<p class="ai-why">Concrete architectural shift using multiple instance learning to address sequence-level embedding limitations; highly applicable.</p>
+<p class="why">&#x27;protein language model&#x27; in abstract; published 3 days ago</p>
+<div class="tags"><span class="badge new">new</span> <span class="badge">PubMed</span> <a class="badge oa" href="https://doi.org/10.1093/bioinformatics/btag804">free full text</a>Bioinformatics (Oxford, England) &middot; 2026-11-02 &middot; doi:10.1093/bioinformatics/btag804</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span><span class="metric" title="OpenAlex 2-year mean citedness for Bioinformatics. It counts EVERY item the journal publishes, meeting abstracts and errata included, so journals with large abstract supplements read far below their reputation. Not an Impact Factor.">journal citedness 7.0 over 19,600 works<span class="src">OpenAlex</span></span><span class="metric" title="Listed in the Directory of Open Access Journals.">in DOAJ<span class="src">OpenAlex</span></span></div>
+<div class="chips"><span class="chip">Enzyme Commission (EC) numbers</span><span class="chip">enzyme function prediction</span><span class="chip">multiple instance learning</span><span class="chip">protein domains</span></div>
+<details><summary>Abstract</summary><p>Accurate Enzyme Commission (EC) number prediction is fundamental to protein function annotation and metabolic pathway reconstruction. Recent methods based on protein language model embeddings or 3D structure have improved EC prediction, but important limitations remain. Whole-sequence embeddings can dilute local functional signals, such as catalytic residues and functional domains, whereas structure-based methods depend on accurate protein structures and are therefore difficult to apply broadly. We present MIL-BC, a multiple instance learning framework for EC prediction that models each protein as a bag of domains rather than a single sequence-level object. This design is motivated by the…</p></details>
+<script type="application/json" class="pf-paper">{"title": "Domain-Aware Enzyme Classification via Multiple Instance Learning.", "authors": ["Xiao Q", "Ye Y", "Tang H"], "abstract": "Accurate Enzyme Commission (EC) number prediction is fundamental to protein function annotation and metabolic pathway reconstruction. Recent methods based on protein language model embeddings or 3D structure have improved EC prediction, but important limitations remain. Whole-sequence embeddings can dilute local functional signals, such as catalytic residues and functional domains, whereas structure-based methods depend on accurate protein structures and are therefore difficult to apply broadly. We present MIL-BC, a multiple instance learning framework for EC prediction that models each protein as a bag of domains rather than a single sequence-level object. This design is motivated by the observation that enzymatic function is often determined by constituent functional domains instead of the full-length sequence alone. Domain instances are generated automatically using our DCTdomain algorithm, avoiding dependence on curated domain annotations. MIL-BC aggregates domain-level evidence into protein-level EC predictions and assigns interpretable weights to domains that contribute most strongly to each prediction. We further combine the domain embedding with global embedding in MIL-BC+. MIL-BC+ achieved F1 improvements of 0.03 - 0.17 over the sequence-based baseline on all four test sets. The largest gains were observed for proteins with multiple enzymatic functions, where domain-level modeling better separates mixed functional signals. These results show that domain-centric multiple instance learning is an accurate and interpretable strategy for enzyme classification. By improving EC prediction without requiring structural data or curated domain labels, MIL-BC provides a scalable framework for large-scale protein function annotation. Code is available as a GitHub repository at https://github.com/omics-ai/enzyme-mil.git.", "doi": "10.1093/bioinformatics/btag804", "url": "https://doi.org/10.1093/bioinformatics/btag804", "published": "2026-11-02", "venue": "Bioinformatics (Oxford, England)", "source": "PubMed", "set_name": "protein language models", "score": 2.0}</script>
+</div>
+<div class="paper" data-doi="10.1093/bioadv/vbag296">
+<div class="head"><span class="score ai" title="Gemini (gemini-3.1-flash-lite)"><span class="tag">AI</span>6</span><span class="score medium" style="--fill:50%" title="PaperFeed&#x27;s own score out of 10 - &#x27;protein language model&#x27; in title; published yesterday">5.0</span><a class="title" href="https://doi.org/10.1093/bioadv/vbag296">AmyloDeep: protein language model-based ensemble model for predicting amyloid propensity from the amino acid sequence.</a></div>
+<p class="byline">Davtyan A, Khachatryan A, Petrosyan R <span class="affil">&mdash; Institute of Physics</span></p>
+<p class="ai-why">Practical ensemble of ESM2/UniRep models for propensity prediction; useful if you need immediate, deployable binary classification.</p>
+<p class="why">&#x27;protein language model&#x27; in title; published yesterday</p>
+<div class="tags"><span class="badge new">new</span> <span class="badge">PubMed</span> <a class="badge oa" href="https://www.ncbi.nlm.nih.gov/pmc/articles/PMC13730270/">free full text</a>Bioinformatics advances &middot; 2026-11-04 &middot; doi:10.1093/bioadv/vbag296</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span><span class="metric" title="OpenAlex 2-year mean citedness for Bioinformatics Advances. It counts EVERY item the journal publishes, meeting abstracts and errata included, so journals with large abstract supplements read far below their reputation. Not an Impact Factor.">journal citedness 3.1 over 1,208 works<span class="src">OpenAlex</span></span><span class="metric" title="Listed in the Directory of Open Access Journals.">in DOAJ<span class="src">OpenAlex</span></span></div>
+
+<details><summary>Abstract</summary><p>Amyloids are predominantly β-sheet-rich, stable protein structures that can maintain their presence in the human body for multiple years. Amyloid protein aggregates contribute to the development of multiple neurodegenerative diseases, such as Alzheimer&#x27;s, Parkinson&#x27;s, and Huntington&#x27;s, and are involved in different vital functions, such as memory formation and immune system function. Here, we used advanced machine learning and deep learning techniques to predict amyloid propensity from the amino acid sequence. First, we aggregated labeled amino acid sequence data from multiple sources, obtaining a roughly balanced dataset of 2365 sequences for binary classification. We leveraged that data…</p></details>
+<script type="application/json" class="pf-paper">{"title": "AmyloDeep: protein language model-based ensemble model for predicting amyloid propensity from the amino acid sequence.", "authors": ["Davtyan A", "Khachatryan A", "Petrosyan R"], "abstract": "Amyloids are predominantly \u03b2-sheet-rich, stable protein structures that can maintain their presence in the human body for multiple years. Amyloid protein aggregates contribute to the development of multiple neurodegenerative diseases, such as Alzheimer's, Parkinson's, and Huntington's, and are involved in different vital functions, such as memory formation and immune system function. Here, we used advanced machine learning and deep learning techniques to predict amyloid propensity from the amino acid sequence. First, we aggregated labeled amino acid sequence data from multiple sources, obtaining a roughly balanced dataset of 2365 sequences for binary classification. We leveraged that data to both fine-tune the ESM2 model and to train new models based on protein embeddings from ESM2 and UniRep. The predictions from these models were then unified into a single soft voting ensemble model, yielding highly robust and accurate results. We further made a tool where users can provide the amino acid sequence and get the amyloid formation probabilities of different segments of the input sequence. Users can access the light version of AmyloDeep through the web server at https://amylodeep.com/, and the full model is available as a Python package at https://pypi.org/project/amylodeep/.", "doi": "10.1093/bioadv/vbag296", "url": "https://doi.org/10.1093/bioadv/vbag296", "published": "2026-11-04", "venue": "Bioinformatics advances", "source": "PubMed", "set_name": "protein language models", "score": 5.0}</script>
+</div>
+<div class="paper" data-doi="10.64898/2026.10.31.763304">
+<div class="head"><span class="score ai" title="Gemini (gemini-3.1-flash-lite)"><span class="tag">AI</span>5</span><span class="score medium" style="--fill:50%" title="PaperFeed&#x27;s own score out of 10 - &#x27;protein language model&#x27; in title; published 2 days ago">5.0</span><a class="title" href="https://doi.org/10.64898/2026.10.31.763304">FedEpitope: Parameter-Efficient Federated Protein Language Models for Linear B-Cell Epitope Prediction</a></div>
+<p class="byline">Joshi D, Priyadarsinee L, Chatterjee B, Natarajan AM, Sastry GN</p>
+<p class="ai-why">Details LoRA adaptation of ESM-2; relevant if you need parameter-efficient training in federated or constrained environments.</p>
+<p class="why">&#x27;protein language model&#x27; in title; published 2 days ago</p>
+<div class="tags"><span class="badge new">new</span> <span class="badge preprint">Preprint</span> <a class="badge oa" href="https://doi.org/10.64898/2026.10.31.763304">free full text</a>bioRxiv &middot; 2026-11-03 &middot; doi:10.64898/2026.10.31.763304</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span></div>
+
+<details><summary>Abstract</summary><p>Linear B-cell epitopes are antigenic regions recognised by antibodies that play crucial roles in vaccine development, antibody production, and other therapeutic applications.Their prediction can support peptide-based vaccine candidate screening and diagnostic assay development, but the experimental data required for model development may be distributed across institutions that cannot freely pool their records. We present FedEpitope, a federated framework that adapts the ESM-2 protein language model for peptide-level linear B-cell epitope prediction using Low-Rank Adaptation (LoRA), keeping client-partitioned data local and restricting the communicated trainable model state to approximately…</p></details>
+<script type="application/json" class="pf-paper">{"title": "FedEpitope: Parameter-Efficient Federated Protein Language Models for Linear B-Cell Epitope Prediction", "authors": ["Joshi D", "Priyadarsinee L", "Chatterjee B", "Natarajan AM", "Sastry GN"], "abstract": "Linear B-cell epitopes are antigenic regions recognised by antibodies that play crucial roles in vaccine development, antibody production, and other therapeutic applications.Their prediction can support peptide-based vaccine candidate screening and diagnostic assay development, but the experimental data required for model development may be distributed across institutions that cannot freely pool their records. We present FedEpitope, a federated framework that adapts the ESM-2 protein language model for peptide-level linear B-cell epitope prediction using Low-Rank Adaptation (LoRA), keeping client-partitioned data local and restricting the communicated trainable model state to approximately 1.11 MB. Simulated benchmarks of FedAvg and FedProx algorithms, evaluated using homology-aware data splits of five biologically heterogeneous, organism-partitioned clients, achieve promising global test performance without centralising training data, with FedAvg outperforming all single-client models in mean AP, F1, and MCC. Additional experiments characterise post-federation personalisation, record-level differential privacy, sensitivity to controlled client heterogeneity, LoRA rank, and generalisation to the independent BCPreds and NetBCE benchmarks, demonstrating the feasibility of parameter-efficient federated protein language model adaptation for data-localised B-cell epitope prediction and the associated trade-offs among predictive performance, personalisation, privacy, communication efficiency, and distribution shift.", "doi": "10.64898/2026.10.31.763304", "url": "https://doi.org/10.64898/2026.10.31.763304", "published": "2026-11-03", "venue": "bioRxiv", "source": "Preprint", "set_name": "protein language models", "score": 5.0}</script>
+</div>
+<div class="paper" data-doi="10.21203/rs.3.rs-11188049/v1">
+<div class="head"><span class="score ai" title="Gemini (gemini-3.1-flash-lite)"><span class="tag">AI</span>4</span><span class="score" style="--fill:20%" title="PaperFeed&#x27;s own score out of 10 - &#x27;ESM-2&#x27; in abstract; published 2 days ago">2.0</span><a class="title" href="https://doi.org/10.21203/rs.3.rs-11188049/v1">Matched-Control Benchmarking of Quantum Machine Learning Models for Hierarchical Protein Function Prediction</a></div>
+<p class="byline">Majidi F</p>
+<p class="ai-why">Honest benchmarking showing quantum models underperform classical controls; useful for avoiding hype, but low architectural applicability.</p>
+<p class="why">&#x27;ESM-2&#x27; in abstract; published 2 days ago</p>
+<div class="tags"><span class="badge new">new</span> <span class="badge preprint">Preprint</span> <a class="badge oa" href="https://doi.org/10.21203/rs.3.rs-11188049/v1">free full text</a>Research Square &middot; 2026-11-03 &middot; doi:10.21203/rs.3.rs-11188049/v1</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span></div>
+
+<details><summary>Abstract</summary><p>Predicting protein function requires assigning hierarchical Gene Ontology (GO) terms to sequences with limited experimental annotation. We tested whether quantum machine learning improves this task when each model is compared with a classical control matched to its architecture or input representation. Five quantum models spanning variational circuits, quantum features, and fidelity kernels were evaluated on 40,000 proteins from the CAFA6 training release, using frozen 480-dimensional ESM-2 embeddings, 180 GO terms, and an internal cluster-disjoint train–validation–test split. Kernel bandwidths were selected through a training-only concentration screen (Gate-0), which also estimated shots…</p></details>
+<script type="application/json" class="pf-paper">{"title": "Matched-Control Benchmarking of Quantum Machine Learning Models for Hierarchical Protein Function Prediction", "authors": ["Majidi F"], "abstract": "Predicting protein function requires assigning hierarchical Gene Ontology (GO) terms to sequences with limited experimental annotation. We tested whether quantum machine learning improves this task when each model is compared with a classical control matched to its architecture or input representation. Five quantum models spanning variational circuits, quantum features, and fidelity kernels were evaluated on 40,000 proteins from the CAFA6 training release, using frozen 480-dimensional ESM-2 embeddings, 180 GO terms, and an internal cluster-disjoint train\u2013validation\u2013test split. Kernel bandwidths were selected through a training-only concentration screen (Gate-0), which also estimated shots required per kernel entry. Across five seeds, the standalone quantum models scored below their matched controls by 0.0023\u20130.0847 in aspect-mean maximum F-measure; the 48-layer re-uploading kernel was admitted in only two seeds and lost in both. Freezing the variational circuit did not reduce performance. Late fusion of quantum and classical predictions improved on cosine nearest neighbours by 0.0034, but kernel-level mixing selected a purely classical weight, and the fused score (0.6697) remained below that of a classical RBF nearest-neighbour model (0.6719). Finite-shot simulations preserved this ordering, although the quantum kernel ridge model was sensitive to shot noise. These results provide no evidence of a standalone quantum advantage on this benchmark. The fusion gain is consistent with complementary prediction errors, but its mechanism remains to be tested against a matched classical ensemble.", "doi": "10.21203/rs.3.rs-11188049/v1", "url": "https://doi.org/10.21203/rs.3.rs-11188049/v1", "published": "2026-11-03", "venue": "Research Square", "source": "Preprint", "set_name": "protein language models", "score": 2.0}</script>
+</div>
+<details class="rest"><summary>Show the other 3</summary>
+<div class="paper" data-doi="10.1016/j.foodres.2026.120951">
+<div class="head"><span class="score ai" title="Gemini (gemini-3.1-flash-lite)"><span class="tag">AI</span>3</span><span class="score" style="--fill:20%" title="PaperFeed&#x27;s own score out of 10 - &#x27;ESM-2&#x27; in abstract; published 2 days ago">2.0</span><a class="title" href="https://doi.org/10.1016/j.foodres.2026.120951">SN-PepDB: a deep learning-driven database for characterizing Sipunculus nudus bioactive peptides and their structure-activity relationships.</a></div>
+<p class="byline">Zhang Y, Qin G, Jiang L, Yang Z, Chen Z, Yue M, Gu C, Zhou L <span class="affil">&mdash; Guangdong Provincial Key Laboratory of Aquatic Product Processing and Safety</span></p>
+<p class="ai-why">Niche database focus; the threshold strategy is interesting but the methodology is highly specific to Sipunculus nudus.</p>
+<p class="why">&#x27;ESM-2&#x27; in abstract; published 2 days ago</p>
+<div class="tags"><span class="badge new">new</span> <span class="badge">PubMed</span>Food research international (Ottawa, Ont.) &middot; 2026-11-03 &middot; doi:10.1016/j.foodres.2026.120951</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span><span class="metric" title="OpenAlex 2-year mean citedness for Food Research International. It counts EVERY item the journal publishes, meeting abstracts and errata included, so journals with large abstract supplements read far below their reputation. Not an Impact Factor.">journal citedness 7.8 over 19,864 works<span class="src">OpenAlex</span></span></div>
+<div class="chips"><span class="chip">Animals</span><span class="chip">Structure-Activity Relationship</span><span class="chip">Deep Learning</span><span class="chip">Bioactive Peptides, Dietary</span><span class="chip">Databases, Protein</span></div>
+<details><summary>Abstract</summary><p>Marine invertebrate peptides remain underrepresented in bioactivity databases. Their translational potential is constrained by the absence of species-specific repositories, limited integration of safety profiling, and insufficient exploitation of prediction probability distributions for threshold optimization. To address these gaps, we developed SN-PepDB, a comprehensive multi-target peptide database for Sipunculus nudus. Combinatorial enzymatic hydrolysis across 22 conditions and high-resolution LC-MS/MS yielded 10,827 unique peptides. Safety-first screening eliminated sequences predicted as potentially toxic or allergenic, securing 5463 candidates. Using the ESM-2-embedded UniDL4BioPep…</p></details>
+<script type="application/json" class="pf-paper">{"title": "SN-PepDB: a deep learning-driven database for characterizing Sipunculus nudus bioactive peptides and their structure-activity relationships.", "authors": ["Zhang Y", "Qin G", "Jiang L", "Yang Z", "Chen Z", "Yue M", "Gu C", "Zhou L"], "abstract": "Marine invertebrate peptides remain underrepresented in bioactivity databases. Their translational potential is constrained by the absence of species-specific repositories, limited integration of safety profiling, and insufficient exploitation of prediction probability distributions for threshold optimization. To address these gaps, we developed SN-PepDB, a comprehensive multi-target peptide database for Sipunculus nudus. Combinatorial enzymatic hydrolysis across 22 conditions and high-resolution LC-MS/MS yielded 10,827 unique peptides. Safety-first screening eliminated sequences predicted as potentially toxic or allergenic, securing 5463 candidates. Using the ESM-2-embedded UniDL4BioPep framework, we introduced a distribution-calibrated threshold strategy that categorizes prediction distributions into three morphological types: bimodal (threshold \u22650.90), mound-shaped (90th percentile; antioxidant \u22650.89, BBB \u2265 0.80), and right-skewed (threshold = 0.50). Compared with the conventional 0.5 cutoff, this approach concentrated candidates to 9.7-26.0% of the safe peptide population across five bioactivities: antihypertensive (n = 1422), antibacterial (n = 653), antioxidant (n = 572), BBB-permeable (n = 529), and cell-penetrating (n = 697) peptides. Comparative structure-activity relationship analysis revealed activity-specific determinants, including Pro-dominated C-terminal motifs associated with ACE inhibition. Experimental validation provided preliminary support for the prediction-prioritization workflow: the selected peptide PPVPHP showed ACE-inhibitory activity with an IC50 of 146.04 \u00b1 4.63 \u03bcM, while the antioxidant-positive peptide LLW showed greater DPPH radical-scavenging activity than the below-threshold peptide FKVFY at 200 \u03bcM (43.1% vs. 15.5%). Molecular docking and in silico gastrointestinal digestion further supported PPVPHP as a candidate with favorable ACE-binding and predicted proteolytic-stability profiles. The interactive database is publicly accessible at https://zai4s.shinyapps.io/SN-PepDB/.", "doi": "10.1016/j.foodres.2026.120951", "url": "https://doi.org/10.1016/j.foodres.2026.120951", "published": "2026-11-03", "venue": "Food research international (Ottawa, Ont.)", "source": "PubMed", "set_name": "protein language models", "score": 2.0}</script>
+</div>
+<div class="paper" data-doi="10.64898/2026.10.29.762916">
+<div class="head"><span class="score ai" title="Gemini (gemini-3.1-flash-lite)"><span class="tag">AI</span>3</span><span class="score" style="--fill:15%" title="PaperFeed&#x27;s own score out of 10 - &#x27;protein structure prediction&#x27; in abstract; published 4 days ago">1.5</span><a class="title" href="https://doi.org/10.64898/2026.10.29.762916">Differentiable Spin-Center Diffusion Model Enables DEER-Guided Generative Pipeline of Weighted Protein Ensembles</a></div>
+<p class="byline">Kao T, Meiler J, Mchaourab HS</p>
+<p class="ai-why">Specialized generative pipeline for DEER spectroscopy data; likely too domain-specific for general model architecture applications.</p>
+<p class="why">&#x27;protein structure prediction&#x27; in abstract; published 4 days ago</p>
+<div class="tags"><span class="badge new">new</span> <span class="badge preprint">Preprint</span> <a class="badge oa" href="https://doi.org/10.64898/2026.10.29.762916">free full text</a>bioRxiv &middot; 2026-11-01 &middot; doi:10.64898/2026.10.29.762916</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span></div>
+
+<details><summary>Abstract</summary><p>Biological function entails the interconversion of a protein between distinct conformations, an equilibrium modulated by ligands and other physicochemical conditions. Double electron-electron resonance (DEER) spectroscopy captures these ensembles as distance distributions, P(r), between spin label pairs. However, the width of P(r) convolves protein conformational heterogeneity with the rotameric flexibility of the label. Because current spin label models overestimate this contribution, translating P(r) into ensembles has remained indirect and predominantly qualitative. Here, we developed spin-center (SC) diffusion, a differentiable model of the spin label with a tunable spin label rotameric…</p></details>
+<script type="application/json" class="pf-paper">{"title": "Differentiable Spin-Center Diffusion Model Enables DEER-Guided Generative Pipeline of Weighted Protein Ensembles", "authors": ["Kao T", "Meiler J", "Mchaourab HS"], "abstract": "Biological function entails the interconversion of a protein between distinct conformations, an equilibrium modulated by ligands and other physicochemical conditions. Double electron-electron resonance (DEER) spectroscopy captures these ensembles as distance distributions, P(r), between spin label pairs. However, the width of P(r) convolves protein conformational heterogeneity with the rotameric flexibility of the label. Because current spin label models overestimate this contribution, translating P(r) into ensembles has remained indirect and predominantly qualitative. Here, we developed spin-center (SC) diffusion, a differentiable model of the spin label with a tunable spin label rotameric width. Coupled to a frozen Boltz-2 structure generator, SC diffusion enables the entire experimental P(r) to guide ensemble generation at inference time. We demonstrate the robustness of this pipeline on synthetic P(r) of known composition, recovering the ensemble populations, including both components of a bimodal profile. Guided by experimental P(r) measured under different biochemical conditions, ensembles of the transporters PfMATE, LmrP, MhsT and P-glycoprotein were modeled and free energy differences derived from the ensembles in a condition-dependent manner. By embedding a differentiable label model in structure generation, our approach interprets DEER distributions as weighted conformational ensembles, adding a missing thermodynamic grounding to generative protein structure prediction methods.", "doi": "10.64898/2026.10.29.762916", "url": "https://doi.org/10.64898/2026.10.29.762916", "published": "2026-11-01", "venue": "bioRxiv", "source": "Preprint", "set_name": "protein language models", "score": 1.5}</script>
+</div>
+<div class="paper" data-doi="10.1093/protein/gzag033">
+<div class="head"><span class="score ai" title="Gemini (gemini-3.1-flash-lite)"><span class="tag">AI</span>2</span><span class="score" style="--fill:20%" title="PaperFeed&#x27;s own score out of 10 - &#x27;protein structure prediction&#x27; in abstract; published 2 days ago">2.0</span><a class="title" href="https://doi.org/10.1093/protein/gzag033">EvoSeq-ML: Advancing Data-Centric Machine Learning with Evolutionary-Informed Protein Sequence Representation and Generation.</a></div>
+<p class="byline">Mardikoraem M, Pascual N, Eaves JN, Chatterjee S, Garland L, VanAntwerp J, Mahama A, Finneran P, et al. <span class="affil">&mdash; Michigan State University</span></p>
+<p class="ai-why">Focuses on data curation rather than model architecture; lacks the concrete architectural details you requested.</p>
+<p class="why">&#x27;protein structure prediction&#x27; in abstract; published 2 days ago</p>
+<div class="tags"><span class="badge new">new</span> <span class="badge">PubMed</span> <a class="badge oa" href="https://doi.org/10.1093/protein/gzag033">free full text</a>Protein engineering, design &amp; selection : PEDS &middot; 2026-11-03 &middot; doi:10.1093/protein/gzag033</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span><span class="metric" title="OpenAlex 2-year mean citedness for Protein Engineering Design and Selection. It counts EVERY item the journal publishes, meeting abstracts and errata included, so journals with large abstract supplements read far below their reputation. Not an Impact Factor.">journal citedness 3.2 over 3,793 works<span class="src">OpenAlex</span></span></div>
+<div class="chips"><span class="chip">Ancestral Sequence Reconstruction</span><span class="chip">Data-Centric Models</span><span class="chip">Fine-Tuning</span><span class="chip">Generative Models</span><span class="chip">Language Models</span></div>
+<details><summary>Abstract</summary><p>From protein structure prediction to novel protein generation, challenging protein engineering tasks have been made possible by advancements in machine learning (ML). While largely driven by ML architecture refinements, these advancements in ML-based protein engineering campaigns have left the impact of data curation underexplored. In light of the growing wealth of labeled sequence data, data-centric advances (e.g. prioritizing improvements in ML protein engineering tools through the curation of high-quality, domain-specific training data) are increasingly preferred over model-centric advancements. Implementing datasets that accurately reflect biological complexity and diversity has been…</p></details>
+<script type="application/json" class="pf-paper">{"title": "EvoSeq-ML: Advancing Data-Centric Machine Learning with Evolutionary-Informed Protein Sequence Representation and Generation.", "authors": ["Mardikoraem M", "Pascual N", "Eaves JN", "Chatterjee S", "Garland L", "VanAntwerp J", "Mahama A", "Finneran P", "Hausinger RP", "Woldring DR"], "abstract": "From protein structure prediction to novel protein generation, challenging protein engineering tasks have been made possible by advancements in machine learning (ML). While largely driven by ML architecture refinements, these advancements in ML-based protein engineering campaigns have left the impact of data curation underexplored. In light of the growing wealth of labeled sequence data, data-centric advances (e.g. prioritizing improvements in ML protein engineering tools through the curation of high-quality, domain-specific training data) are increasingly preferred over model-centric advancements. Implementing datasets that accurately reflect biological complexity and diversity has been shown to improve the efficiency of training protein engineering ML tools. Here, we evaluate an ancestral sequence reconstruction (ASR)-informed data augmentation strategy for training generative and representation-learning models in protein engineering. Using ethylene-forming enzyme (EFE) as a model system, we show that variational autoencoder models trained on ancestral and near-ancestral sequence datasets generate variants with improved predicted and experimentally measured thermostability relative to variants generated from modern-sequence training data. All experimentally tested ancestral and ML-generated EFEs produced detectable ethylene, although ML-generated variants showed reduced activity relative to wild-type EFE, indicating that the approach more strongly captured stability-associated features than catalytic optimization. We further evaluated ASR-enriched sequence sets for fine-tuning ESM2 representations in endolysin and lysozyme C stability-classification tasks, where ancestral representations were competitive with modern-sequence fine-tuning in selected settings. Overall, this work supports ASR-informed data augmentation as a promising strategy for stability-oriented protein sequence generation and motivates future work to couple ancestral sequence diversity with explicit functional selection.", "doi": "10.1093/protein/gzag033", "url": "https://doi.org/10.1093/protein/gzag033", "published": "2026-11-03", "venue": "Protein engineering, design & selection : PEDS", "source": "PubMed", "set_name": "protein language models", "score": 2.0}</script>
+</div>
+</details>
+</div></details>
+<details class="set" id="s-idh1-glioblastoma" open><summary><div class="setbar">
+<span>IDH1 glioblastoma</span>
+<span class="setcount">6 &middot; 6 new</span></div></summary><div class="setbody">
+<p class="showing">Top 5 of 6, best first</p>
+<div class="paper" data-doi="10.1093/neuonc/noag277">
+<div class="head"><span class="score ai" title="Gemini (gemini-3.1-flash-lite)"><span class="tag">AI</span>3</span><span class="score strong" style="--fill:90%" title="PaperFeed&#x27;s own score out of 10 - &#x27;IDH-mutant&#x27; in title; &#x27;glioma&#x27; in title; 2 of 2 concepts in the title; published yesterday">9.0</span><a class="title" href="https://doi.org/10.1093/neuonc/noag277">Pretherapeutic Tumor Growth Velocity Refines Survival Stratification Beyond Clinical, Molecular, and Surgical Factors in IDH-Mutant Lower-Grade Gliomas.</a></div>
+<p class="byline">Ng S, Almairac F, Deverdun J, Darlix A, Mondot L, Fabre E, Tran S, Herbet G, et al. <span class="affil">&mdash; Gui de Chauliac Hospital</span></p>
+<p class="ai-why">Focuses on IDH-mutant glioma growth kinetics rather than the multi-omics or molecular biology mechanisms you requested.</p>
+<p class="why">&#x27;IDH-mutant&#x27; in title; &#x27;glioma&#x27; in title; 2 of 2 concepts in the title; published yesterday</p>
+<div class="tags"><span class="badge new">new</span> <span class="badge">PubMed</span>Neuro-oncology &middot; 2026-11-04 &middot; doi:10.1093/neuonc/noag277</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span><span class="metric" title="OpenAlex 2-year mean citedness for Neuro-Oncology. It counts EVERY item the journal publishes, meeting abstracts and errata included, so journals with large abstract supplements read far below their reputation. Not an Impact Factor.">journal citedness 1.3 over 29,872 works<span class="src">OpenAlex</span></span></div>
+<div class="chips"><span class="chip">IDH-mutant glioma</span><span class="chip">overall survival</span><span class="chip">risk stratification</span><span class="chip">tumor growth velocity</span></div>
+<details><summary>Abstract</summary><p>Contemporary risk stratification of isocitrate dehydrogenase (IDH)-mutant lower-grade gliomas relies primarily on molecular characteristics and surgical tumor burden but does not capture dynamic tumor behavior. Our primary objective was to determine whether pretherapeutic tumor growth velocity (TGV) provides independent prognostic information for overall survival (OS) beyond established factors. This multicenter retrospective study included 569 adults with grade 2-3 IDH-mutant gliomas from three French centers, comprising a development cohort (n = 440) and two external validation cohorts (n = 129). TGV was derived from automated, outcome-blinded volumetric analysis of serial preoperative…</p></details>
+<script type="application/json" class="pf-paper">{"title": "Pretherapeutic Tumor Growth Velocity Refines Survival Stratification Beyond Clinical, Molecular, and Surgical Factors in IDH-Mutant Lower-Grade Gliomas.", "authors": ["Ng S", "Almairac F", "Deverdun J", "Darlix A", "Mondot L", "Fabre E", "Tran S", "Herbet G", "Rigau V", "Le Bars E", "Mandonnet E", "Duffau H"], "abstract": "Contemporary risk stratification of isocitrate dehydrogenase (IDH)-mutant lower-grade gliomas relies primarily on molecular characteristics and surgical tumor burden but does not capture dynamic tumor behavior. Our primary objective was to determine whether pretherapeutic tumor growth velocity (TGV) provides independent prognostic information for overall survival (OS) beyond established factors. This multicenter retrospective study included 569 adults with grade 2-3 IDH-mutant gliomas from three French centers, comprising a development cohort (n = 440) and two external validation cohorts (n = 129). TGV was derived from automated, outcome-blinded volumetric analysis of serial preoperative MRI using mean diameter expansion and log-volume growth. Prognostic value was assessed using multivariable Cox regression, external validation, decision curve analysis, and exploratory random survival forests. During a median follow-up of 6.8 years, 73 deaths occurred in the development cohort. Higher TGV was independently associated with shorter overall survival after adjustment for age, sex, grade, 1p/19q status, and postoperative residual tumor volume (HR per 1-mm/year increase, 1.046; 95%CI, 1.011-1.083; P=.011), and was independently replicated externally (HR, 1.077; 95% CI, 1.005-1.153; P=.035). Findings were consistent using log-volume growth and after accounting for CDKN2A/B status. Adding TGV improved prognostic model fit (likelihood-ratio \u03c7\u00b2=5.70; P=.017), with greatest incremental value in astrocytomas. Decision curve analysis demonstrated additional clinical utility, while survival forests identified TGV among the strongest survival predictors alongside 1p/19q status and postoperative residual tumor volume. Pretherapeutic TGV independently predicts survival beyond contemporary molecular and surgical factors in IDH-mutant lower-grade gliomas. This accessible MRI-derived biomarker may refine individualized risk stratification, particularly in astrocytoma.", "doi": "10.1093/neuonc/noag277", "url": "https://doi.org/10.1093/neuonc/noag277", "published": "2026-11-04", "venue": "Neuro-oncology", "source": "PubMed", "set_name": "IDH1 glioblastoma", "score": 9.0}</script>
+</div>
+<div class="paper" data-doi="10.2174/0109298673524183261013133515">
+<div class="head"><span class="score ai" title="Gemini (gemini-3.1-flash-lite)"><span class="tag">AI</span>3</span><span class="score medium" style="--fill:60%" title="PaperFeed&#x27;s own score out of 10 - &#x27;IDH1&#x27; in abstract; &#x27;glioblastoma&#x27; in title; 1 of 2 concepts in the title; published 2 days ago">6.0</span><a class="title" href="https://doi.org/10.2174/0109298673524183261013133515">Microenvironment-Dependent Role of PLOD3 in Glioblastoma: Associations with Matrix Remodeling and Myeloid Immune Remodeling.</a></div>
+<p class="byline">Luo W, Xu X, Zhou L, Gu S, Wang W, Fang J, Peng X, He J, et al. <span class="affil">&mdash; The First Affiliated Hospital of Anhui Medical University</span></p>
+<p class="ai-why">Uses multi-omics datasets but characterizes PLOD3 in IDH-wild-type glioblastoma, which contradicts your interest in IDH-mutant biology.</p>
+<p class="why">&#x27;IDH1&#x27; in abstract; &#x27;glioblastoma&#x27; in title; 1 of 2 concepts in the title; published 2 days ago</p>
+<div class="tags"><span class="badge new">new</span> <span class="badge">PubMed</span>Current medicinal chemistry &middot; 2026-11-03 &middot; doi:10.2174/0109298673524183261013133515</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span><span class="metric" title="OpenAlex 2-year mean citedness for Current Medicinal Chemistry. It counts EVERY item the journal publishes, meeting abstracts and errata included, so journals with large abstract supplements read far below their reputation. Not an Impact Factor.">journal citedness 2.9 over 9,086 works<span class="src">OpenAlex</span></span></div>
+<div class="chips"><span class="chip">PLOD3</span><span class="chip">glioblastoma</span><span class="chip">macrophage</span><span class="chip">matrix remodeling</span><span class="chip">myeloid immunity</span></div>
+<details><summary>Abstract</summary><p>Glioblastoma progression depends on reciprocal interactions between malignant cells, extracellular matrix remodeling, and myeloid immune suppression. However, whether PLOD3 drives glioblastoma through tumor cell-intrinsic or microenvironment- dependent mechanisms remains unclear. This retrospective multi-cohort observational study integrated transcriptomic datasets (GSE68848 and GSE16011), single-cell RNA sequencing reanalysis, immunohistochemistry of 70 glioma specimens, and functional validation in the GL261 murine model using in vitro assays and a subcutaneous syngeneic tumor model. PLOD3 was significantly upregulated in glioblastoma and was associated with higher tumor grade,…</p></details>
+<script type="application/json" class="pf-paper">{"title": "Microenvironment-Dependent Role of PLOD3 in Glioblastoma: Associations with Matrix Remodeling and Myeloid Immune Remodeling.", "authors": ["Luo W", "Xu X", "Zhou L", "Gu S", "Wang W", "Fang J", "Peng X", "He J", "Huang K", "Sun D", "Yu W", "Yin Y"], "abstract": "Glioblastoma progression depends on reciprocal interactions between malignant cells, extracellular matrix remodeling, and myeloid immune suppression. However, whether PLOD3 drives glioblastoma through tumor cell-intrinsic or microenvironment- dependent mechanisms remains unclear. This retrospective multi-cohort observational study integrated transcriptomic datasets (GSE68848 and GSE16011), single-cell RNA sequencing reanalysis, immunohistochemistry of 70 glioma specimens, and functional validation in the GL261 murine model using in vitro assays and a subcutaneous syngeneic tumor model. PLOD3 was significantly upregulated in glioblastoma and was associated with higher tumor grade, IDH1-wild-type status, and shorter overall survival. Higher PLOD3 expression was associated with increased macrophage infiltration, whereas computational immune-infiltration analyses indicated reduced CD8+ T-cell and natural killer (NK)-cell signatures. PLOD3 knockdown did not appreciably alter GL261 cell proliferation in vitro but significantly reduced subcutaneous tumor growth in immunocompetent mice, accompanied by decreased macrophage infiltration and collagen deposition. These findings support a microenvironment-dependent role for PLOD3 in the GL261 model rather than a major cell-intrinsic effect on tumor-cell proliferation. Extracellular matrix (ECM) remodeling and cytokine-associated signaling identified by transcriptomic analysis represent candidate mechanisms that may contribute to macrophage-dominant microenvironmental remodeling, but these pathways were not directly validated. PLOD3 is upregulated in glioblastoma and is associated with poor prognosis and a macrophage-enriched tumor microenvironment. PLOD3 knockdown suppresses tumor growth in vivo and reduces macrophage infiltration and collagen deposition. These findings support a microenvironment-dependent role of PLOD3 in glioblastoma progression, while ECM remodeling and cytokine-associated signaling may contribute to this effect and require further mechanistic validation.", "doi": "10.2174/0109298673524183261013133515", "url": "https://doi.org/10.2174/0109298673524183261013133515", "published": "2026-11-03", "venue": "Current medicinal chemistry", "source": "PubMed", "set_name": "IDH1 glioblastoma", "score": 6.0}</script>
+</div>
+<div class="paper" data-doi="10.25259/sni_964_2026">
+<div class="head"><span class="score ai" title="Gemini (gemini-3.1-flash-lite)"><span class="tag">AI</span>2</span><span class="score medium" style="--fill:60%" title="PaperFeed&#x27;s own score out of 10 - &#x27;IDH1&#x27; in abstract; &#x27;glioma&#x27; in title; 1 of 2 concepts in the title; published 2 days ago">6.0</span><a class="title" href="https://doi.org/10.25259/sni_964_2026">Diffuse brainstem gliomas across the pediatric, adolescent, and adult age spectrum: Clinical and radiological features, molecular profile, and determinants of survival in a multicenter retrospective cohort of 42 patients.</a></div>
+<p class="byline">Garcia-Bitar A, Gutierrez-Aceves GA, Rodriguez-Camacho A, Torres-Rios JA, Flores-Vazquez JG, Zavala-Romero L, Gomez-Castro G, Salazar-Pigeon A, et al. <span class="affil">&mdash; Instituto Nacional de Neurología y Neurocirugía &quot;Manuel Velasco Suárez&quot;</span></p>
+<p class="ai-why">Provides minimal molecular data on H3K27M and IDH1 status across brainstem gliomas but lacks deep multi-omics focus.</p>
+<p class="why">&#x27;IDH1&#x27; in abstract; &#x27;glioma&#x27; in title; 1 of 2 concepts in the title; published 2 days ago</p>
+<div class="tags"><span class="badge new">new</span> <span class="badge">PubMed</span> <a class="badge oa" href="https://www.ncbi.nlm.nih.gov/pmc/articles/PMC13726837/">free full text</a>Surgical neurology international &middot; 2026-11-03 &middot; doi:10.25259/sni_964_2026</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span><span class="metric" title="OpenAlex 2-year mean citedness for Surgical Neurology International. It counts EVERY item the journal publishes, meeting abstracts and errata included, so journals with large abstract supplements read far below their reputation. Not an Impact Factor.">journal citedness 1.2 over 6,316 works<span class="src">OpenAlex</span></span></div>
+<div class="chips"><span class="chip">Brainstem glioma</span><span class="chip">Diffuse midline glioma</span><span class="chip">H3 K27M</span><span class="chip">Overall survival</span><span class="chip">Prognostic stratification</span></div>
+<details><summary>Abstract</summary><p>Diffuse brainstem gliomas are infiltrative neoplasms classically described in children as diffuse intrinsic pontine glioma, but increasingly recognized in adults. We describe the clinical, radiological, molecular, and survival characteristics of a cohort spanning the full age spectrum and identify determinants of overall survival (OS). Retrospective analysis of 42 consecutive patients with a clinical-radiological diagnosis of diffuse brainstem glioma treated between 1996 and 2025 at two neuro-oncology referral centers in Mexico. Demographic, clinical, imaging, biopsy, molecular (histone H3 lysine-27-to-methionine mutation [H3 K27M], isocitrate dehydrogenase 1 [IDH1], O2-methylguanine-DNA…</p></details>
+<script type="application/json" class="pf-paper">{"title": "Diffuse brainstem gliomas across the pediatric, adolescent, and adult age spectrum: Clinical and radiological features, molecular profile, and determinants of survival in a multicenter retrospective cohort of 42 patients.", "authors": ["Garcia-Bitar A", "Gutierrez-Aceves GA", "Rodriguez-Camacho A", "Torres-Rios JA", "Flores-Vazquez JG", "Zavala-Romero L", "Gomez-Castro G", "Salazar-Pigeon A", "Moreno-Jim\u00e9nez S"], "abstract": "Diffuse brainstem gliomas are infiltrative neoplasms classically described in children as diffuse intrinsic pontine glioma, but increasingly recognized in adults. We describe the clinical, radiological, molecular, and survival characteristics of a cohort spanning the full age spectrum and identify determinants of overall survival (OS). Retrospective analysis of 42 consecutive patients with a clinical-radiological diagnosis of diffuse brainstem glioma treated between 1996 and 2025 at two neuro-oncology referral centers in Mexico. Demographic, clinical, imaging, biopsy, molecular (histone H3 lysine-27-to-methionine mutation [H3 K27M], isocitrate dehydrogenase 1 [IDH1], O2-methylguanine-DNA methyltransferase [MGMT], codeletion of chromosome arms 1p and 19q [1p/19q], epidermal growth factor receptor [EGFR], and tumour protein 53 gene [TP53]), and treatment variables were analyzed after a database audit. OS was estimated by Kaplan-Meier, compared by log-rank test, and modeled by multivariable Cox regression. Median age at onset was 31.1 years (range 7.8-65.7); 10 patients (23.8%) were younger than 18 years, and 33 (78.6%) were male. Stereotactic biopsy was performed in 32 patients (76.2%). H3 K27M was mutant in 12 (28.6%). Median OS was 23.3 months (95% confidence interval [CI] 14.7-32.5). H3 K27M mutation (hazard ratio [HR] 10.35; 95% CI 3.77-28.40) and contrast enhancement (HR 2.71; 95% CI 1.28-5.71) were independent adverse prognostic factors (concordance index 0.76). A score combining both features separated low-, high-, and very-high-risk groups, with median OS of 36.3, 20.5, and 9.7 months (p \u003c 0.001). H3 K27M status and contrast enhancement were the strongest independent determinants of survival and jointly provide an accessible prognostic score. These findings support systematic molecular characterization, aided by stereotactic biopsy when safely feasible, for prognostic stratification and access to targeted therapies.", "doi": "10.25259/sni_964_2026", "url": "https://doi.org/10.25259/sni_964_2026", "published": "2026-11-03", "venue": "Surgical neurology international", "source": "PubMed", "set_name": "IDH1 glioblastoma", "score": 6.0}</script>
+</div>
+<div class="paper" data-doi="10.1093/jnen/nlag119">
+<div class="head"><span class="score ai" title="Gemini (gemini-3.1-flash-lite)"><span class="tag">AI</span>1</span><span class="score medium" style="--fill:60%" title="PaperFeed&#x27;s own score out of 10 - &#x27;IDH1&#x27; in abstract; &#x27;glioma&#x27; in title; 1 of 2 concepts in the title; published 2 days ago">6.0</span><a class="title" href="https://doi.org/10.1093/jnen/nlag119">WLS protein is highly expressed in glioma: A biomarker for grading and prognosis.</a></div>
+<p class="byline">Li M, Chai J, Wan X, Wang J, Pan M <span class="affil">&mdash; The First Affiliated Hospital with Nanjing Medical University</span></p>
+<p class="ai-why">Generic Wnt-pathway biomarker study in glioma, offering no specific depth on IDH-mutant biology or multi-omics.</p>
+<p class="why">&#x27;IDH1&#x27; in abstract; &#x27;glioma&#x27; in title; 1 of 2 concepts in the title; published 2 days ago</p>
+<div class="tags"><span class="badge new">new</span> <span class="badge">PubMed</span>Journal of neuropathology and experimental neurology &middot; 2026-11-03 &middot; doi:10.1093/jnen/nlag119</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span><span class="metric" title="OpenAlex 2-year mean citedness for Journal of Neuropathology &amp; Experimental Neurology. It counts EVERY item the journal publishes, meeting abstracts and errata included, so journals with large abstract supplements read far below their reputation. Not an Impact Factor.">journal citedness 2.2 over 11,980 works<span class="src">OpenAlex</span></span></div>
+<div class="chips"><span class="chip">IDH1/IDH2 mutation</span><span class="chip">WHO grade</span><span class="chip">WLS</span><span class="chip">Wnt signaling</span><span class="chip">glioma</span></div>
+<details><summary>Abstract</summary><p>We investigated the expression level, clinicopathological significance, and mechanistic function of Wnt ligand secretion mediator (WLS) in glioma. WLS expression in glioma was evaluated using public data from GEPIA (gene expression profiling interactive analysis) and immunohistochemistry. siRNA-mediated knockdown was performed in LN229 and U-87MG ATCC (glioblastoma of unknown origin) cells to assess its functional effects. Survival analysis was conducted based on the Chinese Glioma Genome Atlas (CGGA) database. Protein-protein interaction networks were constructed using the STRING database and downstream Wnt signaling events were experimentally validated. Both mRNA and protein levels of WLS…</p></details>
+<script type="application/json" class="pf-paper">{"title": "WLS protein is highly expressed in glioma: A biomarker for grading and prognosis.", "authors": ["Li M", "Chai J", "Wan X", "Wang J", "Pan M"], "abstract": "We investigated the expression level, clinicopathological significance, and mechanistic function of Wnt ligand secretion mediator (WLS) in glioma. WLS expression in glioma was evaluated using public data from GEPIA (gene expression profiling interactive analysis) and immunohistochemistry. siRNA-mediated knockdown was performed in LN229 and U-87MG ATCC (glioblastoma of unknown origin) cells to assess its functional effects. Survival analysis was conducted based on the Chinese Glioma Genome Atlas (CGGA) database. Protein-protein interaction networks were constructed using the STRING database and downstream Wnt signaling events were experimentally validated. Both mRNA and protein levels of WLS were significantly elevated in glioma tissues relative to adjacent non-tumor brain tissues. Elevated WLS expression correlated positively with higher World Health Organization (WHO) tumor grade and negatively with IDH1/2 mutations but not with sex, age, or 1p/19q codeletion. Knockdown of WLS suppressed glioma cell proliferation and invasion and promoted apoptosis. Mechanistically, silencing WLS led to the downregulation of canonical Wnt/\u03b2-catenin target genes suggesting that WLS contributes to Wnt pathway activation in glioma. Importantly, high WLS expression was significantly associated with poorer overall survival. The association between high WLS expression, advanced WHO grade, and poorer prognosis implies its potential utility as a biomarker in glioma patients.", "doi": "10.1093/jnen/nlag119", "url": "https://doi.org/10.1093/jnen/nlag119", "published": "2026-11-03", "venue": "Journal of neuropathology and experimental neurology", "source": "PubMed", "set_name": "IDH1 glioblastoma", "score": 6.0}</script>
+</div>
+<div class="paper" data-doi="10.3389/fcimb.2026.1975136">
+<div class="head"><span class="score ai" title="Gemini (gemini-3.1-flash-lite)"><span class="tag">AI</span>0</span><span class="score medium" style="--fill:60%" title="PaperFeed&#x27;s own score out of 10 - &#x27;IDH1&#x27; in abstract; &#x27;glioma&#x27; in title; 1 of 2 concepts in the title; published yesterday">6.0</span><a class="title" href="https://doi.org/10.3389/fcimb.2026.1975136">Association of HCMV IE1 protein and UL123 DNA with clinicopathological features and survival in patients with glioma.</a></div>
+<p class="byline">Hao Z, Liu Q, Guo Y, Zhang J, Ding R, Chen L, Yin X <span class="affil">&mdash; Second Hospital of Shanxi Medical University</span></p>
+<p class="ai-why">General glioma survival study regarding viral markers, irrelevant to IDH-mutant biology or glioblastoma multi-omics.</p>
+<p class="why">&#x27;IDH1&#x27; in abstract; &#x27;glioma&#x27; in title; 1 of 2 concepts in the title; published yesterday</p>
+<div class="tags"><span class="badge new">new</span> <span class="badge">PubMed</span> <a class="badge oa" href="https://www.ncbi.nlm.nih.gov/pmc/articles/PMC13727739/">free full text</a>Frontiers in cellular and infection microbiology &middot; 2026-11-04 &middot; doi:10.3389/fcimb.2026.1975136</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span><span class="metric" title="OpenAlex 2-year mean citedness for Frontiers in Cellular and Infection Microbiology. It counts EVERY item the journal publishes, meeting abstracts and errata included, so journals with large abstract supplements read far below their reputation. Not an Impact Factor.">journal citedness 5.2 over 12,740 works<span class="src">OpenAlex</span></span><span class="metric" title="Listed in the Directory of Open Access Journals.">in DOAJ<span class="src">OpenAlex</span></span></div>
+<div class="chips"><span class="chip">Humans</span><span class="chip">Immediate-Early Proteins</span><span class="chip">Female</span><span class="chip">Glioma</span><span class="chip">DNA, Viral</span></div>
+<details><summary>Abstract</summary><p>The reported presence of human cytomegalovirus (HCMV) in glioma varies across studies, partly because protein- and DNA-based assays may yield different results. This analysis examined the association of HCMV immediate-early 1 (IE1) protein and UL123 DNA markers and their associations with glioma features and survival. A dataset containing 221 paired glioma records was analyzed. IE1 status was represented as an immunohistochemistry result, and UL123 DNA status was represented as a quantitative real-time PCR result. Associations with clinicopathological characteristics were examined using Pearson&#x27;s chi-square tests. Agreement between IE1 IHC and UL123 qPCR was evaluated using Cohen&#x27;s kappa…</p></details>
+<script type="application/json" class="pf-paper">{"title": "Association of HCMV IE1 protein and UL123 DNA with clinicopathological features and survival in patients with glioma.", "authors": ["Hao Z", "Liu Q", "Guo Y", "Zhang J", "Ding R", "Chen L", "Yin X"], "abstract": "The reported presence of human cytomegalovirus (HCMV) in glioma varies across studies, partly because protein- and DNA-based assays may yield different results. This analysis examined the association of HCMV immediate-early 1 (IE1) protein and UL123 DNA markers and their associations with glioma features and survival. A dataset containing 221 paired glioma records was analyzed. IE1 status was represented as an immunohistochemistry result, and UL123 DNA status was represented as a quantitative real-time PCR result. Associations with clinicopathological characteristics were examined using Pearson's chi-square tests. Agreement between IE1 IHC and UL123 qPCR was evaluated using Cohen's kappa and McNemar's test. Overall survival was analyzed using Kaplan-Meier estimates and two-sided log-rank tests without multivariable adjustment. IE1 high status was present in 135 records (61.1%), and UL123 positive status was present in 124 (56.1%). The assays agreed in 162 records (73.3%; kappa = 0.451), and their positive rates did not differ significantly (McNemar P = 0.193). Both markers were more frequent in higher-grade, IDH1 R132H-negative, older, and lower-KPS groups. The 36-month overall survival rate was 25.9% for IE1-high records and 54.7% for IE1-low records. Corresponding rates were 25.0% and 52.6% for UL123-positive and UL123-negative records. Double-positive records had lower 36-month overall survival than double-negative records (21.0% vs. 59.7%; log-rank P \u003c 0.001). IE1 protein and UL123 DNA showed agreements and were associated with adverse clinicopathological features and shorter overall survival. These findings support further validation of standardized HCMV testing in independent glioma cohorts.", "doi": "10.3389/fcimb.2026.1975136", "url": "https://doi.org/10.3389/fcimb.2026.1975136", "published": "2026-11-04", "venue": "Frontiers in cellular and infection microbiology", "source": "PubMed", "set_name": "IDH1 glioblastoma", "score": 6.0}</script>
+</div>
+<details class="rest"><summary>Show the other 1</summary>
+<div class="paper" data-doi="10.25259/sni_667_2026">
+<div class="head"><span class="score ai" title="Gemini (gemini-3.1-flash-lite)"><span class="tag">AI</span>0</span><span class="score medium" style="--fill:60%" title="PaperFeed&#x27;s own score out of 10 - &#x27;IDH1&#x27; in abstract; &#x27;glioblastoma&#x27; in title; 1 of 2 concepts in the title; published 2 days ago">6.0</span><a class="title" href="https://doi.org/10.25259/sni_667_2026">Calvarial erosion secondary to epithelioid glioblastoma: A molecularly characterized case report.</a></div>
+<p class="byline">Khojah AM, Alkhaibary A, AlSufiani F, Alassiri A, Alkhani AM <span class="affil">&mdash; College of Medicine</span></p>
+<p class="ai-why">This is an IDH-wildtype pediatric case report; entirely irrelevant to your focus on IDH-mutant biology.</p>
+<p class="why">&#x27;IDH1&#x27; in abstract; &#x27;glioblastoma&#x27; in title; 1 of 2 concepts in the title; published 2 days ago</p>
+<div class="tags"><span class="badge new">new</span> <span class="badge">PubMed</span> <span class="badge kind">Case Reports</span> <a class="badge oa" href="https://www.ncbi.nlm.nih.gov/pmc/articles/PMC13726812/">free full text</a>Surgical neurology international &middot; 2026-11-03 &middot; doi:10.25259/sni_667_2026</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span><span class="metric" title="OpenAlex 2-year mean citedness for Surgical Neurology International. It counts EVERY item the journal publishes, meeting abstracts and errata included, so journals with large abstract supplements read far below their reputation. Not an Impact Factor.">journal citedness 1.2 over 6,316 works<span class="src">OpenAlex</span></span></div>
+<div class="chips"><span class="chip">BRAF V600E</span><span class="chip">Calvarial erosion</span><span class="chip">Dural involvement</span><span class="chip">Epithelioid glioblastoma</span><span class="chip">Neurosurgical resection</span></div>
+<details><summary>Abstract</summary><p>Epithelioid glioblastoma (eGBM) is a rare, aggressive IDH-wildtype glioblastoma of children and young adults. It is typically B-Raf proto-oncogene, serine/threonine kinase (BRAF) valine-to-glutamic acid substitution at amino acid position 600 (V600E)/ cyclin-dependent kinase inhibitor 2A (CDKN2A)/ cyclin-dependent kinase inhibitor 2B (CDKN2B) -altered. Calvarial erosion with extracranial extension is exceptionally rare and may mimic primary calvarial or extra-axial tumors. A 16-year-old girl presented with a 2-week history of headache and a new-onset generalized tonic-clonic seizure. Neuroimaging revealed a superficially located left temporal intra-axial lesion with heterogeneous…</p></details>
+<script type="application/json" class="pf-paper">{"title": "Calvarial erosion secondary to epithelioid glioblastoma: A molecularly characterized case report.", "authors": ["Khojah AM", "Alkhaibary A", "AlSufiani F", "Alassiri A", "Alkhani AM"], "abstract": "Epithelioid glioblastoma (eGBM) is a rare, aggressive IDH-wildtype glioblastoma of children and young adults. It is typically B-Raf proto-oncogene, serine/threonine kinase (BRAF) valine-to-glutamic acid substitution at amino acid position 600 (V600E)/ cyclin-dependent kinase inhibitor 2A (CDKN2A)/ cyclin-dependent kinase inhibitor 2B (CDKN2B) -altered. Calvarial erosion with extracranial extension is exceptionally rare and may mimic primary calvarial or extra-axial tumors. A 16-year-old girl presented with a 2-week history of headache and a new-onset generalized tonic-clonic seizure. Neuroimaging revealed a superficially located left temporal intra-axial lesion with heterogeneous enhancement, extensive vasogenic edema, focal dural enhancement, and a through-and-through temporal squamous bone defect suggesting transdural extension. The patient underwent a left temporal craniotomy and tumor resection. The temporal squama was completely eroded, and the tumor breached the dura and extended beyond the inner table, confirming extracranial spread. Gross-total resection, including involved bone and dura with reconstruction, was achieved without postoperative complications or neurological deficit. Histopathology showed eGBM, central nervous system World Health Organization grade 4, with rhabdoid features, necrosis, subpial condensation, and meningeal involvement. Molecular profiling demonstrated BRAF V600E, telomerase reverse transcriptase (TERT) promoter -146C>T, CDKN2A/2B homozygous deletion, and methylthioadenosine phosphorylase (MTAP) loss, with isocitrate dehydrogenase 1 (NADP+) (IDH1)/ isocitrate dehydrogenase 2 (NADP+) (IDH2) and H3F3A wildtype, low tumor mutational burden, and microsatellite stability. Despite standard chemoradiotherapy, the patient passed away 6 months after diagnosis. eGBM may present with calvarial erosion and surgically confirmed extracranial extension in pediatric patients. Recognition of skull defects and dural enhancement should prompt planning for en bloc resection of invaded bone and dura with reconstruction and early comprehensive molecular testing to identify actionable targets such as BRAF V600E.", "doi": "10.25259/sni_667_2026", "url": "https://doi.org/10.25259/sni_667_2026", "published": "2026-11-03", "venue": "Surgical neurology international", "source": "PubMed", "set_name": "IDH1 glioblastoma", "score": 6.0}</script>
+</div>
+</details>
+</div></details>
+<details class="set" id="s-de-novo-nanobody-design" open><summary><div class="setbar">
+<span>de novo nanobody design</span>
+<span class="setcount">2 &middot; 2 new</span></div></summary><div class="setbody">
+<div class="paper" data-doi="10.1002/1873-3468.70500" data-secondary="1">
+<div class="head"><span class="score ai" title="Gemini (gemini-3.1-flash-lite)"><span class="tag">AI</span>3</span><span class="score medium" style="--fill:60%" title="PaperFeed&#x27;s own score out of 10 - &#x27;nanobodies&#x27; in title; &#x27;computational design&#x27; in abstract; 1 of 2 concepts in the title; published yesterday">6.0</span><a class="title" href="https://doi.org/10.1002/1873-3468.70500">Synthetic nanobodies for drug discovery-Design, construction, optimization, and applications.</a></div>
+<p class="byline">Xie Y, Tian Z, Wen Y, Zheng F <span class="affil">&mdash; School of Basic Medical Sciences</span></p>
+<p class="ai-why">A general review of synthetic nanobody libraries; lacks the specific experimental data or novel structural validation you prioritize.</p>
+<p class="why">&#x27;nanobodies&#x27; in title; &#x27;computational design&#x27; in abstract; 1 of 2 concepts in the title; published yesterday</p>
+<div class="tags"><span class="badge new">new</span> <span class="badge">PubMed</span> <span class="badge kind">Review</span>FEBS letters &middot; 2026-11-04 &middot; doi:10.1002/1873-3468.70500</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span><span class="metric" title="OpenAlex 2-year mean citedness for FEBS Letters. It counts EVERY item the journal publishes, meeting abstracts and errata included, so journals with large abstract supplements read far below their reputation. Not an Impact Factor.">journal citedness 3.3 over 59,448 works<span class="src">OpenAlex</span></span></div>
+<div class="chips"><span class="chip">VHH</span><span class="chip">drug discovery</span><span class="chip">library construction</span><span class="chip">nanobody design</span><span class="chip">single‐domain antibody</span></div>
+<details><summary>Abstract</summary><p>Nanobodies (Nbs) are single-domain antibody fragments derived from camelid heavy-chain-only antibodies (HCAbs). Nbs can be readily produced in microbial expression systems and are widely used as research tools while also being actively explored for diagnostic and therapeutic applications. Nbs are traditionally isolated from either immune libraries generated through camelid immunization or naïve libraries constructed from nonimmunized donors. The development of synthetic Nb libraries has transformed this paradigm by eliminating the need for animal immunization and accelerating every stage of Nb discovery-including library design, construction, selection, and optimization-through integrated…</p></details>
+<script type="application/json" class="pf-paper">{"title": "Synthetic nanobodies for drug discovery-Design, construction, optimization, and applications.", "authors": ["Xie Y", "Tian Z", "Wen Y", "Zheng F"], "abstract": "Nanobodies (Nbs) are single-domain antibody fragments derived from camelid heavy-chain-only antibodies (HCAbs). Nbs can be readily produced in microbial expression systems and are widely used as research tools while also being actively explored for diagnostic and therapeutic applications. Nbs are traditionally isolated from either immune libraries generated through camelid immunization or na\u00efve libraries constructed from nonimmunized donors. The development of synthetic Nb libraries has transformed this paradigm by eliminating the need for animal immunization and accelerating every stage of Nb discovery-including library design, construction, selection, and optimization-through integrated in vitro and computational approaches. Compared with conventional immune libraries, synthetic libraries provide greater experimental control, broader target coverage, and increased flexibility for generating binders against challenging or predefined targets. This review summarizes current strategies for the design, construction, optimization, and application of synthetic Nbs, with particular emphasis on advances in library engineering, computational design, and their emerging roles in biomedical research and drug discovery.", "doi": "10.1002/1873-3468.70500", "url": "https://doi.org/10.1002/1873-3468.70500", "published": "2026-11-04", "venue": "FEBS letters", "source": "PubMed", "set_name": "de novo nanobody design", "score": 6.0}</script>
+</div>
+<div class="paper" data-doi="10.1186/s12951-026-04898-x">
+<div class="head"><span class="score ai" title="Gemini (gemini-3.1-flash-lite)"><span class="tag">AI</span>2</span><span class="score medium" style="--fill:50%" title="PaperFeed&#x27;s own score out of 10 - &#x27;nanobody&#x27; in title; 1 of 2 concepts in the title; published 3 days ago">5.0</span><a class="title" href="https://doi.org/10.1186/s12951-026-04898-x">Targeting the non-enzymatic function of DPP4 via a nanobody inhibits cerebral cavernous malformation progression.</a></div>
+<p class="byline">Men C, Xiong Z, Duan Q, Cheng J, Luo X, Yang B, Li Y, Yan C, et al. <span class="affil">&mdash; First Affiliated Hospital of Harbin Medical University</span></p>
+<p class="ai-why">Focuses on CCM disease pathology and DPP4 inhibition; mentions a nanobody but lacks computational design or structural characterization details.</p>
+<p class="why">&#x27;nanobody&#x27; in title; 1 of 2 concepts in the title; published 3 days ago</p>
+<div class="tags"><span class="badge new">new</span> <span class="badge">PubMed</span> <a class="badge oa" href="https://www.ncbi.nlm.nih.gov/pmc/articles/PMC13726199/">free full text</a>Journal of nanobiotechnology &middot; 2026-11-02 &middot; doi:10.1186/s12951-026-04898-x</div>
+<div class="metrics"><span class="metric quiet" title="Published too recently for anyone to have cited it. A zero here would be a verdict, not a fact.">too new to have citations</span><span class="metric" title="OpenAlex 2-year mean citedness for Journal of Nanobiotechnology. It counts EVERY item the journal publishes, meeting abstracts and errata included, so journals with large abstract supplements read far below their reputation. Not an Impact Factor.">journal citedness 14.5 over 5,429 works<span class="src">OpenAlex</span></span><span class="metric" title="Listed in the Directory of Open Access Journals.">in DOAJ<span class="src">OpenAlex</span></span></div>
+<div class="chips"><span class="chip">Dipeptidyl Peptidase 4</span><span class="chip">Animals</span><span class="chip">Caveolin 1</span><span class="chip">Humans</span><span class="chip">Hemangioma, Cavernous, Central Nervous System</span></div>
+<details><summary>Abstract</summary><p>Cerebral cavernous malformations (CCMs) cause hemorrhagic stroke and lack effective pharmacological therapies. Although multiple extracellular stimuli contribute to CCM progression, how these signals are integrated across the plasma membrane remains unclear. Through transcriptomic analysis, we identified dipeptidyl peptidase-4 (DPP4) as a hub gene that may link extracellular stimuli to endothelial dysfunction, with elevated expression in CCM lesions. DPP4 is a type Ⅱ transmembrane glycoprotein that possesses both enzymatic and non-enzymatic functions. DPP4 knockdown reverses endothelial dysfunction in vitro and suppresses CCM progression in vivo. Single-cell transcriptomic analysis further…</p></details>
+<script type="application/json" class="pf-paper">{"title": "Targeting the non-enzymatic function of DPP4 via a nanobody inhibits cerebral cavernous malformation progression.", "authors": ["Men C", "Xiong Z", "Duan Q", "Cheng J", "Luo X", "Yang B", "Li Y", "Yan C", "Wang Y", "Ye Y", "Bi R", "Dai Z", "Hu S", "Zhao X", "Du W", "Zhang D", "Shi C"], "abstract": "Cerebral cavernous malformations (CCMs) cause hemorrhagic stroke and lack effective pharmacological therapies. Although multiple extracellular stimuli contribute to CCM progression, how these signals are integrated across the plasma membrane remains unclear. Through transcriptomic analysis, we identified dipeptidyl peptidase-4 (DPP4) as a hub gene that may link extracellular stimuli to endothelial dysfunction, with elevated expression in CCM lesions. DPP4 is a type \u2161 transmembrane glycoprotein that possesses both enzymatic and non-enzymatic functions. DPP4 knockdown reverses endothelial dysfunction in vitro and suppresses CCM progression in vivo. Single-cell transcriptomic analysis further reveals that DPP4 promotes pro-angiogenic signaling and is associated with caveolin-1 (CAV1). Mechanistically, our data suggest that DPP4 promotes CCM pathogenesis via a non-enzymatic interaction with CAV1, largely independent of its canonical enzymatic activity. This interaction promotes CAV1 phosphorylation and downstream FAK signaling activation. To selectively target the predicted interface epitope on DPP4, we developed a structure-guided nanobody (DC499-mFc) and functionally disrupted the DPP4-CAV1 interaction. This nanobody-based strategy effectively attenuates CCM progression in vivo. Collectively, these findings suggest that DPP4 contributes to CCM progression and point to nanobody\u2011based disruption of the non\u2011enzymatic DPP4-CAV1 interaction as a potential therapeutic strategy for CCM.", "doi": "10.1186/s12951-026-04898-x", "url": "https://doi.org/10.1186/s12951-026-04898-x", "published": "2026-11-02", "venue": "Journal of nanobiotechnology", "source": "PubMed", "set_name": "de novo nanobody design", "score": 5.0}</script>
+</div>
+</div></details>
+<div class="hidden-note">Preprints / IDH1 glioblastoma: mesh:Isocitrate Dehydrogenase was left out of the preprint search - preprints are not MeSH-indexed</div>
+<div class="hidden-note">5 papers hidden by your filters: only 0 of your 2 concepts are in its title, and &#x27;IDH1 glioblastoma&#x27; asks for 1 (3); only 0 of your 2 concepts are in its title, and &#x27;de novo nanobody design&#x27; asks for 1 (2). Nothing hidden is marked as seen, so loosening a filter brings it back.</div>
+<p class="footer">Generated by PaperFeed from PubMed and Preprints. Edit config.json to change keywords, filters or the schedule. <a href="index.html">All digests</a>.</p>
+</div>
+</main></div>
+<script>
+(function () {
+  // Only `paperfeed serve` can answer /library, and it only ever listens on
+  // this Mac. Opened anywhere else - straight off disk, or on a website such
+  // as GitHub Pages - there is nothing behind the link. Testing for file:
+  // alone left it live on https, where it went to the web host's 404 page.
+  var served = location.hostname === '127.0.0.1' || location.hostname === 'localhost';
+  if (!served) {
+    document.querySelectorAll('a[data-needs-server]').forEach(function (link) {
+      link.removeAttribute('href');
+      link.classList.add('off');
+      link.title = 'Only on your Mac: python3 paperfeed.py serve';
+    });
+  }
+
+  // Which topic is on screen. '' means all of them. The tabs do not hide
+  // anything themselves - they declare what they want and let the one
+  // filter decide, the same arrangement the library's status pills use, so
+  // a tab and a search term combine instead of overwriting each other.
+  var topic = '';
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs .tab'));
+
+  var box = document.querySelector('.filterbox');
+  var opts = document.querySelectorAll('.viewopts input');
+  var count = document.querySelector('.hitcount');
+  // Re-queried on every pass, not snapshotted once: removing a saved paper
+  // detached its card while this list kept counting it, so the sidebar read
+  // "23 papers" with 21 on screen. The searchable text is cached on the
+  // element itself rather than in a parallel array that can fall out of
+  // step with it.
+  function liveCards() {
+    return Array.prototype.slice.call(document.querySelectorAll('.paper'));
+  }
+  function textOf(card) {
+    if (card.__pfText === undefined) {
+      card.__pfText = (card.textContent || '').toLowerCase();
+    }
+    return card.__pfText;
+  }
+  if (!liveCards().length) { return; }
+
+  function wanted(card, needle) {
+    if (needle && textOf(card).indexOf(needle) === -1) { return false; }
+    if (topic) {
+      var section = card.closest('details.set');
+      if (!section || section.id !== topic) { return false; }
+    }
+    // Pages with their own filter (the library's status pills) hand it in
+    // here rather than setting display themselves. Two scripts both hiding
+    // and showing the same cards would take it in turns to undo each other.
+    if (window.pfExtraFilter && !window.pfExtraFilter(card)) { return false; }
+    for (var i = 0; i < opts.length; i++) {
+      if (!opts[i].checked) { continue; }
+      var rule = opts[i].getAttribute('data-rule');
+      if (rule === 'oa' && !card.querySelector('.badge.oa')) { return false; }
+      if (rule === 'primary' && card.dataset.secondary) { return false; }
+      if (rule === 'nonew' && card.querySelector('.metric.quiet')) { return false; }
+      if (rule === 'new' && !card.querySelector('.badge.new')) { return false; }
+    }
+    return true;
+  }
+
+  function apply() {
+    var needle = box ? box.value.trim().toLowerCase() : '';
+    var cards = liveCards();
+    var shown = 0;
+    cards.forEach(function (card) {
+      var keep = wanted(card, needle);
+      card.style.display = keep ? '' : 'none';
+      if (keep) { shown++; }
+    });
+    // A section whose papers are all hidden is just a confusing empty
+    // heading, so it goes too. A section the active tab excludes goes
+    // whatever its contents.
+    document.querySelectorAll('details.set').forEach(function (block) {
+      var wrongTopic = topic && block.id !== topic;
+      var any = block.querySelector('.paper:not([style*="none"])');
+      block.style.display = (any && !wrongTopic) ? '' : 'none';
+    });
+    if (count) {
+      count.textContent = (shown === cards.length)
+        ? (cards.length + ' papers')
+        : ('showing ' + shown + ' of ' + cards.length);
+    }
+  }
+
+  if (box) { box.addEventListener('input', apply); }
+  opts.forEach(function (option) { option.addEventListener('change', apply); });
+
+  tabs.forEach(function (tab) {
+    tab.addEventListener('click', function (event) {
+      event.preventDefault();          // it is an anchor only without JS
+      topic = tab.getAttribute('data-topic') || '';
+      tabs.forEach(function (other) {
+        other.classList.toggle('on', other === tab);
+      });
+      apply();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  });
+
+  window.pfApplyFilters = apply;
+  apply();
+})();
+</script>
+</body></html>
